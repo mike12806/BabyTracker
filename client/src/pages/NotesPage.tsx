@@ -1,0 +1,156 @@
+import { useEffect, useState } from "react";
+import {
+  Box,
+  Button,
+  Card,
+  CardContent,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  IconButton,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  TextField,
+  Typography,
+} from "@mui/material";
+import AddIcon from "@mui/icons-material/Add";
+import DeleteIcon from "@mui/icons-material/Delete";
+import { api } from "../api/client";
+import { useChildren } from "../hooks/useChildren";
+import NowButton from "../components/NowButton";
+import type { Note } from "../types/models";
+
+export default function NotesPage() {
+  const { selectedChild } = useChildren();
+  const [entries, setEntries] = useState<Note[]>([]);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [form, setForm] = useState({ time: "", title: "", content: "" });
+
+  const load = async () => {
+    if (!selectedChild) return;
+    const data = await api.get<Note[]>(`/notes?child_id=${selectedChild.id}`);
+    setEntries(data);
+  };
+
+  useEffect(() => {
+    load();
+  }, [selectedChild]);
+
+  const handleSave = async () => {
+    if (!selectedChild) return;
+    await api.post("/notes", {
+      child_id: selectedChild.id,
+      time: new Date(form.time).toISOString(),
+      title: form.title || null,
+      content: form.content,
+    });
+    setDialogOpen(false);
+    setForm({ time: "", title: "", content: "" });
+    await load();
+  };
+
+  const handleDelete = async (id: number) => {
+    await api.delete(`/notes/${id}`);
+    await load();
+  };
+
+  if (!selectedChild) {
+    return <Typography color="text.secondary">Select a child first.</Typography>;
+  }
+
+  return (
+    <Box>
+      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 3 }}>
+        <Typography variant="h4">Notes</Typography>
+        <Button variant="contained" startIcon={<AddIcon />} onClick={() => setDialogOpen(true)}>
+          Add Note
+        </Button>
+      </Box>
+
+      <Card>
+        <CardContent>
+          <TableContainer>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Time</TableCell>
+                  <TableCell>Title</TableCell>
+                  <TableCell>Content</TableCell>
+                  <TableCell />
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {entries.map((n) => (
+                  <TableRow key={n.id}>
+                    <TableCell>{new Date(n.time).toLocaleString()}</TableCell>
+                    <TableCell>{n.title || "—"}</TableCell>
+                    <TableCell>{n.content}</TableCell>
+                    <TableCell>
+                      <IconButton size="small" onClick={() => handleDelete(n.id)}>
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {entries.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={4} align="center">
+                      <Typography color="text.secondary">No notes recorded.</Typography>
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </CardContent>
+      </Card>
+
+      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Add Note</DialogTitle>
+        <DialogContent>
+          <Box sx={{ display: "flex", gap: 1, alignItems: "flex-start" }}>
+            <TextField
+              margin="dense"
+              label="Time"
+              type="datetime-local"
+              sx={{ flex: 1 }}
+              required
+              slotProps={{ inputLabel: { shrink: true } }}
+              value={form.time}
+              onChange={(e) => setForm({ ...form, time: e.target.value })}
+            />
+            <NowButton onSetNow={(v) => setForm({ ...form, time: v })} />
+          </Box>
+          <TextField
+            margin="dense"
+            label="Title"
+            fullWidth
+            value={form.title}
+            onChange={(e) => setForm({ ...form, title: e.target.value })}
+          />
+          <TextField
+            margin="dense"
+            label="Content"
+            fullWidth
+            required
+            multiline
+            rows={4}
+            value={form.content}
+            onChange={(e) => setForm({ ...form, content: e.target.value })}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDialogOpen(false)}>Cancel</Button>
+          <Button onClick={handleSave} variant="contained" disabled={!form.time || !form.content}>
+            Save
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Box>
+  );
+}

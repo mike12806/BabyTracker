@@ -1,0 +1,178 @@
+name: Deploy Server
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "server/**"
+      - ".github/workflows/deploy-server.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-server
+  cancel-in-progress: false
+
+env:
+  CUSTOM_DOMAIN: baby-api.mfaherty.net
+  ZONE_NAME: mfaherty.net
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Type check
+        run: npx tsc --noEmit -p server/tsconfig.json
+
+      - name: Run tests
+        run: npm run test -w server
+
+  deploy:
+    name: Deploy Worker
+    runs-on: ubuntu-latest
+    needs: test
+    environment: production
+    permissions:
+      contents: read
+      deployments: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      # D1 migrations are idempotent — wrangler tracks applied migrations
+      # and only runs new ones. Safe to run on every deploy.
+      - name: Apply D1 migrations
+        run: npx wrangler d1 migrations apply baby-tracker-db --remote
+        working-directory: server
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      # Deploy the Worker. Wrangler deploy is atomic — the new version
+      # only goes live after a successful upload. R2 bucket binding is
+      # declared in wrangler.toml and provisioned once via dashboard/CLI.
+      - name: Deploy Worker
+        run: npx wrangler deploy
+        working-directory: server
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      # Configure a custom domain route for the Worker via DNS.
+      # Workers custom domains use a CNAME (or A record proxied through
+      # Cloudflare). When proxied, Cloudflare routes matching requests
+      # to the Worker automatically.
+      # This is idempotent — checks for existing record and updates in
+      # place rather than creating duplicates.
+      - name: Configure DNS for Worker custom domain
+        run: |
+          # Get zone ID
+          ZONE_RESPONSE=$(curl -s -X GET \
+            "https://api.cloudflare.com/client/v4/zones?name=${{ env.ZONE_NAME }}" \
+            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" \
+            -H "Content-Type: application/json")
+          ZONE_ID=$(echo "$ZONE_RESPONSE" | jq -r '.result[0].id // ""')
+          if [ -z "$ZONE_ID" ]; then
+            echo "Failed to get zone ID for ${{ env.ZONE_NAME }}"
+            exit 1
+          fi
+          echo "Zone ID: $ZONE_ID"
+
+          # Check for existing CNAME record
+          RECORDS_RESPONSE=$(curl -s -X GET \
+            "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records?type=CNAME&name=${{ env.CUSTOM_DOMAIN }}" \
+            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" \
+            -H "Content-Type: application/json")
+          RECORD_ID=$(echo "$RECORDS_RESPONSE" | jq -r '.result[0].id // ""')
+
+          # Workers custom domains need a proxied CNAME pointing to the
+          # workers.dev subdomain. The target doesn't strictly matter for
+          # proxied records (Cloudflare routes via the Worker binding), but
+          # we point it to the workers.dev hostname for clarity.
+          WORKER_TARGET="baby-tracker-api.workers.dev"
+
+          if [ -n "$RECORD_ID" ]; then
+            echo "Updating existing CNAME record $RECORD_ID..."
+            RESULT=$(curl -s -X PUT \
+              "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records/$RECORD_ID" \
+              -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" \
+              -H "Content-Type: application/json" \
+              -d "{\"type\":\"CNAME\",\"name\":\"baby-api\",\"content\":\"$WORKER_TARGET\",\"proxied\":true}")
+          else
+            echo "Creating new CNAME record..."
+            RESULT=$(curl -s -X POST \
+              "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records" \
+              -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" \
+              -H "Content-Type: application/json" \
+              -d "{\"type\":\"CNAME\",\"name\":\"baby-api\",\"content\":\"$WORKER_TARGET\",\"proxied\":true}")
+          fi
+
+          SUCCESS=$(echo "$RESULT" | jq -r '.success // "false"')
+          if [ "$SUCCESS" != "true" ]; then
+            echo "Error configuring DNS: $(echo "$RESULT" | jq -r '.errors')"
+            exit 1
+          fi
+          echo "DNS CNAME configured: ${{ env.CUSTOM_DOMAIN }} -> $WORKER_TARGET"
+
+      # Register the custom domain as a Worker route so Cloudflare
+      # routes requests to the Worker. This API is idempotent.
+      - name: Configure Worker custom domain
+        run: |
+          RESPONSE=$(curl -s -X PUT \
+            "https://api.cloudflare.com/client/v4/accounts/${{ secrets.CLOUDFLARE_ACCOUNT_ID }}/workers/domains" \
+            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d "{\"hostname\":\"${{ env.CUSTOM_DOMAIN }}\",\"service\":\"baby-tracker-api\",\"environment\":\"production\"}")
+          SUCCESS=$(echo "$RESPONSE" | jq -r '.success // "false"' 2>/dev/null)
+          if [ "$SUCCESS" != "true" ]; then
+            CODE=$(echo "$RESPONSE" | jq -r '.errors[0].code // ""' 2>/dev/null)
+            MESSAGE=$(echo "$RESPONSE" | jq -r '.errors[0].message // "Unknown error"' 2>/dev/null)
+            if [[ "$MESSAGE" == *"already"* ]]; then
+              echo "Worker custom domain already configured"
+            else
+              echo "Warning: Worker domain config ($CODE): $MESSAGE"
+            fi
+          else
+            echo "Worker custom domain configured: ${{ env.CUSTOM_DOMAIN }}"
+          fi
+        continue-on-error: true
+
+      # Purge cached responses for the API domain
+      - name: Purge Cloudflare cache
+        run: |
+          ZONE_RESPONSE=$(curl -s -X GET \
+            "https://api.cloudflare.com/client/v4/zones?name=${{ env.ZONE_NAME }}" \
+            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" \
+            -H "Content-Type: application/json")
+          ZONE_ID=$(echo "$ZONE_RESPONSE" | jq -r '.result[0].id // ""')
+          if [ -z "$ZONE_ID" ]; then
+            echo "Failed to get zone ID for ${{ env.ZONE_NAME }}"
+            exit 1
+          fi
+
+          PURGE_RESPONSE=$(curl -s -X POST \
+            "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/purge_cache" \
+            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d '{"hosts": ["${{ env.CUSTOM_DOMAIN }}"]}')
+          SUCCESS=$(echo "$PURGE_RESPONSE" | jq -r '.success // "false"' 2>/dev/null)
+          if [ "$SUCCESS" != "true" ]; then
+            echo "Failed to purge cache: $(echo "$PURGE_RESPONSE" | jq -c '.errors // []')"
+            exit 1
+          fi
+          echo "Cache purged for ${{ env.CUSTOM_DOMAIN }}"
