@@ -101,7 +101,7 @@ export default function Layout() {
               <MenuItem key={child.id} value={child.id}>
                 <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                   <Avatar
-                    src={child.picture_content_type ? `${API_BASE}/children/${child.id}/photo` : undefined}
+                    src={child.picture_content_type ? `${API_BASE}/children/${child.id}/photo?v=${encodeURIComponent(child.updated_at)}` : undefined}
                     sx={{ width: 24, height: 24, fontSize: 12 }}
                   >
                     {child.first_name[0]}
@@ -157,7 +157,7 @@ export default function Layout() {
           <Typography variant="h6" noWrap sx={{ flexGrow: 1, display: "flex", alignItems: "center", gap: 1 }}>
             {selectedChild && (
               <Avatar
-                src={selectedChild.picture_content_type ? `${API_BASE}/children/${selectedChild.id}/photo` : undefined}
+                src={selectedChild.picture_content_type ? `${API_BASE}/children/${selectedChild.id}/photo?v=${encodeURIComponent(selectedChild.updated_at)}` : undefined}
                 sx={{ width: 32, height: 32, fontSize: 14 }}
               >
                 {selectedChild.first_name[0]}
