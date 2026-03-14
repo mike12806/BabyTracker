@@ -22,6 +22,7 @@ import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
 import { api } from "../api/client";
 import { useChildren } from "../hooks/useChildren";
+import NowButton from "../components/NowButton";
 import type { Note } from "../types/models";
 
 export default function NotesPage() {
@@ -112,16 +113,19 @@ export default function NotesPage() {
       <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle>Add Note</DialogTitle>
         <DialogContent>
-          <TextField
-            margin="dense"
-            label="Time"
-            type="datetime-local"
-            fullWidth
-            required
-            slotProps={{ inputLabel: { shrink: true } }}
-            value={form.time}
-            onChange={(e) => setForm({ ...form, time: e.target.value })}
-          />
+          <Box sx={{ display: "flex", gap: 1, alignItems: "flex-start" }}>
+            <TextField
+              margin="dense"
+              label="Time"
+              type="datetime-local"
+              sx={{ flex: 1 }}
+              required
+              slotProps={{ inputLabel: { shrink: true } }}
+              value={form.time}
+              onChange={(e) => setForm({ ...form, time: e.target.value })}
+            />
+            <NowButton onSetNow={(v) => setForm({ ...form, time: v })} />
+          </Box>
           <TextField
             margin="dense"
             label="Title"

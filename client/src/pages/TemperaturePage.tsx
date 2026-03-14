@@ -23,6 +23,7 @@ import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
 import { api } from "../api/client";
 import { useChildren } from "../hooks/useChildren";
+import NowButton from "../components/NowButton";
 import type { Temperature } from "../types/models";
 
 export default function TemperaturePage() {
@@ -114,16 +115,19 @@ export default function TemperaturePage() {
       <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle>Add Temperature Reading</DialogTitle>
         <DialogContent>
-          <TextField
-            margin="dense"
-            label="Time"
-            type="datetime-local"
-            fullWidth
-            required
-            slotProps={{ inputLabel: { shrink: true } }}
-            value={form.time}
-            onChange={(e) => setForm({ ...form, time: e.target.value })}
-          />
+          <Box sx={{ display: "flex", gap: 1, alignItems: "flex-start" }}>
+            <TextField
+              margin="dense"
+              label="Time"
+              type="datetime-local"
+              sx={{ flex: 1 }}
+              required
+              slotProps={{ inputLabel: { shrink: true } }}
+              value={form.time}
+              onChange={(e) => setForm({ ...form, time: e.target.value })}
+            />
+            <NowButton onSetNow={(v) => setForm({ ...form, time: v })} />
+          </Box>
           <Box sx={{ display: "flex", gap: 2 }}>
             <TextField
               margin="dense"

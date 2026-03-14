@@ -1,7 +1,6 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import { ThemeProvider } from "@mui/material/styles";
 import { CssBaseline } from "@mui/material";
-import theme from "./theme/theme";
+import { AppThemeProvider } from "./hooks/useTheme";
 import { AuthProvider, useAuth } from "./hooks/useAuth";
 import { ChildProvider } from "./hooks/useChildren";
 import Layout from "./components/Layout";
@@ -43,7 +42,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   return (
-    <ThemeProvider theme={theme}>
+    <AppThemeProvider>
       <CssBaseline />
       <BrowserRouter>
         <AuthProvider>
@@ -68,6 +67,6 @@ export default function App() {
           </AuthGate>
         </AuthProvider>
       </BrowserRouter>
-    </ThemeProvider>
+    </AppThemeProvider>
   );
 }

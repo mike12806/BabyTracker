@@ -26,7 +26,7 @@ const testAuthMiddleware: MiddlewareHandler<AppEnv> = async (c, next) => {
   const name = c.req.header("X-Test-Name") || "Test User";
 
   await c.env.DB.prepare(
-    "INSERT INTO users (email, name, created_at, updated_at) VALUES (?, ?, datetime('now'), datetime('now')) ON CONFLICT(email) DO UPDATE SET name = excluded.name, updated_at = datetime('now')"
+    "INSERT INTO users (email, name, created_at, updated_at) VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), strftime('%Y-%m-%dT%H:%M:%SZ', 'now')) ON CONFLICT(email) DO UPDATE SET name = excluded.name, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')"
   )
     .bind(email, name)
     .run();
@@ -90,8 +90,8 @@ export async function applyMigrations(db: D1Database) {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       email TEXT NOT NULL UNIQUE,
       name TEXT NOT NULL,
-      created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+      updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
     );
 
     CREATE TABLE IF NOT EXISTS children (
@@ -101,14 +101,14 @@ export async function applyMigrations(db: D1Database) {
       birth_date TEXT NOT NULL,
       picture_url TEXT,
       picture_content_type TEXT,
-      created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+      updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
     );
 
     CREATE TABLE IF NOT EXISTS user_children (
       user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       child_id INTEGER NOT NULL REFERENCES children(id) ON DELETE CASCADE,
-      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
       PRIMARY KEY (user_id, child_id)
     );
 
@@ -121,8 +121,8 @@ export async function applyMigrations(db: D1Database) {
       amount REAL,
       amount_unit TEXT CHECK(amount_unit IN ('ml', 'oz', 'g')),
       notes TEXT,
-      created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+      updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
     );
 
     CREATE TABLE IF NOT EXISTS diaper_changes (
@@ -132,8 +132,8 @@ export async function applyMigrations(db: D1Database) {
       type TEXT NOT NULL CHECK(type IN ('wet', 'solid', 'both')),
       color TEXT CHECK(color IN ('black', 'brown', 'green', 'yellow', 'white', '')),
       notes TEXT,
-      created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+      updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
     );
 
     CREATE TABLE IF NOT EXISTS sleep (
@@ -143,8 +143,8 @@ export async function applyMigrations(db: D1Database) {
       end_time TEXT,
       is_nap INTEGER NOT NULL DEFAULT 0,
       notes TEXT,
-      created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+      updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
     );
 
     CREATE TABLE IF NOT EXISTS tummy_time (
@@ -154,8 +154,8 @@ export async function applyMigrations(db: D1Database) {
       end_time TEXT,
       milestone TEXT,
       notes TEXT,
-      created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+      updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
     );
 
     CREATE TABLE IF NOT EXISTS pumping (
@@ -166,8 +166,8 @@ export async function applyMigrations(db: D1Database) {
       amount REAL,
       amount_unit TEXT CHECK(amount_unit IN ('ml', 'oz')),
       notes TEXT,
-      created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+      updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
     );
 
     CREATE TABLE IF NOT EXISTS growth (
@@ -181,8 +181,8 @@ export async function applyMigrations(db: D1Database) {
       head_circumference REAL,
       head_circumference_unit TEXT CHECK(head_circumference_unit IN ('cm', 'in')),
       notes TEXT,
-      created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+      updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
     );
 
     CREATE TABLE IF NOT EXISTS temperature (
@@ -192,8 +192,8 @@ export async function applyMigrations(db: D1Database) {
       reading REAL NOT NULL,
       reading_unit TEXT NOT NULL CHECK(reading_unit IN ('F', 'C')) DEFAULT 'F',
       notes TEXT,
-      created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+      updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
     );
 
     CREATE TABLE IF NOT EXISTS notes (
@@ -202,8 +202,8 @@ export async function applyMigrations(db: D1Database) {
       time TEXT NOT NULL,
       title TEXT,
       content TEXT NOT NULL,
-      created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+      updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
     );
 
     CREATE TABLE IF NOT EXISTS timers (
@@ -215,8 +215,8 @@ export async function applyMigrations(db: D1Database) {
       end_time TEXT,
       is_active INTEGER NOT NULL DEFAULT 1,
       notes TEXT,
-      created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+      updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
     );
   `;
 

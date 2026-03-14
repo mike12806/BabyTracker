@@ -3,8 +3,8 @@ CREATE TABLE users (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   email TEXT NOT NULL UNIQUE,
   name TEXT NOT NULL,
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 );
 
 -- Children
@@ -14,15 +14,15 @@ CREATE TABLE children (
   last_name TEXT NOT NULL DEFAULT '',
   birth_date TEXT NOT NULL,
   picture_url TEXT,
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 );
 
 -- Many-to-many: users <-> children
 CREATE TABLE user_children (
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   child_id INTEGER NOT NULL REFERENCES children(id) ON DELETE CASCADE,
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
   PRIMARY KEY (user_id, child_id)
 );
 
@@ -36,8 +36,8 @@ CREATE TABLE feedings (
   amount REAL,
   amount_unit TEXT CHECK(amount_unit IN ('ml', 'oz', 'g')),
   notes TEXT,
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 );
 
 CREATE INDEX idx_feedings_child_id ON feedings(child_id);
@@ -51,8 +51,8 @@ CREATE TABLE diaper_changes (
   type TEXT NOT NULL CHECK(type IN ('wet', 'solid', 'both')),
   color TEXT CHECK(color IN ('black', 'brown', 'green', 'yellow', 'white', '')),
   notes TEXT,
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 );
 
 CREATE INDEX idx_diaper_changes_child_id ON diaper_changes(child_id);
@@ -66,8 +66,8 @@ CREATE TABLE sleep (
   end_time TEXT,
   is_nap INTEGER NOT NULL DEFAULT 0,
   notes TEXT,
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 );
 
 CREATE INDEX idx_sleep_child_id ON sleep(child_id);
@@ -81,8 +81,8 @@ CREATE TABLE tummy_time (
   end_time TEXT,
   milestone TEXT,
   notes TEXT,
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 );
 
 CREATE INDEX idx_tummy_time_child_id ON tummy_time(child_id);
@@ -97,8 +97,8 @@ CREATE TABLE pumping (
   amount REAL,
   amount_unit TEXT CHECK(amount_unit IN ('ml', 'oz')),
   notes TEXT,
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 );
 
 CREATE INDEX idx_pumping_child_id ON pumping(child_id);
@@ -116,8 +116,8 @@ CREATE TABLE growth (
   head_circumference REAL,
   head_circumference_unit TEXT CHECK(head_circumference_unit IN ('cm', 'in')),
   notes TEXT,
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 );
 
 CREATE INDEX idx_growth_child_id ON growth(child_id);
@@ -131,8 +131,8 @@ CREATE TABLE temperature (
   reading REAL NOT NULL,
   reading_unit TEXT NOT NULL CHECK(reading_unit IN ('F', 'C')) DEFAULT 'F',
   notes TEXT,
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 );
 
 CREATE INDEX idx_temperature_child_id ON temperature(child_id);
@@ -145,8 +145,8 @@ CREATE TABLE notes (
   time TEXT NOT NULL,
   title TEXT,
   content TEXT NOT NULL,
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 );
 
 CREATE INDEX idx_notes_child_id ON notes(child_id);
@@ -162,8 +162,8 @@ CREATE TABLE timers (
   end_time TEXT,
   is_active INTEGER NOT NULL DEFAULT 1,
   notes TEXT,
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 );
 
 CREATE INDEX idx_timers_child_id ON timers(child_id);

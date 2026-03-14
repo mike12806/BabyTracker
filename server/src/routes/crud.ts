@@ -126,7 +126,7 @@ export function createChildScopedCrud(config: CrudRouteConfig) {
       return c.json({ error: "No fields to update" }, 400);
     }
 
-    const setClauses = [...updateCols.map((col) => `${col} = ?`), "updated_at = datetime('now')"];
+    const setClauses = [...updateCols.map((col) => `${col} = ?`), "updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')"];
     const values = updateCols.map((col) => body[col]);
 
     await c.env.DB.prepare(

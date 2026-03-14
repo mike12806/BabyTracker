@@ -44,7 +44,7 @@ timers.post("/", async (c) => {
   }
 
   const result = await c.env.DB.prepare(
-    "INSERT INTO timers (child_id, user_id, name, start_time, notes) VALUES (?, ?, ?, datetime('now'), ?)"
+    "INSERT INTO timers (child_id, user_id, name, start_time, notes) VALUES (?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), ?)"
   )
     .bind(body.child_id, userId, body.name, body.notes || null)
     .run();
@@ -72,7 +72,7 @@ timers.put("/:id/stop", async (c) => {
   }
 
   await c.env.DB.prepare(
-    "UPDATE timers SET end_time = datetime('now'), is_active = 0, updated_at = datetime('now') WHERE id = ?"
+    "UPDATE timers SET end_time = strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), is_active = 0, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?"
   )
     .bind(id)
     .run();

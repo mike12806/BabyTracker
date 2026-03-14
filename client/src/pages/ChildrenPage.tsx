@@ -80,7 +80,8 @@ export default function ChildrenPage() {
     await api.upload(`/children/${uploadTargetId}/photo`, formData);
     setUploadTargetId(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
-    await refreshChildren();
+    // Brief delay for R2 propagation, then reload to bust cached photo URLs
+    setTimeout(() => window.location.reload(), 500);
   };
 
   const photoUrl = (child: Child) =>

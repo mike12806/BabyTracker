@@ -23,6 +23,7 @@ import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
 import { api } from "../api/client";
 import { useChildren } from "../hooks/useChildren";
+import NowButton from "../components/NowButton";
 import type { Growth } from "../types/models";
 
 export default function GrowthPage() {
@@ -131,16 +132,19 @@ export default function GrowthPage() {
       <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle>Add Growth Measurement</DialogTitle>
         <DialogContent>
-          <TextField
-            margin="dense"
-            label="Date"
-            type="date"
-            fullWidth
-            required
-            slotProps={{ inputLabel: { shrink: true } }}
-            value={form.date}
-            onChange={(e) => setForm({ ...form, date: e.target.value })}
-          />
+          <Box sx={{ display: "flex", gap: 1, alignItems: "flex-start" }}>
+            <TextField
+              margin="dense"
+              label="Date"
+              type="date"
+              sx={{ flex: 1 }}
+              required
+              slotProps={{ inputLabel: { shrink: true } }}
+              value={form.date}
+              onChange={(e) => setForm({ ...form, date: e.target.value })}
+            />
+            <NowButton type="date" onSetNow={(v) => setForm({ ...form, date: v })} />
+          </Box>
           <Box sx={{ display: "flex", gap: 2 }}>
             <TextField
               margin="dense"

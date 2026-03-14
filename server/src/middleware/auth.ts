@@ -62,6 +62,32 @@ async function verifyJwt(token: string, certsUrl: string, audience: string): Pro
 }
 
 export const authMiddleware: MiddlewareHandler<AppEnv> = async (c, next) => {
+  // Dev mode: bypass JWT verification for local development
+  if (c.env.DEV_MODE === "true") {
+    const email = c.req.header("X-Dev-Email") || "dev@example.com";
+    const name = c.req.header("X-Dev-Name") || "Dev User";
+
+    await c.env.DB.prepare(
+      "INSERT INTO users (email, name, created_at, updated_at) VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), strftime('%Y-%m-%dT%H:%M:%SZ', 'now')) ON CONFLICT(email) DO UPDATE SET name = excluded.name, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')"
+    )
+      .bind(email, name)
+      .run();
+
+    const user = await c.env.DB.prepare("SELECT id, email, name FROM users WHERE email = ?")
+      .bind(email)
+      .first<{ id: number; email: string; name: string }>();
+
+    if (!user) {
+      return c.json({ error: "Failed to resolve user" }, 500);
+    }
+
+    c.set("userId", user.id);
+    c.set("userEmail", user.email);
+    c.set("userName", user.name);
+    await next();
+    return;
+  }
+
   const jwt = c.req.header("Cf-Access-Jwt-Assertion");
   if (!jwt) {
     return c.json({ error: "Unauthorized" }, 401);
@@ -79,7 +105,7 @@ export const authMiddleware: MiddlewareHandler<AppEnv> = async (c, next) => {
 
   // Upsert user on every request
   await c.env.DB.prepare(
-    "INSERT INTO users (email, name, created_at, updated_at) VALUES (?, ?, datetime('now'), datetime('now')) ON CONFLICT(email) DO UPDATE SET name = excluded.name, updated_at = datetime('now')"
+    "INSERT INTO users (email, name, created_at, updated_at) VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), strftime('%Y-%m-%dT%H:%M:%SZ', 'now')) ON CONFLICT(email) DO UPDATE SET name = excluded.name, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')"
   )
     .bind(email, name)
     .run();

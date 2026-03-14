@@ -5,6 +5,7 @@ import {
   Avatar,
   Box,
   CssBaseline,
+  Divider,
   Drawer,
   IconButton,
   List,
@@ -15,6 +16,8 @@ import {
   Select,
   Toolbar,
   Typography,
+  useMediaQuery,
+  useTheme,
 } from "@mui/material";
 import MenuIcon from "@mui/icons-material/Menu";
 import DashboardIcon from "@mui/icons-material/Dashboard";
@@ -28,8 +31,11 @@ import ThermostatIcon from "@mui/icons-material/Thermostat";
 import NoteIcon from "@mui/icons-material/Note";
 import TimerIcon from "@mui/icons-material/Timer";
 import ChildCareIcon from "@mui/icons-material/ChildCare";
+import DarkModeIcon from "@mui/icons-material/DarkMode";
+import LightModeIcon from "@mui/icons-material/LightMode";
 import { useAuth } from "../hooks/useAuth";
 import { useChildren } from "../hooks/useChildren";
+import { useThemeMode } from "../hooks/useTheme";
 import { API_BASE } from "../api/client";
 
 const DRAWER_WIDTH = 240;
@@ -54,16 +60,15 @@ export default function Layout() {
   const location = useLocation();
   const { user } = useAuth();
   const { children, selectedChild, selectChild } = useChildren();
+  const { mode, toggleMode } = useThemeMode();
+  const muiTheme = useTheme();
+  const isMobile = useMediaQuery(muiTheme.breakpoints.down("md"));
 
   const drawer = (
-    <Box>
-      <Toolbar>
-        <Typography variant="h6" noWrap>
-          Baby Tracker
-        </Typography>
-      </Toolbar>
+    <Box sx={{ display: "flex", flexDirection: "column", height: "100%" }}>
+      <Toolbar />
       {children.length > 1 && (
-        <Box sx={{ px: 2, pb: 1 }}>
+        <Box sx={{ px: 2, py: 1.5 }}>
           <Select
             fullWidth
             size="small"
@@ -89,23 +94,26 @@ export default function Layout() {
           </Select>
         </Box>
       )}
-      <List>
+      <Divider />
+      <List sx={{ flex: 1, overflowY: "auto" }}>
         {navItems.map((item) => (
           <ListItemButton
             key={item.path}
             selected={location.pathname === item.path}
             onClick={() => {
               navigate(item.path);
-              setDrawerOpen(false);
+              if (isMobile) setDrawerOpen(false);
             }}
+            sx={{ py: 1.5 }}
           >
             <ListItemIcon>{item.icon}</ListItemIcon>
             <ListItemText primary={item.label} />
           </ListItemButton>
         ))}
       </List>
+      <Divider />
       {user && (
-        <Box sx={{ mt: "auto", p: 2 }}>
+        <Box sx={{ p: 2 }}>
           <Typography variant="body2" color="text.secondary" noWrap>
             {user.email}
           </Typography>
@@ -140,6 +148,9 @@ export default function Layout() {
               ? `${selectedChild.first_name}'s Tracker`
               : "Baby Tracker"}
           </Typography>
+          <IconButton color="inherit" onClick={toggleMode} aria-label="Toggle dark mode">
+            {mode === "dark" ? <LightModeIcon /> : <DarkModeIcon />}
+          </IconButton>
         </Toolbar>
       </AppBar>
 
@@ -150,7 +161,7 @@ export default function Layout() {
         onClose={() => setDrawerOpen(false)}
         sx={{
           display: { xs: "block", md: "none" },
-          "& .MuiDrawer-paper": { width: DRAWER_WIDTH },
+          "& .MuiDrawer-paper": { width: DRAWER_WIDTH, boxSizing: "border-box" },
         }}
       >
         {drawer}
@@ -172,10 +183,12 @@ export default function Layout() {
         component="main"
         sx={{
           flexGrow: 1,
-          p: 3,
+          p: { xs: 2, sm: 3 },
           ml: { md: `${DRAWER_WIDTH}px` },
           mt: "64px",
           minHeight: "calc(100vh - 64px)",
+          maxWidth: "100%",
+          overflow: "hidden",
         }}
       >
         <Outlet />

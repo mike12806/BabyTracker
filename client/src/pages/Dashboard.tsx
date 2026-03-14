@@ -12,9 +12,28 @@ import RestaurantIcon from "@mui/icons-material/Restaurant";
 import BabyChangingStationIcon from "@mui/icons-material/BabyChangingStation";
 import BedtimeIcon from "@mui/icons-material/Bedtime";
 import TimerIcon from "@mui/icons-material/Timer";
+import AccessibilityNewIcon from "@mui/icons-material/AccessibilityNew";
+import OpacityIcon from "@mui/icons-material/Opacity";
+import MonitorWeightIcon from "@mui/icons-material/MonitorWeight";
 import { api } from "../api/client";
 import { useChildren } from "../hooks/useChildren";
-import type { Feeding, DiaperChange, SleepEntry, Timer } from "../types/models";
+import {
+  FeedingChart,
+  DiaperChart,
+  SleepChart,
+  TummyTimeChart,
+  PumpingChart,
+  GrowthChart,
+} from "../components/Charts";
+import type {
+  Feeding,
+  DiaperChange,
+  SleepEntry,
+  Timer,
+  TummyTime,
+  Pumping,
+  Growth,
+} from "../types/models";
 
 function formatTime(iso: string): string {
   return new Date(iso).toLocaleString(undefined, {
@@ -40,20 +59,30 @@ export default function Dashboard() {
   const [diapers, setDiapers] = useState<DiaperChange[]>([]);
   const [sleeps, setSleeps] = useState<SleepEntry[]>([]);
   const [timers, setTimers] = useState<Timer[]>([]);
+  const [tummyTimes, setTummyTimes] = useState<TummyTime[]>([]);
+  const [pumpings, setPumpings] = useState<Pumping[]>([]);
+  const [growths, setGrowths] = useState<Growth[]>([]);
 
   useEffect(() => {
     if (!selectedChild) return;
     const childId = selectedChild.id;
+    // Fetch recent items for cards + enough history for charts (last 14 days)
     Promise.all([
-      api.get<Feeding[]>(`/feedings?child_id=${childId}&limit=5`),
-      api.get<DiaperChange[]>(`/diaper-changes?child_id=${childId}&limit=5`),
-      api.get<SleepEntry[]>(`/sleep?child_id=${childId}&limit=5`),
+      api.get<Feeding[]>(`/feedings?child_id=${childId}&limit=500`),
+      api.get<DiaperChange[]>(`/diaper-changes?child_id=${childId}&limit=500`),
+      api.get<SleepEntry[]>(`/sleep?child_id=${childId}&limit=500`),
       api.get<Timer[]>(`/timers?child_id=${childId}&active=true`),
-    ]).then(([f, d, s, t]) => {
+      api.get<TummyTime[]>(`/tummy-time?child_id=${childId}&limit=500`),
+      api.get<Pumping[]>(`/pumping?child_id=${childId}&limit=500`),
+      api.get<Growth[]>(`/growth?child_id=${childId}&limit=100`),
+    ]).then(([f, d, s, t, tt, p, g]) => {
       setFeedings(f);
       setDiapers(d);
       setSleeps(s);
       setTimers(t);
+      setTummyTimes(tt);
+      setPumpings(p);
+      setGrowths(g);
     });
   }, [selectedChild]);
 
@@ -69,6 +98,10 @@ export default function Dashboard() {
       </Box>
     );
   }
+
+  const recentFeedings = feedings.slice(0, 5);
+  const recentDiapers = diapers.slice(0, 5);
+  const recentSleeps = sleeps.slice(0, 5);
 
   return (
     <Box>
@@ -93,8 +126,8 @@ export default function Dashboard() {
         </Box>
       )}
 
+      {/* Recent Activity Cards */}
       <Grid container spacing={3}>
-        {/* Recent Feedings */}
         <Grid size={{ xs: 12, md: 6 }}>
           <Card>
             <CardContent>
@@ -102,10 +135,10 @@ export default function Dashboard() {
                 <RestaurantIcon color="primary" />
                 <Typography variant="h6">Recent Feedings</Typography>
               </Stack>
-              {feedings.length === 0 ? (
+              {recentFeedings.length === 0 ? (
                 <Typography color="text.secondary">No feedings recorded yet.</Typography>
               ) : (
-                feedings.map((f) => (
+                recentFeedings.map((f) => (
                   <Box key={f.id} sx={{ mb: 1, display: "flex", justifyContent: "space-between" }}>
                     <Typography variant="body2">
                       {f.type.replace(/_/g, " ")} — {formatTime(f.start_time)}
@@ -120,7 +153,6 @@ export default function Dashboard() {
           </Card>
         </Grid>
 
-        {/* Recent Diapers */}
         <Grid size={{ xs: 12, md: 6 }}>
           <Card>
             <CardContent>
@@ -128,10 +160,10 @@ export default function Dashboard() {
                 <BabyChangingStationIcon color="primary" />
                 <Typography variant="h6">Recent Diapers</Typography>
               </Stack>
-              {diapers.length === 0 ? (
+              {recentDiapers.length === 0 ? (
                 <Typography color="text.secondary">No diaper changes recorded yet.</Typography>
               ) : (
-                diapers.map((d) => (
+                recentDiapers.map((d) => (
                   <Box key={d.id} sx={{ mb: 1, display: "flex", justifyContent: "space-between" }}>
                     <Typography variant="body2">
                       {d.type} — {formatTime(d.time)}
@@ -146,7 +178,6 @@ export default function Dashboard() {
           </Card>
         </Grid>
 
-        {/* Recent Sleep */}
         <Grid size={{ xs: 12, md: 6 }}>
           <Card>
             <CardContent>
@@ -154,10 +185,10 @@ export default function Dashboard() {
                 <BedtimeIcon color="primary" />
                 <Typography variant="h6">Recent Sleep</Typography>
               </Stack>
-              {sleeps.length === 0 ? (
+              {recentSleeps.length === 0 ? (
                 <Typography color="text.secondary">No sleep recorded yet.</Typography>
               ) : (
-                sleeps.map((s) => (
+                recentSleeps.map((s) => (
                   <Box key={s.id} sx={{ mb: 1, display: "flex", justifyContent: "space-between" }}>
                     <Typography variant="body2">
                       {s.is_nap ? "Nap" : "Night"} — {formatTime(s.start_time)}
@@ -171,6 +202,93 @@ export default function Dashboard() {
             </CardContent>
           </Card>
         </Grid>
+      </Grid>
+
+      {/* Charts Section */}
+      <Typography variant="h5" sx={{ mt: 5, mb: 3 }}>
+        Trends (Last 14 Days)
+      </Typography>
+
+      <Grid container spacing={3}>
+        {/* Feeding Trends */}
+        <Grid size={{ xs: 12, lg: 6 }}>
+          <Card>
+            <CardContent>
+              <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
+                <RestaurantIcon color="primary" />
+                <Typography variant="h6">Feedings</Typography>
+              </Stack>
+              <FeedingChart feedings={feedings} />
+            </CardContent>
+          </Card>
+        </Grid>
+
+        {/* Diaper Trends */}
+        <Grid size={{ xs: 12, lg: 6 }}>
+          <Card>
+            <CardContent>
+              <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
+                <BabyChangingStationIcon color="primary" />
+                <Typography variant="h6">Diapers</Typography>
+              </Stack>
+              <DiaperChart diapers={diapers} />
+            </CardContent>
+          </Card>
+        </Grid>
+
+        {/* Sleep Trends */}
+        <Grid size={{ xs: 12, lg: 6 }}>
+          <Card>
+            <CardContent>
+              <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
+                <BedtimeIcon color="primary" />
+                <Typography variant="h6">Sleep</Typography>
+              </Stack>
+              <SleepChart sleeps={sleeps} />
+            </CardContent>
+          </Card>
+        </Grid>
+
+        {/* Tummy Time Trends */}
+        <Grid size={{ xs: 12, lg: 6 }}>
+          <Card>
+            <CardContent>
+              <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
+                <AccessibilityNewIcon color="primary" />
+                <Typography variant="h6">Tummy Time</Typography>
+              </Stack>
+              <TummyTimeChart tummyTimes={tummyTimes} />
+            </CardContent>
+          </Card>
+        </Grid>
+
+        {/* Pumping Trends */}
+        <Grid size={{ xs: 12, lg: 6 }}>
+          <Card>
+            <CardContent>
+              <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
+                <OpacityIcon color="primary" />
+                <Typography variant="h6">Pumping</Typography>
+              </Stack>
+              <PumpingChart pumpings={pumpings} />
+            </CardContent>
+          </Card>
+        </Grid>
+
+        {/* Growth Trends */}
+        {growths.length > 0 && (
+          <Grid size={{ xs: 12, lg: 6 }}>
+            <Card>
+              <CardContent>
+                <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
+                  <MonitorWeightIcon color="primary" />
+                  <Typography variant="h6">Growth</Typography>
+                </Stack>
+                <GrowthChart growths={growths} />
+              </CardContent>
+            </Card>
+          </Grid>
+        )}
       </Grid>
     </Box>
   );

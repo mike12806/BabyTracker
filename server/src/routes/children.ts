@@ -82,7 +82,7 @@ children.put("/:id", async (c) => {
   const body = await c.req.json<{ first_name?: string; last_name?: string; birth_date?: string }>();
 
   await c.env.DB.prepare(
-    "UPDATE children SET first_name = COALESCE(?, first_name), last_name = COALESCE(?, last_name), birth_date = COALESCE(?, birth_date), updated_at = datetime('now') WHERE id = ?"
+    "UPDATE children SET first_name = COALESCE(?, first_name), last_name = COALESCE(?, last_name), birth_date = COALESCE(?, birth_date), updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?"
   )
     .bind(body.first_name ?? null, body.last_name ?? null, body.birth_date ?? null, childId)
     .run();
@@ -158,7 +158,7 @@ children.post("/:id/photo", async (c) => {
   });
 
   await c.env.DB.prepare(
-    "UPDATE children SET picture_content_type = ?, updated_at = datetime('now') WHERE id = ?"
+    "UPDATE children SET picture_content_type = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?"
   )
     .bind(file.type, childId)
     .run();
@@ -214,7 +214,7 @@ children.delete("/:id/photo", async (c) => {
   await c.env.PHOTOS.delete(photoKey(childId));
 
   await c.env.DB.prepare(
-    "UPDATE children SET picture_content_type = NULL, updated_at = datetime('now') WHERE id = ?"
+    "UPDATE children SET picture_content_type = NULL, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?"
   )
     .bind(childId)
     .run();

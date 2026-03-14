@@ -22,6 +22,7 @@ import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
 import { api } from "../api/client";
 import { useChildren } from "../hooks/useChildren";
+import NowButton from "../components/NowButton";
 import type { TummyTime } from "../types/models";
 
 export default function TummyTimePage() {
@@ -115,25 +116,31 @@ export default function TummyTimePage() {
       <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle>Add Tummy Time</DialogTitle>
         <DialogContent>
-          <TextField
-            margin="dense"
-            label="Start Time"
-            type="datetime-local"
-            fullWidth
-            required
-            slotProps={{ inputLabel: { shrink: true } }}
-            value={form.start_time}
-            onChange={(e) => setForm({ ...form, start_time: e.target.value })}
-          />
-          <TextField
-            margin="dense"
-            label="End Time"
-            type="datetime-local"
-            fullWidth
-            slotProps={{ inputLabel: { shrink: true } }}
-            value={form.end_time}
-            onChange={(e) => setForm({ ...form, end_time: e.target.value })}
-          />
+          <Box sx={{ display: "flex", gap: 1, alignItems: "flex-start" }}>
+            <TextField
+              margin="dense"
+              label="Start Time"
+              type="datetime-local"
+              sx={{ flex: 1 }}
+              required
+              slotProps={{ inputLabel: { shrink: true } }}
+              value={form.start_time}
+              onChange={(e) => setForm({ ...form, start_time: e.target.value })}
+            />
+            <NowButton onSetNow={(v) => setForm({ ...form, start_time: v })} />
+          </Box>
+          <Box sx={{ display: "flex", gap: 1, alignItems: "flex-start" }}>
+            <TextField
+              margin="dense"
+              label="End Time"
+              type="datetime-local"
+              sx={{ flex: 1 }}
+              slotProps={{ inputLabel: { shrink: true } }}
+              value={form.end_time}
+              onChange={(e) => setForm({ ...form, end_time: e.target.value })}
+            />
+            <NowButton onSetNow={(v) => setForm({ ...form, end_time: v })} />
+          </Box>
           <TextField
             margin="dense"
             label="Milestone"
