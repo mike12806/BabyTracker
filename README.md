@@ -8,7 +8,7 @@ A baby tracking application inspired by [Baby Buddy](https://github.com/babybudd
 - **Comprehensive tracking** — feedings, diaper changes, sleep, tummy time, pumping, growth, temperature, notes, and timers
 - **Photo uploads** — child profile photos stored securely in Cloudflare R2
 - **Secure by default** — authentication via Cloudflare Access (no custom login UI needed)
-- **Edge-native** — runs entirely on Cloudflare (Pages, Workers, D1, R2, etc.)
+- **Edge-native** — runs entirely on Cloudflare (Pages, Workers, D1, R2)
 
 ## Architecture
 
