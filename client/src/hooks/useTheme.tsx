@@ -1,39 +1,89 @@
 import { createContext, useContext, useState, useMemo, useCallback, useEffect } from "react";
 import { ThemeProvider as MuiThemeProvider } from "@mui/material/styles";
 import { buildTheme } from "../theme/theme";
+import { api } from "../api/client";
+import type { UserSettings } from "../types/models";
 
 type Mode = "light" | "dark";
+type ThemePreference = "system" | "light" | "dark";
 
 interface ThemeContextValue {
   mode: Mode;
-  toggleMode: () => void;
+  preference: ThemePreference;
+  setPreference: (pref: ThemePreference) => void;
 }
 
-const ThemeContext = createContext<ThemeContextValue>({ mode: "light", toggleMode: () => {} });
+const ThemeContext = createContext<ThemeContextValue>({
+  mode: "light",
+  preference: "system",
+  setPreference: () => {},
+});
 
 export function useThemeMode() {
   return useContext(ThemeContext);
 }
 
-function getInitialMode(): Mode {
+function resolveMode(pref: ThemePreference): Mode {
+  if (pref === "system") {
+    try {
+      return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    } catch {
+      return "light";
+    }
+  }
+  return pref;
+}
+
+function getInitialPreference(): ThemePreference {
   try {
-    const stored = localStorage.getItem("theme-mode");
-    if (stored === "dark" || stored === "light") return stored;
-    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    const stored = localStorage.getItem("theme-preference");
+    if (stored === "system" || stored === "dark" || stored === "light") return stored;
+    // Migrate old "theme-mode" key
+    const legacy = localStorage.getItem("theme-mode");
+    if (legacy === "dark" || legacy === "light") return legacy;
+    return "system";
   } catch {
-    return "light";
+    return "system";
   }
 }
 
 export function AppThemeProvider({ children }: { children: React.ReactNode }) {
-  const [mode, setMode] = useState<Mode>(getInitialMode);
+  const [preference, setPreferenceState] = useState<ThemePreference>(getInitialPreference);
+  const [mode, setMode] = useState<Mode>(() => resolveMode(getInitialPreference()));
 
-  const toggleMode = useCallback(() => {
-    setMode((prev) => {
-      const next = prev === "light" ? "dark" : "light";
-      try { localStorage.setItem("theme-mode", next); } catch { /* noop */ }
-      return next;
-    });
+  // Listen for system theme changes when preference is "system"
+  useEffect(() => {
+    if (preference !== "system") return;
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const handler = (e: MediaQueryListEvent) => setMode(e.matches ? "dark" : "light");
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, [preference]);
+
+  // Load preference from server settings on mount
+  useEffect(() => {
+    api
+      .get<UserSettings>("/settings")
+      .then((s) => {
+        if (s?.theme_mode) {
+          setPreferenceState(s.theme_mode);
+          setMode(resolveMode(s.theme_mode));
+          try {
+            localStorage.setItem("theme-preference", s.theme_mode);
+          } catch { /* noop */ }
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const setPreference = useCallback((pref: ThemePreference) => {
+    setPreferenceState(pref);
+    setMode(resolveMode(pref));
+    try {
+      localStorage.setItem("theme-preference", pref);
+    } catch { /* noop */ }
+    // Persist to server (fire-and-forget)
+    api.put("/settings", { theme_mode: pref }).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -42,7 +92,7 @@ export function AppThemeProvider({ children }: { children: React.ReactNode }) {
 
   const theme = useMemo(() => buildTheme(mode), [mode]);
 
-  const value = useMemo(() => ({ mode, toggleMode }), [mode, toggleMode]);
+  const value = useMemo(() => ({ mode, preference, setPreference }), [mode, preference, setPreference]);
 
   return (
     <ThemeContext.Provider value={value}>

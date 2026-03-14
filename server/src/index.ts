@@ -13,6 +13,7 @@ import { growth } from "./routes/growth.js";
 import { temperature } from "./routes/temperature.js";
 import { notes } from "./routes/notes.js";
 import { timers } from "./routes/timers.js";
+import { settings } from "./routes/settings.js";
 
 type AppEnv = { Bindings: Env; Variables: { userId: number; userEmail: string; userName: string } };
 
@@ -44,6 +45,7 @@ app.route("/api/growth", growth);
 app.route("/api/temperature", temperature);
 app.route("/api/notes", notes);
 app.route("/api/timers", timers);
+app.route("/api/settings", settings);
 
 // Global error handler
 app.onError((err, c) => {

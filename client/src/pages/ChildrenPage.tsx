@@ -5,6 +5,7 @@ import {
   Button,
   Card,
   CardContent,
+  Chip,
   Dialog,
   DialogActions,
   DialogContent,
@@ -21,17 +22,20 @@ import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 import PhotoCameraIcon from "@mui/icons-material/PhotoCamera";
+import StarIcon from "@mui/icons-material/Star";
+import StarBorderIcon from "@mui/icons-material/StarBorder";
 import { api, API_BASE } from "../api/client";
 import { useChildren } from "../hooks/useChildren";
 import type { Child } from "../types/models";
 
 export default function ChildrenPage() {
-  const { children, refreshChildren } = useChildren();
+  const { children, refreshChildren, defaultChildId, setDefaultChild } = useChildren();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Child | null>(null);
   const [form, setForm] = useState({ first_name: "", last_name: "", birth_date: "" });
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadTargetId, setUploadTargetId] = useState<number | null>(null);
+  const [photoVersion, setPhotoVersion] = useState(0);
 
   const openCreate = () => {
     setEditing(null);
@@ -80,12 +84,16 @@ export default function ChildrenPage() {
     await api.upload(`/children/${uploadTargetId}/photo`, formData);
     setUploadTargetId(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
-    // Brief delay for R2 propagation, then reload to bust cached photo URLs
-    setTimeout(() => window.location.reload(), 500);
+    setPhotoVersion((v) => v + 1);
+    await refreshChildren();
+  };
+
+  const handleToggleDefault = async (childId: number) => {
+    await setDefaultChild(defaultChildId === childId ? null : childId);
   };
 
   const photoUrl = (child: Child) =>
-    child.picture_content_type ? `${API_BASE}/children/${child.id}/photo` : undefined;
+    child.picture_content_type ? `${API_BASE}/children/${child.id}/photo?v=${photoVersion}` : undefined;
 
   return (
     <Box>
@@ -107,6 +115,13 @@ export default function ChildrenPage() {
                   key={child.id}
                   secondaryAction={
                     <Box>
+                      <IconButton
+                        onClick={() => handleToggleDefault(child.id)}
+                        title={defaultChildId === child.id ? "Remove as default" : "Set as default"}
+                        color={defaultChildId === child.id ? "primary" : "default"}
+                      >
+                        {defaultChildId === child.id ? <StarIcon /> : <StarBorderIcon />}
+                      </IconButton>
                       <IconButton onClick={() => handlePhotoClick(child.id)} title="Upload photo">
                         <PhotoCameraIcon />
                       </IconButton>
@@ -129,7 +144,14 @@ export default function ChildrenPage() {
                     </Avatar>
                   </ListItemAvatar>
                   <ListItemText
-                    primary={`${child.first_name} ${child.last_name}`}
+                    primary={
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                        {`${child.first_name} ${child.last_name}`}
+                        {defaultChildId === child.id && (
+                          <Chip label="Default" size="small" color="primary" variant="outlined" />
+                        )}
+                      </Box>
+                    }
                     secondary={`Born ${new Date(child.birth_date).toLocaleDateString()}`}
                   />
                 </ListItem>

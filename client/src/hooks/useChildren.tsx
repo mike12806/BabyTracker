@@ -1,6 +1,6 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from "react";
 import { api } from "../api/client";
-import type { Child } from "../types/models";
+import type { Child, UserSettings } from "../types/models";
 
 interface ChildContextType {
   children: Child[];
@@ -8,6 +8,8 @@ interface ChildContextType {
   selectChild: (child: Child) => void;
   refreshChildren: () => Promise<void>;
   loading: boolean;
+  defaultChildId: number | null;
+  setDefaultChild: (childId: number | null) => Promise<void>;
 }
 
 const ChildContext = createContext<ChildContextType>({
@@ -16,20 +18,31 @@ const ChildContext = createContext<ChildContextType>({
   selectChild: () => {},
   refreshChildren: async () => {},
   loading: true,
+  defaultChildId: null,
+  setDefaultChild: async () => {},
 });
 
 export function ChildProvider({ children: reactChildren }: { children: ReactNode }) {
   const [children, setChildren] = useState<Child[]>([]);
   const [selectedChild, setSelectedChild] = useState<Child | null>(null);
   const [loading, setLoading] = useState(true);
+  const [defaultChildId, setDefaultChildId] = useState<number | null>(null);
 
-  const refreshChildren = async () => {
-    const data = await api.get<Child[]>("/children");
+  const refreshChildren = useCallback(async () => {
+    const [data, settings] = await Promise.all([
+      api.get<Child[]>("/children"),
+      api.get<UserSettings>("/settings").catch(() => null),
+    ]);
     setChildren(data);
+    const defId = settings?.default_child_id ?? null;
+    setDefaultChildId(defId);
+
+    // Auto-select: use default child if set & exists, otherwise first child
     if (data.length > 0 && !selectedChild) {
-      setSelectedChild(data[0]);
+      const defaultChild = defId ? data.find((c) => c.id === defId) : null;
+      setSelectedChild(defaultChild ?? data[0]);
     }
-  };
+  }, []);
 
   useEffect(() => {
     refreshChildren()
@@ -41,8 +54,13 @@ export function ChildProvider({ children: reactChildren }: { children: ReactNode
     setSelectedChild(child);
   };
 
+  const setDefaultChild = async (childId: number | null) => {
+    await api.put<UserSettings>("/settings", { default_child_id: childId });
+    setDefaultChildId(childId);
+  };
+
   return (
-    <ChildContext.Provider value={{ children, selectedChild, selectChild, refreshChildren, loading }}>
+    <ChildContext.Provider value={{ children, selectedChild, selectChild, refreshChildren, loading, defaultChildId, setDefaultChild }}>
       {reactChildren}
     </ChildContext.Provider>
   );

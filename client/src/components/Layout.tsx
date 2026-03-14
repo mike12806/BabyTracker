@@ -33,6 +33,7 @@ import TimerIcon from "@mui/icons-material/Timer";
 import ChildCareIcon from "@mui/icons-material/ChildCare";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
 import LightModeIcon from "@mui/icons-material/LightMode";
+import SettingsBrightnessIcon from "@mui/icons-material/SettingsBrightness";
 import { useAuth } from "../hooks/useAuth";
 import { useChildren } from "../hooks/useChildren";
 import { useThemeMode } from "../hooks/useTheme";
@@ -60,9 +61,27 @@ export default function Layout() {
   const location = useLocation();
   const { user } = useAuth();
   const { children, selectedChild, selectChild } = useChildren();
-  const { mode, toggleMode } = useThemeMode();
+  const { mode, preference, setPreference } = useThemeMode();
   const muiTheme = useTheme();
   const isMobile = useMediaQuery(muiTheme.breakpoints.down("md"));
+
+  const cycleTheme = () => {
+    const order: Array<"system" | "light" | "dark"> = ["system", "light", "dark"];
+    const next = order[(order.indexOf(preference) + 1) % order.length];
+    setPreference(next);
+  };
+
+  const themeIcon = preference === "system"
+    ? <SettingsBrightnessIcon />
+    : preference === "dark"
+      ? <LightModeIcon />
+      : <DarkModeIcon />;
+
+  const themeLabel = preference === "system"
+    ? "Theme: System"
+    : preference === "dark"
+      ? "Theme: Dark"
+      : "Theme: Light";
 
   const drawer = (
     <Box sx={{ display: "flex", flexDirection: "column", height: "100%" }}>
@@ -148,8 +167,8 @@ export default function Layout() {
               ? `${selectedChild.first_name}'s Tracker`
               : "Baby Tracker"}
           </Typography>
-          <IconButton color="inherit" onClick={toggleMode} aria-label="Toggle dark mode">
-            {mode === "dark" ? <LightModeIcon /> : <DarkModeIcon />}
+          <IconButton color="inherit" onClick={cycleTheme} aria-label={themeLabel} title={themeLabel}>
+            {themeIcon}
           </IconButton>
         </Toolbar>
       </AppBar>

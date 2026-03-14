@@ -12,6 +12,7 @@ import { growth } from "../src/routes/growth.js";
 import { temperature } from "../src/routes/temperature.js";
 import { notes } from "../src/routes/notes.js";
 import { timers } from "../src/routes/timers.js";
+import { settings } from "../src/routes/settings.js";
 import type { MiddlewareHandler } from "hono";
 
 type AppEnv = { Bindings: Env; Variables: { userId: number; userEmail: string; userName: string } };
@@ -63,6 +64,7 @@ export function createTestApp() {
   app.route("/api/temperature", temperature);
   app.route("/api/notes", notes);
   app.route("/api/timers", timers);
+  app.route("/api/settings", settings);
 
   return app;
 }
@@ -71,6 +73,7 @@ export function createTestApp() {
 export async function applyMigrations(db: D1Database) {
   // Drop all tables first to ensure clean state between tests
   const dropSQL = `
+    DROP TABLE IF EXISTS user_settings;
     DROP TABLE IF EXISTS timers;
     DROP TABLE IF EXISTS notes;
     DROP TABLE IF EXISTS temperature;
@@ -215,6 +218,14 @@ export async function applyMigrations(db: D1Database) {
       end_time TEXT,
       is_active INTEGER NOT NULL DEFAULT 1,
       notes TEXT,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+      updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS user_settings (
+      user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      default_child_id INTEGER REFERENCES children(id) ON DELETE SET NULL,
+      theme_mode TEXT NOT NULL DEFAULT 'system' CHECK(theme_mode IN ('system', 'light', 'dark')),
       created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
       updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
     );

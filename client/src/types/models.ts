@@ -121,3 +121,9 @@ export interface Timer {
   created_at: string;
   updated_at: string;
 }
+
+export interface UserSettings {
+  user_id: number;
+  default_child_id: number | null;
+  theme_mode: "system" | "light" | "dark";
+}
