@@ -21,10 +21,12 @@ import {
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
+import EditIcon from "@mui/icons-material/Edit";
 import { api } from "../api/client";
 import { useChildren } from "../hooks/useChildren";
 import NowButton from "../components/NowButton";
 import type { Feeding } from "../types/models";
+import { isoToLocal } from "../utils/dateTime";
 
 const FEEDING_TYPES = [
   { value: "breast_left", label: "Breast (Left)" },
@@ -39,6 +41,7 @@ export default function FeedingsPage() {
   const { selectedChild } = useChildren();
   const [feedings, setFeedings] = useState<Feeding[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingEntry, setEditingEntry] = useState<Feeding | null>(null);
   const [form, setForm] = useState({
     type: "bottle",
     start_time: "",
@@ -58,18 +61,36 @@ export default function FeedingsPage() {
     load();
   }, [selectedChild]);
 
+  const handleEdit = (entry: Feeding) => {
+    setEditingEntry(entry);
+    setForm({
+      type: entry.type,
+      start_time: isoToLocal(entry.start_time),
+      end_time: entry.end_time ? isoToLocal(entry.end_time) : "",
+      amount: entry.amount != null ? String(entry.amount) : "",
+      amount_unit: entry.amount_unit || "oz",
+      notes: entry.notes || "",
+    });
+    setDialogOpen(true);
+  };
+
   const handleSave = async () => {
     if (!selectedChild) return;
-    await api.post("/feedings", {
-      child_id: selectedChild.id,
+    const payload = {
       type: form.type,
       start_time: new Date(form.start_time).toISOString(),
       end_time: form.end_time ? new Date(form.end_time).toISOString() : null,
       amount: form.amount ? parseFloat(form.amount) : null,
       amount_unit: form.amount ? form.amount_unit : null,
       notes: form.notes || null,
-    });
+    };
+    if (editingEntry) {
+      await api.put(`/feedings/${editingEntry.id}`, payload);
+    } else {
+      await api.post("/feedings", { child_id: selectedChild.id, ...payload });
+    }
     setDialogOpen(false);
+    setEditingEntry(null);
     setForm({ type: "bottle", start_time: "", end_time: "", amount: "", amount_unit: "oz", notes: "" });
     await load();
   };
@@ -87,7 +108,15 @@ export default function FeedingsPage() {
     <Box>
       <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 3 }}>
         <Typography variant="h4">Feedings</Typography>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={() => setDialogOpen(true)}>
+        <Button
+          variant="contained"
+          startIcon={<AddIcon />}
+          onClick={() => {
+            setEditingEntry(null);
+            setForm({ type: "bottle", start_time: "", end_time: "", amount: "", amount_unit: "oz", notes: "" });
+            setDialogOpen(true);
+          }}
+        >
           Add Feeding
         </Button>
       </Box>
@@ -115,6 +144,9 @@ export default function FeedingsPage() {
                     <TableCell>{f.amount ? `${f.amount} ${f.amount_unit}` : "—"}</TableCell>
                     <TableCell>{f.notes || "—"}</TableCell>
                     <TableCell>
+                      <IconButton size="small" onClick={() => handleEdit(f)}>
+                        <EditIcon fontSize="small" />
+                      </IconButton>
                       <IconButton size="small" onClick={() => handleDelete(f.id)}>
                         <DeleteIcon fontSize="small" />
                       </IconButton>
@@ -134,8 +166,8 @@ export default function FeedingsPage() {
         </CardContent>
       </Card>
 
-      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Add Feeding</DialogTitle>
+      <Dialog open={dialogOpen} onClose={() => { setDialogOpen(false); setEditingEntry(null); }} maxWidth="sm" fullWidth>
+        <DialogTitle>{editingEntry ? "Edit Feeding" : "Add Feeding"}</DialogTitle>
         <DialogContent>
           <TextField
             select
@@ -209,7 +241,7 @@ export default function FeedingsPage() {
           />
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setDialogOpen(false)}>Cancel</Button>
+          <Button onClick={() => { setDialogOpen(false); setEditingEntry(null); }}>Cancel</Button>
           <Button onClick={handleSave} variant="contained" disabled={!form.start_time}>
             Save
           </Button>

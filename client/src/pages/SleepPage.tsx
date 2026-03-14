@@ -22,15 +22,18 @@ import {
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
+import EditIcon from "@mui/icons-material/Edit";
 import { api } from "../api/client";
 import { useChildren } from "../hooks/useChildren";
 import NowButton from "../components/NowButton";
 import type { SleepEntry } from "../types/models";
+import { isoToLocal } from "../utils/dateTime";
 
 export default function SleepPage() {
   const { selectedChild } = useChildren();
   const [entries, setEntries] = useState<SleepEntry[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingEntry, setEditingEntry] = useState<SleepEntry | null>(null);
   const [form, setForm] = useState({ start_time: "", end_time: "", is_nap: false, notes: "" });
 
   const load = async () => {
@@ -43,16 +46,32 @@ export default function SleepPage() {
     load();
   }, [selectedChild]);
 
+  const handleEdit = (entry: SleepEntry) => {
+    setEditingEntry(entry);
+    setForm({
+      start_time: isoToLocal(entry.start_time),
+      end_time: entry.end_time ? isoToLocal(entry.end_time) : "",
+      is_nap: Boolean(entry.is_nap),
+      notes: entry.notes || "",
+    });
+    setDialogOpen(true);
+  };
+
   const handleSave = async () => {
     if (!selectedChild) return;
-    await api.post("/sleep", {
-      child_id: selectedChild.id,
+    const payload = {
       start_time: new Date(form.start_time).toISOString(),
       end_time: form.end_time ? new Date(form.end_time).toISOString() : null,
       is_nap: form.is_nap ? 1 : 0,
       notes: form.notes || null,
-    });
+    };
+    if (editingEntry) {
+      await api.put(`/sleep/${editingEntry.id}`, payload);
+    } else {
+      await api.post("/sleep", { child_id: selectedChild.id, ...payload });
+    }
     setDialogOpen(false);
+    setEditingEntry(null);
     setForm({ start_time: "", end_time: "", is_nap: false, notes: "" });
     await load();
   };
@@ -70,7 +89,15 @@ export default function SleepPage() {
     <Box>
       <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 3 }}>
         <Typography variant="h4">Sleep</Typography>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={() => setDialogOpen(true)}>
+        <Button
+          variant="contained"
+          startIcon={<AddIcon />}
+          onClick={() => {
+            setEditingEntry(null);
+            setForm({ start_time: "", end_time: "", is_nap: false, notes: "" });
+            setDialogOpen(true);
+          }}
+        >
           Add Sleep
         </Button>
       </Box>
@@ -96,6 +123,9 @@ export default function SleepPage() {
                     <TableCell>{s.is_nap ? "Nap" : "Night"}</TableCell>
                     <TableCell>{s.notes || "—"}</TableCell>
                     <TableCell>
+                      <IconButton size="small" onClick={() => handleEdit(s)}>
+                        <EditIcon fontSize="small" />
+                      </IconButton>
                       <IconButton size="small" onClick={() => handleDelete(s.id)}>
                         <DeleteIcon fontSize="small" />
                       </IconButton>
@@ -115,8 +145,8 @@ export default function SleepPage() {
         </CardContent>
       </Card>
 
-      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Add Sleep</DialogTitle>
+      <Dialog open={dialogOpen} onClose={() => { setDialogOpen(false); setEditingEntry(null); }} maxWidth="sm" fullWidth>
+        <DialogTitle>{editingEntry ? "Edit Sleep" : "Add Sleep"}</DialogTitle>
         <DialogContent>
           <Box sx={{ display: "flex", gap: 1, alignItems: "flex-start" }}>
             <TextField
@@ -163,7 +193,7 @@ export default function SleepPage() {
           />
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setDialogOpen(false)}>Cancel</Button>
+          <Button onClick={() => { setDialogOpen(false); setEditingEntry(null); }}>Cancel</Button>
           <Button onClick={handleSave} variant="contained" disabled={!form.start_time}>
             Save
           </Button>

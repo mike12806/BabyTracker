@@ -21,6 +21,7 @@ import {
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
+import EditIcon from "@mui/icons-material/Edit";
 import { api } from "../api/client";
 import { useChildren } from "../hooks/useChildren";
 import NowButton from "../components/NowButton";
@@ -30,6 +31,7 @@ export default function GrowthPage() {
   const { selectedChild } = useChildren();
   const [entries, setEntries] = useState<Growth[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingEntry, setEditingEntry] = useState<Growth | null>(null);
   const [form, setForm] = useState({
     date: "",
     weight: "",
@@ -51,10 +53,24 @@ export default function GrowthPage() {
     load();
   }, [selectedChild]);
 
+  const handleEdit = (entry: Growth) => {
+    setEditingEntry(entry);
+    setForm({
+      date: entry.date,
+      weight: entry.weight != null ? String(entry.weight) : "",
+      weight_unit: entry.weight_unit || "lb",
+      height: entry.height != null ? String(entry.height) : "",
+      height_unit: entry.height_unit || "in",
+      head_circumference: entry.head_circumference != null ? String(entry.head_circumference) : "",
+      head_circumference_unit: entry.head_circumference_unit || "in",
+      notes: entry.notes || "",
+    });
+    setDialogOpen(true);
+  };
+
   const handleSave = async () => {
     if (!selectedChild) return;
-    await api.post("/growth", {
-      child_id: selectedChild.id,
+    const payload = {
       date: form.date,
       weight: form.weight ? parseFloat(form.weight) : null,
       weight_unit: form.weight ? form.weight_unit : null,
@@ -63,8 +79,14 @@ export default function GrowthPage() {
       head_circumference: form.head_circumference ? parseFloat(form.head_circumference) : null,
       head_circumference_unit: form.head_circumference ? form.head_circumference_unit : null,
       notes: form.notes || null,
-    });
+    };
+    if (editingEntry) {
+      await api.put(`/growth/${editingEntry.id}`, payload);
+    } else {
+      await api.post("/growth", { child_id: selectedChild.id, ...payload });
+    }
     setDialogOpen(false);
+    setEditingEntry(null);
     setForm({ date: "", weight: "", weight_unit: "lb", height: "", height_unit: "in", head_circumference: "", head_circumference_unit: "in", notes: "" });
     await load();
   };
@@ -82,7 +104,15 @@ export default function GrowthPage() {
     <Box>
       <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 3 }}>
         <Typography variant="h4">Growth</Typography>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={() => setDialogOpen(true)}>
+        <Button
+          variant="contained"
+          startIcon={<AddIcon />}
+          onClick={() => {
+            setEditingEntry(null);
+            setForm({ date: "", weight: "", weight_unit: "lb", height: "", height_unit: "in", head_circumference: "", head_circumference_unit: "in", notes: "" });
+            setDialogOpen(true);
+          }}
+        >
           Add Measurement
         </Button>
       </Box>
@@ -110,6 +140,9 @@ export default function GrowthPage() {
                     <TableCell>{g.head_circumference ? `${g.head_circumference} ${g.head_circumference_unit}` : "—"}</TableCell>
                     <TableCell>{g.notes || "—"}</TableCell>
                     <TableCell>
+                      <IconButton size="small" onClick={() => handleEdit(g)}>
+                        <EditIcon fontSize="small" />
+                      </IconButton>
                       <IconButton size="small" onClick={() => handleDelete(g.id)}>
                         <DeleteIcon fontSize="small" />
                       </IconButton>
@@ -129,8 +162,8 @@ export default function GrowthPage() {
         </CardContent>
       </Card>
 
-      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Add Growth Measurement</DialogTitle>
+      <Dialog open={dialogOpen} onClose={() => { setDialogOpen(false); setEditingEntry(null); }} maxWidth="sm" fullWidth>
+        <DialogTitle>{editingEntry ? "Edit Growth Measurement" : "Add Growth Measurement"}</DialogTitle>
         <DialogContent>
           <Box sx={{ display: "flex", gap: 1, alignItems: "flex-start" }}>
             <TextField
@@ -221,7 +254,7 @@ export default function GrowthPage() {
           />
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setDialogOpen(false)}>Cancel</Button>
+          <Button onClick={() => { setDialogOpen(false); setEditingEntry(null); }}>Cancel</Button>
           <Button onClick={handleSave} variant="contained" disabled={!form.date}>
             Save
           </Button>

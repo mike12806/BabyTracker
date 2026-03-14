@@ -21,15 +21,18 @@ import {
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
+import EditIcon from "@mui/icons-material/Edit";
 import { api } from "../api/client";
 import { useChildren } from "../hooks/useChildren";
 import NowButton from "../components/NowButton";
 import type { Temperature } from "../types/models";
+import { isoToLocal } from "../utils/dateTime";
 
 export default function TemperaturePage() {
   const { selectedChild } = useChildren();
   const [entries, setEntries] = useState<Temperature[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingEntry, setEditingEntry] = useState<Temperature | null>(null);
   const [form, setForm] = useState({ time: "", reading: "", reading_unit: "F", notes: "" });
 
   const load = async () => {
@@ -42,16 +45,32 @@ export default function TemperaturePage() {
     load();
   }, [selectedChild]);
 
+  const handleEdit = (entry: Temperature) => {
+    setEditingEntry(entry);
+    setForm({
+      time: isoToLocal(entry.time),
+      reading: String(entry.reading),
+      reading_unit: entry.reading_unit,
+      notes: entry.notes || "",
+    });
+    setDialogOpen(true);
+  };
+
   const handleSave = async () => {
     if (!selectedChild) return;
-    await api.post("/temperature", {
-      child_id: selectedChild.id,
+    const payload = {
       time: new Date(form.time).toISOString(),
       reading: parseFloat(form.reading),
       reading_unit: form.reading_unit,
       notes: form.notes || null,
-    });
+    };
+    if (editingEntry) {
+      await api.put(`/temperature/${editingEntry.id}`, payload);
+    } else {
+      await api.post("/temperature", { child_id: selectedChild.id, ...payload });
+    }
     setDialogOpen(false);
+    setEditingEntry(null);
     setForm({ time: "", reading: "", reading_unit: "F", notes: "" });
     await load();
   };
@@ -69,7 +88,15 @@ export default function TemperaturePage() {
     <Box>
       <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 3 }}>
         <Typography variant="h4">Temperature</Typography>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={() => setDialogOpen(true)}>
+        <Button
+          variant="contained"
+          startIcon={<AddIcon />}
+          onClick={() => {
+            setEditingEntry(null);
+            setForm({ time: "", reading: "", reading_unit: "F", notes: "" });
+            setDialogOpen(true);
+          }}
+        >
           Add Reading
         </Button>
       </Box>
@@ -93,6 +120,9 @@ export default function TemperaturePage() {
                     <TableCell>{t.reading}°{t.reading_unit}</TableCell>
                     <TableCell>{t.notes || "—"}</TableCell>
                     <TableCell>
+                      <IconButton size="small" onClick={() => handleEdit(t)}>
+                        <EditIcon fontSize="small" />
+                      </IconButton>
                       <IconButton size="small" onClick={() => handleDelete(t.id)}>
                         <DeleteIcon fontSize="small" />
                       </IconButton>
@@ -112,8 +142,8 @@ export default function TemperaturePage() {
         </CardContent>
       </Card>
 
-      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Add Temperature Reading</DialogTitle>
+      <Dialog open={dialogOpen} onClose={() => { setDialogOpen(false); setEditingEntry(null); }} maxWidth="sm" fullWidth>
+        <DialogTitle>{editingEntry ? "Edit Temperature Reading" : "Add Temperature Reading"}</DialogTitle>
         <DialogContent>
           <Box sx={{ display: "flex", gap: 1, alignItems: "flex-start" }}>
             <TextField
@@ -161,7 +191,7 @@ export default function TemperaturePage() {
           />
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setDialogOpen(false)}>Cancel</Button>
+          <Button onClick={() => { setDialogOpen(false); setEditingEntry(null); }}>Cancel</Button>
           <Button onClick={handleSave} variant="contained" disabled={!form.time || !form.reading}>
             Save
           </Button>
