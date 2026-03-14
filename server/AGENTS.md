@@ -4,7 +4,7 @@
 
 - Hono as the HTTP router
 - Cloudflare D1 (SQLite) for persistence
-- Cloudflare Access for auth
+- Cloudflare Access for auth (JWT validation)
 - Deployed as a single Cloudflare Worker
 
 ## Structure
@@ -25,12 +25,16 @@
 - Return JSON responses with `c.json()` — include appropriate HTTP status codes
 - Use `c.var` for middleware-injected values (e.g., authenticated user email)
 
-## Auth Middleware
+## Auth — Cloudflare Access
 
-- Validate `CF-Access-JWT-Assertion` header on every request
+- Cloudflare Access handles login — the Worker never sees credentials
+- Auth middleware validates the `Cf-Access-Jwt-Assertion` header on every request
 - Extract the user's email from the JWT payload
-- Store the email in `c.set('userEmail', email)` for downstream route handlers
-- Reject requests with missing or invalid tokens with 401
+- Auto-create/match user by email in the `users` table (upsert on every request)
+- Set `c.set('userId', id)` and `c.set('userEmail', email)` for downstream route handlers
+- `/api/auth/me` returns the current user profile from the JWT identity
+- Reject requests with missing or invalid JWT with 401
+- CF Access policy team domain and audience (AUD) come from Worker env bindings
 
 ## D1 Patterns
 

@@ -28,9 +28,12 @@
 
 ## Auth
 
-- Cloudflare Access handles login — no login page or auth UI needed
-- The API client should include credentials with every request (`credentials: 'include'` or forward cookies)
-- If a 401 is returned, redirect to the Access login URL
+- Cloudflare Access handles login — no login page or auth UI needed in the app
+- The client and API are both behind Cloudflare Access, so the browser automatically has a valid CF Access cookie
+- The API client includes credentials with every request (`credentials: 'include'`)
+- On 401 responses, redirect the user to re-authenticate via Cloudflare Access
+- A `/api/auth/me` endpoint returns the current user's profile (email, name)
+- No logout button needed — session lifecycle is managed by Cloudflare Access
 
 ## Component Patterns
 

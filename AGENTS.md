@@ -13,8 +13,9 @@ Monorepo for a baby tracking application. Two packages:
 
 - **Client**: React + Vite SPA served from Cloudflare Pages. Communicates with the backend via REST API.
 - **Server**: Single Cloudflare Worker using Hono as the router. Uses Cloudflare D1 (SQLite-compatible) for persistence.
-- **Auth**: Cloudflare Access. The Worker validates the `CF-Access-JWT-Assertion` header on every request. No custom auth system — rely entirely on Cloudflare Access for identity.
+- **Auth**: Cloudflare Access. Both the client (Pages) and server (Worker) are behind Cloudflare Access. The Worker validates the `Cf-Access-Jwt-Assertion` header, extracts the user's email, and auto-creates a user row on first request. No custom login UI or session management needed.
 - **Database**: Cloudflare D1. Migrations live in `server/migrations/`. Use sequential numbered migration files.
+- **Multi-tenancy**: Multiple users, each linked to one or more children via a junction table. Users are auto-created from the Cloudflare Access JWT email.
 
 ## Domain Model
 
@@ -48,7 +49,8 @@ All entries are associated with a child. Multi-child support is required.
 - D1 queries use prepared statements with bound parameters — never interpolate user input into SQL
 - Hono is the sole router — define routes in modular files and mount them on the main app
 - Environment variables and secrets are accessed via the Worker's `Env` bindings, not `process.env`
-- Cloudflare Access identity (email) is extracted from the validated JWT and used to associate data with users
+- User identity is derived from the Cloudflare Access JWT and used to scope all data access
+- Users can only access children they are linked to via the `user_children` table
 
 ## Build and Test
 

@@ -1,0 +1,202 @@
+name: Deploy Client
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "client/**"
+      - ".github/workflows/deploy-client.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-client
+  cancel-in-progress: false
+
+env:
+  PAGES_PROJECT: baby-tracker
+  CUSTOM_DOMAIN: baby.mfaherty.net
+  ZONE_NAME: mfaherty.net
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Type check
+        run: npx tsc --noEmit -p client/tsconfig.json
+
+      - name: Run tests
+        run: npm run test -w client
+
+  deploy:
+    name: Deploy Pages
+    runs-on: ubuntu-latest
+    needs: test
+    environment: production
+    permissions:
+      contents: read
+      deployments: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build client
+        run: npm run build:client
+        env:
+          VITE_API_URL: https://baby-api.mfaherty.net/api
+
+      - name: Create Pages project
+        run: npx wrangler pages project create ${{ env.PAGES_PROJECT }} --production-branch=main
+        continue-on-error: true
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      # Cloudflare Pages deploy is atomic — the new version is uploaded
+      # first, then traffic is switched. If the upload fails, the
+      # previous version remains live.
+      - name: Deploy to Cloudflare Pages
+        run: npx wrangler pages deploy client/dist --project-name=${{ env.PAGES_PROJECT }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      # Register the custom domain with the Pages project (idempotent —
+      # returns success or "already exists" which we handle gracefully).
+      - name: Register custom domain
+        run: |
+          RESPONSE=$(curl -s -X POST \
+            "https://api.cloudflare.com/client/v4/accounts/${{ secrets.CLOUDFLARE_ACCOUNT_ID }}/pages/projects/${{ env.PAGES_PROJECT }}/domains" \
+            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d '{"name": "${{ env.CUSTOM_DOMAIN }}"}')
+          SUCCESS=$(echo "$RESPONSE" | jq -r '.success // "false"' 2>/dev/null)
+          if [ "$SUCCESS" != "true" ]; then
+            CODE=$(echo "$RESPONSE" | jq -r '.errors[0].code // ""' 2>/dev/null)
+            MESSAGE=$(echo "$RESPONSE" | jq -r '.errors[0].message // "Unknown error"' 2>/dev/null)
+            if [[ "$CODE" == "8000003" ]] || [[ "$MESSAGE" == *"already"* ]]; then
+              echo "Domain already registered"
+            else
+              echo "Error ($CODE): $MESSAGE"
+              exit 1
+            fi
+          else
+            echo "Domain registered successfully"
+          fi
+        continue-on-error: true
+
+      # Create or update the DNS CNAME record pointing the custom domain
+      # to the Pages subdomain. Idempotent — checks for existing record
+      # and updates in place rather than creating duplicates.
+      - name: Configure DNS CNAME
+        run: |
+          # Get the pages.dev subdomain
+          PROJECT_RESPONSE=$(curl -s -X GET \
+            "https://api.cloudflare.com/client/v4/accounts/${{ secrets.CLOUDFLARE_ACCOUNT_ID }}/pages/projects/${{ env.PAGES_PROJECT }}" \
+            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" \
+            -H "Content-Type: application/json")
+          PAGES_DOMAIN=$(echo "$PROJECT_RESPONSE" | jq -r '.result.subdomain // ""')
+          if [ -z "$PAGES_DOMAIN" ]; then
+            echo "Could not read pages.dev subdomain, falling back to default"
+            PAGES_DOMAIN="${{ env.PAGES_PROJECT }}.pages.dev"
+          fi
+          echo "Pages domain: $PAGES_DOMAIN"
+
+          # Get zone ID
+          ZONE_RESPONSE=$(curl -s -X GET \
+            "https://api.cloudflare.com/client/v4/zones?name=${{ env.ZONE_NAME }}" \
+            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" \
+            -H "Content-Type: application/json")
+          ZONE_ID=$(echo "$ZONE_RESPONSE" | jq -r '.result[0].id // ""')
+          if [ -z "$ZONE_ID" ]; then
+            echo "Failed to get zone ID for ${{ env.ZONE_NAME }}"
+            exit 1
+          fi
+          echo "Zone ID: $ZONE_ID"
+
+          # Check for existing CNAME
+          RECORDS_RESPONSE=$(curl -s -X GET \
+            "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records?type=CNAME&name=${{ env.CUSTOM_DOMAIN }}" \
+            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" \
+            -H "Content-Type: application/json")
+          RECORD_ID=$(echo "$RECORDS_RESPONSE" | jq -r '.result[0].id // ""')
+
+          if [ -n "$RECORD_ID" ]; then
+            echo "Updating existing CNAME record $RECORD_ID..."
+            RESULT=$(curl -s -X PUT \
+              "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records/$RECORD_ID" \
+              -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" \
+              -H "Content-Type: application/json" \
+              -d "{\"type\":\"CNAME\",\"name\":\"baby\",\"content\":\"$PAGES_DOMAIN\",\"proxied\":true}")
+          else
+            echo "Creating new CNAME record..."
+            RESULT=$(curl -s -X POST \
+              "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records" \
+              -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" \
+              -H "Content-Type: application/json" \
+              -d "{\"type\":\"CNAME\",\"name\":\"baby\",\"content\":\"$PAGES_DOMAIN\",\"proxied\":true}")
+          fi
+
+          SUCCESS=$(echo "$RESULT" | jq -r '.success // "false"')
+          if [ "$SUCCESS" != "true" ]; then
+            echo "Error configuring DNS: $(echo "$RESULT" | jq -r '.errors')"
+            exit 1
+          fi
+          echo "DNS CNAME configured: ${{ env.CUSTOM_DOMAIN }} -> $PAGES_DOMAIN"
+
+      # Trigger domain verification for the custom domain
+      - name: Verify custom domain
+        run: |
+          PATCH_RESPONSE=$(curl -s -X PATCH \
+            "https://api.cloudflare.com/client/v4/accounts/${{ secrets.CLOUDFLARE_ACCOUNT_ID }}/pages/projects/${{ env.PAGES_PROJECT }}/domains/${{ env.CUSTOM_DOMAIN }}" \
+            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d '{}')
+          SUCCESS=$(echo "$PATCH_RESPONSE" | jq -r '.success // "false"' 2>/dev/null)
+          if [ "$SUCCESS" != "true" ]; then
+            echo "Warning: domain verification may not have succeeded: $(echo "$PATCH_RESPONSE" | jq -c '.errors // []')"
+          else
+            STATUS=$(echo "$PATCH_RESPONSE" | jq -r '.result.status // "unknown"' 2>/dev/null)
+            echo "Domain verification initiated, status: $STATUS"
+          fi
+
+      # Purge cached assets for the custom domain so the new deployment
+      # is immediately visible.
+      - name: Purge Cloudflare cache
+        run: |
+          ZONE_RESPONSE=$(curl -s -X GET \
+            "https://api.cloudflare.com/client/v4/zones?name=${{ env.ZONE_NAME }}" \
+            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" \
+            -H "Content-Type: application/json")
+          ZONE_ID=$(echo "$ZONE_RESPONSE" | jq -r '.result[0].id // ""')
+          if [ -z "$ZONE_ID" ]; then
+            echo "Failed to get zone ID for ${{ env.ZONE_NAME }}"
+            exit 1
+          fi
+
+          PURGE_RESPONSE=$(curl -s -X POST \
+            "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/purge_cache" \
+            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d '{"hosts": ["${{ env.CUSTOM_DOMAIN }}"]}')
+          SUCCESS=$(echo "$PURGE_RESPONSE" | jq -r '.success // "false"' 2>/dev/null)
+          if [ "$SUCCESS" != "true" ]; then
+            echo "Failed to purge cache: $(echo "$PURGE_RESPONSE" | jq -c '.errors // []')"
+            exit 1
+          fi
+          echo "Cache purged for ${{ env.CUSTOM_DOMAIN }}"
