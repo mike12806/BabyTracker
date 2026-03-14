@@ -13,8 +13,8 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  CUSTOM_DOMAIN: baby-api.mfaherty.net
   ZONE_NAME: mfaherty.net
+  PURGE_DOMAIN: baby.mfaherty.net
 
 jobs:
   test:
@@ -25,7 +25,7 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
 
       - run: npm ci
@@ -49,7 +49,7 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
 
       - run: npm ci
@@ -90,10 +90,10 @@ jobs:
             "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/purge_cache" \
             -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" \
             -H "Content-Type: application/json" \
-            -d '{"hosts": ["${{ env.CUSTOM_DOMAIN }}"]}')
+            -d '{"hosts": ["${{ env.PURGE_DOMAIN }}"]}')
           SUCCESS=$(echo "$PURGE_RESPONSE" | jq -r '.success // "false"' 2>/dev/null)
           if [ "$SUCCESS" != "true" ]; then
             echo "Failed to purge cache: $(echo "$PURGE_RESPONSE" | jq -c '.errors // []')"
             exit 1
           fi
-          echo "Cache purged for ${{ env.CUSTOM_DOMAIN }}"
+          echo "Cache purged for ${{ env.PURGE_DOMAIN }}"

@@ -26,7 +26,7 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
 
       - run: npm ci
@@ -50,15 +50,13 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
 
       - run: npm ci
 
       - name: Build client
         run: npm run build:client
-        env:
-          VITE_API_URL: https://baby-api.mfaherty.net/api
 
       - name: Create Pages project
         run: npx wrangler pages project create ${{ env.PAGES_PROJECT }} --production-branch=main
