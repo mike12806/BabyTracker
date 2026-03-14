@@ -3,7 +3,7 @@ import {
   Box,
   Card,
   CardContent,
-  Grid2 as Grid,
+  Grid,
   Typography,
   Chip,
   Stack,
