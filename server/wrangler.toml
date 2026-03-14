@@ -18,7 +18,7 @@ bucket_name = "baby-tracker-photos"
 
 [vars]
 CF_ACCESS_TEAM_DOMAIN = "mfaherty.cloudflareaccess.com"
-CF_ACCESS_AUD = "e37e97535859d92f1f1d9a3caaffd5626229e29adee7005a9b8100e116d32aa6"
+CF_ACCESS_AUD = "5a28edb4368d3cfc1971089b60cc3a4444d93fd54d256e55bf9736fd6c8c4ad1"
 
 # For local dev, create server/.dev.vars to override:
 #   CLIENT_URL=http://localhost:5173
