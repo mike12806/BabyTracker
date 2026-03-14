@@ -26,10 +26,13 @@ export function useThemeMode() {
 function resolveMode(pref: ThemePreference): Mode {
   if (pref === "system") {
     try {
-      return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      if (typeof window.matchMedia === "function") {
+        return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      }
     } catch {
-      return "light";
+      /* noop */
     }
+    return "light";
   }
   return pref;
 }
@@ -54,6 +57,7 @@ export function AppThemeProvider({ children }: { children: React.ReactNode }) {
   // Listen for system theme changes when preference is "system"
   useEffect(() => {
     if (preference !== "system") return;
+    if (typeof window.matchMedia !== "function") return;
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
     const handler = (e: MediaQueryListEvent) => setMode(e.matches ? "dark" : "light");
     mq.addEventListener("change", handler);

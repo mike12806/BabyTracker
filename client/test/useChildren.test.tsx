@@ -43,10 +43,18 @@ describe("useChildren", () => {
   });
 
   it("provides children list and auto-selects first child", async () => {
-    mockApi.get.mockResolvedValueOnce([
-      { id: 1, first_name: "Emma", last_name: "Smith", birth_date: "2024-06-15" },
-      { id: 2, first_name: "Liam", last_name: "Smith", birth_date: "2025-01-10" },
-    ]);
+    mockApi.get.mockImplementation((path: string) => {
+      if (path === "/children") {
+        return Promise.resolve([
+          { id: 1, first_name: "Emma", last_name: "Smith", birth_date: "2024-06-15" },
+          { id: 2, first_name: "Liam", last_name: "Smith", birth_date: "2025-01-10" },
+        ]);
+      }
+      if (path === "/settings") {
+        return Promise.resolve({ default_child_id: null, theme_mode: "system" });
+      }
+      return Promise.resolve([]);
+    });
 
     render(
       <ChildProvider>
@@ -61,7 +69,11 @@ describe("useChildren", () => {
   });
 
   it("handles empty children list", async () => {
-    mockApi.get.mockResolvedValueOnce([]);
+    mockApi.get.mockImplementation((path: string) => {
+      if (path === "/children") return Promise.resolve([]);
+      if (path === "/settings") return Promise.resolve({ default_child_id: null, theme_mode: "system" });
+      return Promise.resolve([]);
+    });
 
     render(
       <ChildProvider>

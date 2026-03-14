@@ -137,9 +137,9 @@ children.post("/:id/photo", async (c) => {
   }
 
   const formData = await c.req.formData();
-  const file = formData.get("photo");
+  const file = formData.get("photo") as unknown as File | null;
 
-  if (!file || !(file instanceof File)) {
+  if (!file || typeof file === "string" || typeof file.arrayBuffer !== "function") {
     return c.json({ error: "No photo file provided" }, 400);
   }
 
