@@ -35,7 +35,6 @@ export default function ChildrenPage() {
   const [form, setForm] = useState({ first_name: "", last_name: "", birth_date: "" });
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadTargetId, setUploadTargetId] = useState<number | null>(null);
-  const [photoVersion, setPhotoVersion] = useState(0);
 
   const openCreate = () => {
     setEditing(null);
@@ -84,7 +83,6 @@ export default function ChildrenPage() {
     await api.upload(`/children/${uploadTargetId}/photo`, formData);
     setUploadTargetId(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
-    setPhotoVersion((v) => v + 1);
     await refreshChildren();
   };
 
@@ -93,7 +91,7 @@ export default function ChildrenPage() {
   };
 
   const photoUrl = (child: Child) =>
-    child.picture_content_type ? `${API_BASE}/children/${child.id}/photo?v=${photoVersion}` : undefined;
+    child.picture_content_type ? `${API_BASE}/children/${child.id}/photo?v=${encodeURIComponent(child.updated_at)}` : undefined;
 
   return (
     <Box>
@@ -152,7 +150,7 @@ export default function ChildrenPage() {
                         )}
                       </Box>
                     }
-                    secondary={`Born ${new Date(child.birth_date).toLocaleDateString()}`}
+                    secondary={`Born ${(() => { const [y, m, d] = child.birth_date.split('T')[0].split('-').map(Number); return new Date(y, m - 1, d).toLocaleDateString(); })()}`}
                   />
                 </ListItem>
               ))}
