@@ -11,8 +11,13 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   });
 
   if (res.status === 401) {
-    // Cloudflare Access will handle re-authentication on page reload
-    window.location.reload();
+    // Reload once so CF Access can re-authenticate; guard prevents infinite loop
+    const key = "auth_reload_ts";
+    const last = sessionStorage.getItem(key);
+    if (!last || Date.now() - Number(last) > 10_000) {
+      sessionStorage.setItem(key, String(Date.now()));
+      window.location.reload();
+    }
     throw new Error("Unauthorized");
   }
 
@@ -43,7 +48,12 @@ export const api = {
     });
 
     if (res.status === 401) {
-      window.location.reload();
+      const key = "auth_reload_ts";
+      const last = sessionStorage.getItem(key);
+      if (!last || Date.now() - Number(last) > 10_000) {
+        sessionStorage.setItem(key, String(Date.now()));
+        window.location.reload();
+      }
       throw new Error("Unauthorized");
     }
 

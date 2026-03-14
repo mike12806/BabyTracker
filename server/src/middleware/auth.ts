@@ -88,7 +88,15 @@ export const authMiddleware: MiddlewareHandler<AppEnv> = async (c, next) => {
     return;
   }
 
-  const jwt = c.req.header("Cf-Access-Jwt-Assertion");
+  // Try header first, fall back to CF Access cookie (same JWT)
+  let jwt = c.req.header("Cf-Access-Jwt-Assertion");
+  if (!jwt) {
+    const cookieHeader = c.req.header("Cookie");
+    if (cookieHeader) {
+      const match = cookieHeader.match(/CF_Authorization=([^;]+)/);
+      if (match) jwt = match[1];
+    }
+  }
   if (!jwt) {
     return c.json({ error: "Unauthorized" }, 401);
   }
