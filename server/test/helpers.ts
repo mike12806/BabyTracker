@@ -250,7 +250,6 @@ export function testRequest(app: ReturnType<typeof createTestApp>, db: D1Databas
     PHOTOS: photos as R2Bucket,
     CF_ACCESS_TEAM_DOMAIN: "test.cloudflareaccess.com",
     CF_ACCESS_AUD: "test-aud",
-    CLIENT_URL: "http://localhost:5173",
   };
 
   return {

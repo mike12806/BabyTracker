@@ -57,8 +57,6 @@ jobs:
 
       - name: Build client
         run: npm run build:client
-        env:
-          VITE_API_URL: https://baby-api.mfaherty.net/api
 
       - name: Create Pages project
         run: npx wrangler pages project create ${{ env.PAGES_PROJECT }} --production-branch=main

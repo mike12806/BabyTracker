@@ -1,5 +1,4 @@
 import { Hono } from "hono";
-import { cors } from "hono/cors";
 import type { Env } from "./types/env.js";
 import { authMiddleware } from "./middleware/auth.js";
 import { auth } from "./routes/auth.js";
@@ -18,15 +17,6 @@ import { settings } from "./routes/settings.js";
 type AppEnv = { Bindings: Env; Variables: { userId: number; userEmail: string; userName: string } };
 
 const app = new Hono<AppEnv>();
-
-// CORS — allow the client origin
-app.use(
-  "/api/*",
-  cors({
-    origin: (origin, c) => c.env.CLIENT_URL,
-    credentials: true,
-  })
-);
 
 // All API routes require Cloudflare Access authentication
 app.use("/api/*", authMiddleware);
