@@ -21,15 +21,23 @@ import {
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
+import EditIcon from "@mui/icons-material/Edit";
 import { api } from "../api/client";
 import { useChildren } from "../hooks/useChildren";
 import NowButton from "../components/NowButton";
 import type { DiaperChange } from "../types/models";
 
+function isoToLocal(iso: string): string {
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 export default function DiapersPage() {
   const { selectedChild } = useChildren();
   const [diapers, setDiapers] = useState<DiaperChange[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingEntry, setEditingEntry] = useState<DiaperChange | null>(null);
   const [form, setForm] = useState({ time: "", type: "wet", color: "", notes: "" });
 
   const load = async () => {
@@ -42,16 +50,32 @@ export default function DiapersPage() {
     load();
   }, [selectedChild]);
 
+  const handleEdit = (entry: DiaperChange) => {
+    setEditingEntry(entry);
+    setForm({
+      time: isoToLocal(entry.time),
+      type: entry.type,
+      color: entry.color || "",
+      notes: entry.notes || "",
+    });
+    setDialogOpen(true);
+  };
+
   const handleSave = async () => {
     if (!selectedChild) return;
-    await api.post("/diaper-changes", {
-      child_id: selectedChild.id,
+    const payload = {
       time: new Date(form.time).toISOString(),
       type: form.type,
       color: form.color || null,
       notes: form.notes || null,
-    });
+    };
+    if (editingEntry) {
+      await api.put(`/diaper-changes/${editingEntry.id}`, payload);
+    } else {
+      await api.post("/diaper-changes", { child_id: selectedChild.id, ...payload });
+    }
     setDialogOpen(false);
+    setEditingEntry(null);
     setForm({ time: "", type: "wet", color: "", notes: "" });
     await load();
   };
@@ -69,7 +93,15 @@ export default function DiapersPage() {
     <Box>
       <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 3 }}>
         <Typography variant="h4">Diaper Changes</Typography>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={() => setDialogOpen(true)}>
+        <Button
+          variant="contained"
+          startIcon={<AddIcon />}
+          onClick={() => {
+            setEditingEntry(null);
+            setForm({ time: "", type: "wet", color: "", notes: "" });
+            setDialogOpen(true);
+          }}
+        >
           Add Change
         </Button>
       </Box>
@@ -95,6 +127,9 @@ export default function DiapersPage() {
                     <TableCell sx={{ textTransform: "capitalize" }}>{d.color || "—"}</TableCell>
                     <TableCell>{d.notes || "—"}</TableCell>
                     <TableCell>
+                      <IconButton size="small" onClick={() => handleEdit(d)}>
+                        <EditIcon fontSize="small" />
+                      </IconButton>
                       <IconButton size="small" onClick={() => handleDelete(d.id)}>
                         <DeleteIcon fontSize="small" />
                       </IconButton>
@@ -114,8 +149,8 @@ export default function DiapersPage() {
         </CardContent>
       </Card>
 
-      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Add Diaper Change</DialogTitle>
+      <Dialog open={dialogOpen} onClose={() => { setDialogOpen(false); setEditingEntry(null); }} maxWidth="sm" fullWidth>
+        <DialogTitle>{editingEntry ? "Edit Diaper Change" : "Add Diaper Change"}</DialogTitle>
         <DialogContent>
           <Box sx={{ display: "flex", gap: 1, alignItems: "flex-start" }}>
             <TextField
@@ -168,7 +203,7 @@ export default function DiapersPage() {
           />
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setDialogOpen(false)}>Cancel</Button>
+          <Button onClick={() => { setDialogOpen(false); setEditingEntry(null); }}>Cancel</Button>
           <Button onClick={handleSave} variant="contained" disabled={!form.time}>
             Save
           </Button>

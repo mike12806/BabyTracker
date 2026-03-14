@@ -20,15 +20,23 @@ import {
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
+import EditIcon from "@mui/icons-material/Edit";
 import { api } from "../api/client";
 import { useChildren } from "../hooks/useChildren";
 import NowButton from "../components/NowButton";
 import type { Note } from "../types/models";
 
+function isoToLocal(iso: string): string {
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 export default function NotesPage() {
   const { selectedChild } = useChildren();
   const [entries, setEntries] = useState<Note[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingEntry, setEditingEntry] = useState<Note | null>(null);
   const [form, setForm] = useState({ time: "", title: "", content: "" });
 
   const load = async () => {
@@ -41,15 +49,30 @@ export default function NotesPage() {
     load();
   }, [selectedChild]);
 
+  const handleEdit = (entry: Note) => {
+    setEditingEntry(entry);
+    setForm({
+      time: isoToLocal(entry.time),
+      title: entry.title || "",
+      content: entry.content,
+    });
+    setDialogOpen(true);
+  };
+
   const handleSave = async () => {
     if (!selectedChild) return;
-    await api.post("/notes", {
-      child_id: selectedChild.id,
+    const payload = {
       time: new Date(form.time).toISOString(),
       title: form.title || null,
       content: form.content,
-    });
+    };
+    if (editingEntry) {
+      await api.put(`/notes/${editingEntry.id}`, payload);
+    } else {
+      await api.post("/notes", { child_id: selectedChild.id, ...payload });
+    }
     setDialogOpen(false);
+    setEditingEntry(null);
     setForm({ time: "", title: "", content: "" });
     await load();
   };
@@ -67,7 +90,15 @@ export default function NotesPage() {
     <Box>
       <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 3 }}>
         <Typography variant="h4">Notes</Typography>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={() => setDialogOpen(true)}>
+        <Button
+          variant="contained"
+          startIcon={<AddIcon />}
+          onClick={() => {
+            setEditingEntry(null);
+            setForm({ time: "", title: "", content: "" });
+            setDialogOpen(true);
+          }}
+        >
           Add Note
         </Button>
       </Box>
@@ -91,6 +122,9 @@ export default function NotesPage() {
                     <TableCell>{n.title || "—"}</TableCell>
                     <TableCell>{n.content}</TableCell>
                     <TableCell>
+                      <IconButton size="small" onClick={() => handleEdit(n)}>
+                        <EditIcon fontSize="small" />
+                      </IconButton>
                       <IconButton size="small" onClick={() => handleDelete(n.id)}>
                         <DeleteIcon fontSize="small" />
                       </IconButton>
@@ -110,8 +144,8 @@ export default function NotesPage() {
         </CardContent>
       </Card>
 
-      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Add Note</DialogTitle>
+      <Dialog open={dialogOpen} onClose={() => { setDialogOpen(false); setEditingEntry(null); }} maxWidth="sm" fullWidth>
+        <DialogTitle>{editingEntry ? "Edit Note" : "Add Note"}</DialogTitle>
         <DialogContent>
           <Box sx={{ display: "flex", gap: 1, alignItems: "flex-start" }}>
             <TextField
@@ -145,7 +179,7 @@ export default function NotesPage() {
           />
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setDialogOpen(false)}>Cancel</Button>
+          <Button onClick={() => { setDialogOpen(false); setEditingEntry(null); }}>Cancel</Button>
           <Button onClick={handleSave} variant="contained" disabled={!form.time || !form.content}>
             Save
           </Button>
