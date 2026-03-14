@@ -26,6 +26,7 @@ import { api } from "../api/client";
 import { useChildren } from "../hooks/useChildren";
 import NowButton from "../components/NowButton";
 import type { Feeding } from "../types/models";
+import { isoToLocal } from "../utils/dateTime";
 
 const FEEDING_TYPES = [
   { value: "breast_left", label: "Breast (Left)" },
@@ -35,12 +36,6 @@ const FEEDING_TYPES = [
   { value: "solid", label: "Solid Food" },
   { value: "fortified_breast_milk", label: "Fortified Breast Milk" },
 ];
-
-function isoToLocal(iso: string): string {
-  const d = new Date(iso);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
 
 export default function FeedingsPage() {
   const { selectedChild } = useChildren();
