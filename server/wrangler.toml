@@ -3,7 +3,7 @@ main = "src/index.ts"
 compatibility_date = "2024-12-01"
 
 routes = [
-  { pattern = "baby-api.mfaherty.net", custom_domain = true }
+  { pattern = "baby.mfaherty.net/api/*", zone_name = "mfaherty.net" }
 ]
 
 [[d1_databases]]
@@ -19,7 +19,6 @@ bucket_name = "baby-tracker-photos"
 [vars]
 CF_ACCESS_TEAM_DOMAIN = "mfaherty.cloudflareaccess.com"
 CF_ACCESS_AUD = "e37e97535859d92f1f1d9a3caaffd5626229e29adee7005a9b8100e116d32aa6"
-CLIENT_URL = "https://baby.mfaherty.net"
 
 # For local dev, create server/.dev.vars to override:
 #   CLIENT_URL=http://localhost:5173
