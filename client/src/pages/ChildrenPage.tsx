@@ -111,6 +111,7 @@ export default function ChildrenPage() {
               {children.map((child) => (
                 <ListItem
                   key={child.id}
+                  sx={{ pr: 22 }}
                   secondaryAction={
                     <Box>
                       <IconButton
