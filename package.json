@@ -6,6 +6,9 @@
     "client",
     "server"
   ],
+  "overrides": {
+    "undici": "^7.24.0"
+  },
   "scripts": {
     "dev:client": "npm run dev -w client",
     "dev:server": "npm run dev -w server",
