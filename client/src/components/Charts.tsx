@@ -3,6 +3,7 @@ import { useTheme } from "@mui/material/styles";
 import {
   BarChart,
   Bar,
+  ComposedChart,
   LineChart,
   Line,
   XAxis,
@@ -63,8 +64,11 @@ export function FeedingChart({ feedings, days = 14 }: FeedingChartProps) {
   const theme = useTheme();
   const data = useMemo(() => {
     const dateKeys = lastNDays(days);
-    const map: Record<string, { breast: number; bottle: number; solid: number }> = {};
-    for (const d of dateKeys) map[d] = { breast: 0, bottle: 0, solid: 0 };
+    const map: Record<
+      string,
+      { breast: number; bottle: number; solid: number; amountSum: number; amountCount: number }
+    > = {};
+    for (const d of dateKeys) map[d] = { breast: 0, bottle: 0, solid: 0, amountSum: 0, amountCount: 0 };
 
     for (const f of feedings) {
       const key = toDateKey(f.start_time);
@@ -72,6 +76,10 @@ export function FeedingChart({ feedings, days = 14 }: FeedingChartProps) {
       if (f.type === "bottle" || f.type === "fortified_breast_milk") map[key].bottle++;
       else if (f.type === "solid") map[key].solid++;
       else map[key].breast++;
+      if (f.amount != null) {
+        map[key].amountSum += f.amount;
+        map[key].amountCount++;
+      }
     }
 
     return dateKeys.map((d) => ({
@@ -79,27 +87,54 @@ export function FeedingChart({ feedings, days = 14 }: FeedingChartProps) {
       Breast: map[d].breast,
       Bottle: map[d].bottle,
       Solid: map[d].solid,
+      Amount: map[d].amountCount > 0 ? Math.round(map[d].amountSum * 10) / 10 : undefined,
     }));
   }, [feedings, days]);
 
+  const unit = feedings.find((f) => f.amount != null && f.amount_unit)?.amount_unit ?? null;
+  const hasAmount = data.some((d) => d.Amount !== undefined);
+
   return (
     <ResponsiveContainer width="100%" height={CHART_HEIGHT}>
-      <BarChart data={data}>
+      <ComposedChart data={data}>
         <CartesianGrid strokeDasharray="3 3" stroke={theme.palette.divider} />
         <XAxis dataKey="date" tick={{ fontSize: 12 }} />
-        <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
+        <YAxis yAxisId="count" allowDecimals={false} tick={{ fontSize: 12 }} />
+        {hasAmount && (
+          <YAxis
+            yAxisId="amount"
+            orientation="right"
+            tick={{ fontSize: 12 }}
+            unit={unit ?? undefined}
+          />
+        )}
         <Tooltip
           contentStyle={{
             backgroundColor: theme.palette.background.paper,
             border: `1px solid ${theme.palette.divider}`,
             borderRadius: 8,
           }}
+          formatter={(value, name) => {
+            if (name === "Amount") return [`${value}${unit ? ` ${unit}` : ""}`, "Amount"];
+            return [value, name];
+          }}
         />
         <Legend />
-        <Bar dataKey="Breast" stackId="a" fill="#7e57c2" radius={[0, 0, 0, 0]} />
-        <Bar dataKey="Bottle" stackId="a" fill="#42a5f5" />
-        <Bar dataKey="Solid" stackId="a" fill="#66bb6a" radius={[4, 4, 0, 0]} />
-      </BarChart>
+        <Bar yAxisId="count" dataKey="Breast" stackId="a" fill="#7e57c2" radius={[0, 0, 0, 0]} />
+        <Bar yAxisId="count" dataKey="Bottle" stackId="a" fill="#42a5f5" />
+        <Bar yAxisId="count" dataKey="Solid" stackId="a" fill="#66bb6a" radius={[4, 4, 0, 0]} />
+        {hasAmount && (
+          <Line
+            yAxisId="amount"
+            type="monotone"
+            dataKey="Amount"
+            stroke="#ff7043"
+            strokeWidth={2}
+            dot={{ r: 3 }}
+            connectNulls
+          />
+        )}
+      </ComposedChart>
     </ResponsiveContainer>
   );
 }
