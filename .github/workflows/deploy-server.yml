@@ -12,6 +12,9 @@ concurrency:
   group: deploy-server
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
 env:
   ZONE_NAME: mfaherty.net
   PURGE_DOMAIN: baby.mfaherty.net

@@ -12,6 +12,9 @@ concurrency:
   group: deploy-client
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
 env:
   PAGES_PROJECT: baby-tracker
   CUSTOM_DOMAIN: baby.mfaherty.net
