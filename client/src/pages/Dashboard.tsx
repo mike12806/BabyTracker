@@ -144,7 +144,9 @@ export default function Dashboard() {
                       {f.type.replace(/_/g, " ")} — {formatTime(f.start_time)}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
-                      {formatDuration(f.start_time, f.end_time)}
+                      {f.amount != null
+                        ? `${f.amount}${f.amount_unit ? ` ${f.amount_unit}` : ""} · ${formatDuration(f.start_time, f.end_time)}`
+                        : formatDuration(f.start_time, f.end_time)}
                     </Typography>
                   </Box>
                 ))
