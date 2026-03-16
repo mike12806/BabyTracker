@@ -81,14 +81,14 @@ async function fetchChildData(
         "SELECT time, type, color FROM diaper_changes WHERE child_id = ? AND time >= ? AND time < ? ORDER BY time"
       ).bind(childId, start, end).all<DiaperRow>(),
       env.DB.prepare(
-        "SELECT start_time, end_time, is_nap FROM sleep WHERE child_id = ? AND start_time >= ? AND start_time < ? ORDER BY start_time"
-      ).bind(childId, start, end).all<SleepRow>(),
+        "SELECT start_time, end_time, is_nap FROM sleep WHERE child_id = ? AND start_time < ? AND (end_time IS NULL OR end_time > ?) ORDER BY start_time"
+      ).bind(childId, end, start).all<SleepRow>(),
       env.DB.prepare(
-        "SELECT start_time, end_time, milestone FROM tummy_time WHERE child_id = ? AND start_time >= ? AND start_time < ? ORDER BY start_time"
-      ).bind(childId, start, end).all<TummyRow>(),
+        "SELECT start_time, end_time, milestone FROM tummy_time WHERE child_id = ? AND start_time < ? AND (end_time IS NULL OR end_time > ?) ORDER BY start_time"
+      ).bind(childId, end, start).all<TummyRow>(),
       env.DB.prepare(
-        "SELECT start_time, end_time, amount, amount_unit FROM pumping WHERE child_id = ? AND start_time >= ? AND start_time < ? ORDER BY start_time"
-      ).bind(childId, start, end).all<PumpingRow>(),
+        "SELECT start_time, end_time, amount, amount_unit FROM pumping WHERE child_id = ? AND start_time < ? AND (end_time IS NULL OR end_time > ?) ORDER BY start_time"
+      ).bind(childId, end, start).all<PumpingRow>(),
       env.DB.prepare(
         "SELECT time, reading, reading_unit FROM temperature WHERE child_id = ? AND time >= ? AND time < ? ORDER BY time"
       ).bind(childId, start, end).all<TemperatureRow>(),
