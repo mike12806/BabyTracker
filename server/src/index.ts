@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import type { Env } from "./types/env.js";
 import { authMiddleware } from "./middleware/auth.js";
+import { sendDailySummary } from "./scheduled/dailySummary.js";
 import { auth } from "./routes/auth.js";
 import { children } from "./routes/children.js";
 import { feedings } from "./routes/feedings.js";
@@ -43,4 +44,14 @@ app.onError((err, c) => {
   return c.json({ error: "Internal server error" }, 500);
 });
 
-export default app;
+export default {
+  fetch: app.fetch,
+
+  async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
+    ctx.waitUntil(
+      sendDailySummary(env).catch((err) =>
+        console.error("Daily summary failed:", err)
+      )
+    );
+  },
+};
