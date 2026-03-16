@@ -17,6 +17,7 @@ describe("Settings API", () => {
     const data = (await res.json()) as Record<string, unknown>;
     expect(data.default_child_id).toBeNull();
     expect(data.theme_mode).toBe("system");
+    expect(data.email_reports).toBe(1);
   });
 
   it("PUT /api/settings updates theme_mode", async () => {
@@ -90,5 +91,30 @@ describe("Settings API", () => {
       { "X-Test-Email": "userB@example.com" }
     );
     expect(res.status).toBe(404);
+  });
+
+  it("PUT /api/settings can opt out of email reports", async () => {
+    const res = await api.put("/api/settings", { email_reports: false });
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as Record<string, unknown>;
+    expect(data.email_reports).toBe(0);
+  });
+
+  it("PUT /api/settings can opt back in to email reports", async () => {
+    // Opt out first
+    await api.put("/api/settings", { email_reports: false });
+    // Then opt back in
+    const res = await api.put("/api/settings", { email_reports: true });
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as Record<string, unknown>;
+    expect(data.email_reports).toBe(1);
+  });
+
+  it("GET /api/settings reflects updated email_reports", async () => {
+    await api.put("/api/settings", { email_reports: false });
+    const res = await api.get("/api/settings");
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as Record<string, unknown>;
+    expect(data.email_reports).toBe(0);
   });
 });
