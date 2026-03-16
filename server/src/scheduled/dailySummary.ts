@@ -434,20 +434,40 @@ export async function sendDailySummary(env: Env): Promise<void> {
 
     if (children.length === 0) continue;
 
-    const childSections = await Promise.all(
-      children.map(async (child) => {
-        const data = await fetchChildData(env, child.id, windowStart, windowEnd);
-        return buildChildSection(
-          child,
-          data.feedings,
-          data.diapers,
-          data.sleepSessions,
-          data.tummyTimes,
-          data.pumping,
-          data.temperatures,
-          data.notes,
-        );
-      }),
+    const childData = await Promise.all(
+      children.map(async (child) => ({
+        child,
+        data: await fetchChildData(env, child.id, windowStart, windowEnd),
+      })),
+    );
+
+    // Skip email if there is no activity at all across all children
+    const hasActivity = childData.some(({ data }) =>
+      data.feedings.length > 0 ||
+      data.diapers.length > 0 ||
+      data.sleepSessions.length > 0 ||
+      data.tummyTimes.length > 0 ||
+      data.pumping.length > 0 ||
+      data.temperatures.length > 0 ||
+      data.notes.length > 0
+    );
+
+    if (!hasActivity) {
+      console.log(`No activity for ${user.email} on ${reportDateLabel}, skipping email`);
+      continue;
+    }
+
+    const childSections = childData.map(({ child, data }) =>
+      buildChildSection(
+        child,
+        data.feedings,
+        data.diapers,
+        data.sleepSessions,
+        data.tummyTimes,
+        data.pumping,
+        data.temperatures,
+        data.notes,
+      )
     );
 
     const html = buildEmailHtml(user.name, reportDateLabel, childSections);
