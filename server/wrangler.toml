@@ -16,9 +16,19 @@ migrations_dir = "migrations"
 binding = "PHOTOS"
 bucket_name = "baby-tracker-photos"
 
+[triggers]
+# Fires at 05:00 UTC daily = midnight Eastern Standard Time.
+# During EDT (UTC-4) this fires at 1:00 AM ET — close enough for a daily summary.
+crons = ["0 5 * * *"]
+
 [vars]
 CF_ACCESS_TEAM_DOMAIN = "mfaherty.cloudflareaccess.com"
 CF_ACCESS_AUD = "5a28edb4368d3cfc1971089b60cc3a4444d93fd54d256e55bf9736fd6c8c4ad1"
+AWS_SES_REGION = "us-east-1"
 
 # For local dev, create server/.dev.vars to override:
 #   CLIENT_URL=http://localhost:5173
+# Secrets (never put in wrangler.toml — set via CLI):
+#   wrangler secret put AWS_SES_ACCESS_KEY
+#   wrangler secret put AWS_SES_SECRET_KEY
+#   wrangler secret put REPORT_FROM_EMAIL
