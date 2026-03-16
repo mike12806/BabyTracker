@@ -424,37 +424,41 @@ export async function sendDailySummary(env: Env): Promise<void> {
   `).all<UserRow>();
 
   for (const user of users) {
-    const { results: children } = await env.DB.prepare(`
-      SELECT c.id, c.first_name, c.last_name, c.birth_date
-      FROM children c
-      JOIN user_children uc ON uc.child_id = c.id
-      WHERE uc.user_id = ?
-      ORDER BY c.first_name
-    `).bind(user.id).all<ChildRow>();
+    try {
+      const { results: children } = await env.DB.prepare(`
+        SELECT c.id, c.first_name, c.last_name, c.birth_date
+        FROM children c
+        JOIN user_children uc ON uc.child_id = c.id
+        WHERE uc.user_id = ?
+        ORDER BY c.first_name
+      `).bind(user.id).all<ChildRow>();
 
-    if (children.length === 0) continue;
+      if (children.length === 0) continue;
 
-    const childData = await Promise.all(
-      children.map(async (child) => ({
-        child,
-        data: await fetchChildData(env, child.id, windowStart, windowEnd),
-      })),
-    );
-
-    // Skip email if there is no activity at all across all children
-    const hasActivity = childData.some(({ data }) =>
-      data.feedings.length > 0 ||
-      data.diapers.length > 0 ||
-      data.sleepSessions.length > 0 ||
-      data.tummyTimes.length > 0 ||
-      data.pumping.length > 0 ||
-      data.temperatures.length > 0 ||
+      const childSections = await Promise.all(
+        children.map(async (child) => {
+          const data = await fetchChildData(env, child.id, windowStart, windowEnd);
+          return buildChildSection(
+            child,
+            data.feedings,
+            data.diapers,
+            data.sleepSessions,
+            data.tummyTimes,
+            data.pumping,
+            data.temperatures,
+            data.notes,
+          );
+        }),
+      );
       data.notes.length > 0
-    );
-
+      const html = buildEmailHtml(user.name, reportDateLabel, childSections);
+      const subject = `Baby Tracker: Daily Summary – ${reportDateLabel}`;
     if (!hasActivity) {
-      console.log(`No activity for ${user.email} on ${reportDateLabel}, skipping email`);
-      continue;
+      await sendEmail(env, user.email, subject, html);
+      console.log(`Daily summary sent to ${user.email}`);
+    } catch (error) {
+      console.error(`Failed to send daily summary to ${user.email}:`, error);
+    }
     }
 
     const childSections = childData.map(({ child, data }) =>
