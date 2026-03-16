@@ -139,7 +139,13 @@ function buildChildSection(
   // Feedings
   rows.push(sectionHeader("🍼", `Feedings (${feedings.length})`));
   if (feedings.length > 0) {
-    const totalMins = feedings.reduce((sum, f) => sum + (durationMins(f.start_time, f.end_time) ?? 0), 0);
+    let totalMins: number | null = null;
+    for (const f of feedings) {
+      const dur = durationMins(f.start_time, f.end_time);
+      if (dur != null) {
+        totalMins = (totalMins ?? 0) + dur;
+      }
+    }
     const typeCounts = feedings.reduce<Record<string, number>>((acc, f) => {
       acc[f.type] = (acc[f.type] ?? 0) + 1;
       return acc;
@@ -147,7 +153,8 @@ function buildChildSection(
     const typeStr = Object.entries(typeCounts)
       .map(([t, c]) => `${c}× ${t.replace(/_/g, " ")}`)
       .join(", ");
-    rows.push(row(`<span style="color:#888">${esc(typeStr)} · Total nursing/feed time: ${fmtDuration(totalMins > 0 ? totalMins : null)}</span>`));
+    const totalStr = totalMins != null && totalMins > 0 ? fmtDuration(totalMins) : "—";
+    rows.push(row(`<span style="color:#888">${esc(typeStr)} · Total nursing/feed time: ${esc(totalStr)}</span>`));
     for (const f of feedings) {
       const amount = f.amount != null ? ` · ${f.amount} ${esc(f.amount_unit ?? "")}` : "";
       rows.push(row(`${esc(formatTime(f.start_time))} &mdash; ${esc(f.type.replace(/_/g, " "))} · ${esc(fmtDuration(durationMins(f.start_time, f.end_time)))}${amount}`));
