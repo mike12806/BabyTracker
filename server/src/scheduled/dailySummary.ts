@@ -81,14 +81,14 @@ async function fetchChildData(
         "SELECT time, type, color FROM diaper_changes WHERE child_id = ? AND time >= ? AND time < ? ORDER BY time"
       ).bind(childId, start, end).all<DiaperRow>(),
       env.DB.prepare(
-        "SELECT start_time, end_time, is_nap FROM sleep WHERE child_id = ? AND start_time >= ? AND start_time < ? ORDER BY start_time"
-      ).bind(childId, start, end).all<SleepRow>(),
+        "SELECT start_time, end_time, is_nap FROM sleep WHERE child_id = ? AND start_time < ? AND (end_time IS NULL OR end_time > ?) ORDER BY start_time"
+      ).bind(childId, end, start).all<SleepRow>(),
       env.DB.prepare(
-        "SELECT start_time, end_time, milestone FROM tummy_time WHERE child_id = ? AND start_time >= ? AND start_time < ? ORDER BY start_time"
-      ).bind(childId, start, end).all<TummyRow>(),
+        "SELECT start_time, end_time, milestone FROM tummy_time WHERE child_id = ? AND start_time < ? AND (end_time IS NULL OR end_time > ?) ORDER BY start_time"
+      ).bind(childId, end, start).all<TummyRow>(),
       env.DB.prepare(
-        "SELECT start_time, end_time, amount, amount_unit FROM pumping WHERE child_id = ? AND start_time >= ? AND start_time < ? ORDER BY start_time"
-      ).bind(childId, start, end).all<PumpingRow>(),
+        "SELECT start_time, end_time, amount, amount_unit FROM pumping WHERE child_id = ? AND start_time < ? AND (end_time IS NULL OR end_time > ?) ORDER BY start_time"
+      ).bind(childId, end, start).all<PumpingRow>(),
       env.DB.prepare(
         "SELECT time, reading, reading_unit FROM temperature WHERE child_id = ? AND time >= ? AND time < ? ORDER BY time"
       ).bind(childId, start, end).all<TemperatureRow>(),
@@ -139,7 +139,13 @@ function buildChildSection(
   // Feedings
   rows.push(sectionHeader("🍼", `Feedings (${feedings.length})`));
   if (feedings.length > 0) {
-    const totalMins = feedings.reduce((sum, f) => sum + (durationMins(f.start_time, f.end_time) ?? 0), 0);
+    let totalMins: number | null = null;
+    for (const f of feedings) {
+      const dur = durationMins(f.start_time, f.end_time);
+      if (dur != null) {
+        totalMins = (totalMins ?? 0) + dur;
+      }
+    }
     const typeCounts = feedings.reduce<Record<string, number>>((acc, f) => {
       acc[f.type] = (acc[f.type] ?? 0) + 1;
       return acc;
@@ -147,7 +153,8 @@ function buildChildSection(
     const typeStr = Object.entries(typeCounts)
       .map(([t, c]) => `${c}× ${t.replace(/_/g, " ")}`)
       .join(", ");
-    rows.push(row(`<span style="color:#888">${esc(typeStr)} · Total nursing/feed time: ${fmtDuration(totalMins > 0 ? totalMins : null)}</span>`));
+    const totalStr = totalMins != null && totalMins > 0 ? fmtDuration(totalMins) : "—";
+    rows.push(row(`<span style="color:#888">${esc(typeStr)} · Total nursing/feed time: ${esc(totalStr)}</span>`));
     for (const f of feedings) {
       const amount = f.amount != null ? ` · ${f.amount} ${esc(f.amount_unit ?? "")}` : "";
       rows.push(row(`${esc(formatTime(f.start_time))} &mdash; ${esc(f.type.replace(/_/g, " "))} · ${esc(fmtDuration(durationMins(f.start_time, f.end_time)))}${amount}`));
@@ -385,7 +392,6 @@ async function sendEmail(
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Host: host,
       "X-Amz-Date": amzDate,
       Authorization: authHeader,
     },
@@ -400,12 +406,17 @@ async function sendEmail(
 
 // ── Main export ───────────────────────────────────────────────────────────────
 
-export async function sendDailySummary(env: Env): Promise<void> {
+export function computeDailyWindow(now: Date): {
+  windowStart: string;
+  windowEnd: string;
+  reportDateLabel: string;
+} {
   // Rolling 24-hour window ending at the moment the cron fires (5:00 AM UTC = midnight ET).
   // This covers exactly "yesterday" in Eastern time regardless of DST.
-  const now = new Date();
   const windowEnd = now.toISOString().slice(0, 19) + "Z";
-  const windowStart = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString().slice(0, 19) + "Z";
+  const windowStart = new Date(now.getTime() - 24 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 19) + "Z";
 
   const reportDateLabel = new Date(now.getTime() - 24 * 60 * 60 * 1000).toLocaleDateString("en-US", {
     timeZone: "America/New_York",
@@ -414,6 +425,13 @@ export async function sendDailySummary(env: Env): Promise<void> {
     month: "long",
     day: "numeric",
   });
+
+  return { windowStart, windowEnd, reportDateLabel };
+}
+
+export async function sendDailySummary(env: Env): Promise<void> {
+  const now = new Date();
+  const { windowStart, windowEnd, reportDateLabel } = computeDailyWindow(now);
 
   // Fetch users who have email reports enabled (default = enabled when no settings row exists)
   const { results: users } = await env.DB.prepare(`
