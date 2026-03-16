@@ -400,12 +400,17 @@ async function sendEmail(
 
 // ── Main export ───────────────────────────────────────────────────────────────
 
-export async function sendDailySummary(env: Env): Promise<void> {
+export function computeDailyWindow(now: Date): {
+  windowStart: string;
+  windowEnd: string;
+  reportDateLabel: string;
+} {
   // Rolling 24-hour window ending at the moment the cron fires (5:00 AM UTC = midnight ET).
   // This covers exactly "yesterday" in Eastern time regardless of DST.
-  const now = new Date();
   const windowEnd = now.toISOString().slice(0, 19) + "Z";
-  const windowStart = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString().slice(0, 19) + "Z";
+  const windowStart = new Date(now.getTime() - 24 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 19) + "Z";
 
   const reportDateLabel = new Date(now.getTime() - 24 * 60 * 60 * 1000).toLocaleDateString("en-US", {
     timeZone: "America/New_York",
@@ -414,6 +419,13 @@ export async function sendDailySummary(env: Env): Promise<void> {
     month: "long",
     day: "numeric",
   });
+
+  return { windowStart, windowEnd, reportDateLabel };
+}
+
+export async function sendDailySummary(env: Env): Promise<void> {
+  const now = new Date();
+  const { windowStart, windowEnd, reportDateLabel } = computeDailyWindow(now);
 
   // Fetch users who have email reports enabled (default = enabled when no settings row exists)
   const { results: users } = await env.DB.prepare(`
