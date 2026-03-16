@@ -17,7 +17,7 @@ settings.get("/", async (c) => {
     .run();
 
   const row = await c.env.DB.prepare(
-    "SELECT user_id, default_child_id, theme_mode FROM user_settings WHERE user_id = ?"
+    "SELECT user_id, default_child_id, theme_mode, email_reports FROM user_settings WHERE user_id = ?"
   )
     .bind(userId)
     .first();
@@ -31,6 +31,7 @@ settings.put("/", async (c) => {
   const body = await c.req.json<{
     default_child_id?: number | null;
     theme_mode?: "system" | "light" | "dark";
+    email_reports?: boolean;
   }>();
 
   // Validate default_child_id belongs to this user if provided
@@ -63,31 +64,29 @@ settings.put("/", async (c) => {
     setClauses.push("theme_mode = ?");
     setValues.push(body.theme_mode!);
   }
+  if ("email_reports" in body) {
+    setClauses.push("email_reports = ?");
+    setValues.push(body.email_reports ? 1 : 0);
+  }
 
-  if (setClauses.length === 0) {
-    // Nothing to update — just ensure row exists and return it
-    await c.env.DB.prepare(
-      "INSERT OR IGNORE INTO user_settings (user_id) VALUES (?)"
-    )
-      .bind(userId)
-      .run();
-  } else {
+  // Ensure the row exists (creates with column defaults on first visit)
+  await c.env.DB.prepare(
+    "INSERT OR IGNORE INTO user_settings (user_id) VALUES (?)"
+  )
+    .bind(userId)
+    .run();
+
+  if (setClauses.length > 0) {
     setClauses.push("updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')");
-
-    // Insert with provided values so first-time upsert gets the right data
-    const insertDefault = body.default_child_id !== undefined ? (body.default_child_id ?? null) : null;
-    const insertTheme = body.theme_mode ?? "system";
-
     await c.env.DB.prepare(
-      `INSERT INTO user_settings (user_id, default_child_id, theme_mode) VALUES (?, ?, ?)
-       ON CONFLICT(user_id) DO UPDATE SET ${setClauses.join(", ")}`
+      `UPDATE user_settings SET ${setClauses.join(", ")} WHERE user_id = ?`
     )
-      .bind(userId, insertDefault, insertTheme, ...setValues)
+      .bind(...setValues, userId)
       .run();
   }
 
   const row = await c.env.DB.prepare(
-    "SELECT user_id, default_child_id, theme_mode FROM user_settings WHERE user_id = ?"
+    "SELECT user_id, default_child_id, theme_mode, email_reports FROM user_settings WHERE user_id = ?"
   )
     .bind(userId)
     .first();

@@ -406,25 +406,73 @@ async function sendEmail(
 
 // ── Main export ───────────────────────────────────────────────────────────────
 
+/** Returns the `YYYY-MM-DD` calendar-date string in America/New_York for a given UTC instant. */
+function toEtDateStr(date: Date): string {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const y = parts.find(p => p.type === "year")!.value;
+  const m = parts.find(p => p.type === "month")!.value;
+  const d = parts.find(p => p.type === "day")!.value;
+  return `${y}-${m}-${d}`;
+}
+
+/**
+ * Returns the UTC ISO string (with milliseconds) for midnight 00:00:00.000 at the
+ * start of `etDateStr` (a "YYYY-MM-DD" calendar date in America/New_York).
+ * Correctly handles both EST (UTC-5) and EDT (UTC-4).
+ *
+ * Offset 4 (EDT) is tried before 5 (EST) so that on DST fall-back days — where
+ * midnight can correspond to both UTC-4 and UTC-5 — the earlier (EDT) midnight
+ * is chosen, giving the correct 25-hour day boundary.
+ */
+function etMidnightToUtc(etDateStr: string): string {
+  for (const offsetHrs of [4, 5]) {
+    const candidate = new Date(`${etDateStr}T${String(offsetHrs).padStart(2, "0")}:00:00.000Z`);
+    if (toEtDateStr(candidate) === etDateStr) {
+      const etHour = parseInt(
+        new Intl.DateTimeFormat("en-US", {
+          timeZone: "America/New_York",
+          hour: "2-digit",
+          hour12: false,
+        }).format(candidate),
+        10,
+      );
+      // hour12:false returns "00" for midnight in V8; guard against "24" which
+      // some Intl implementations emit for the very start of a new day.
+      if (etHour === 0 || etHour === 24) return candidate.toISOString();
+    }
+  }
+  // Fallback — ET is always UTC-4 or UTC-5
+  return `${etDateStr}T05:00:00.000Z`;
+}
+
 export function computeDailyWindow(now: Date): {
   windowStart: string;
   windowEnd: string;
   reportDateLabel: string;
 } {
-  // Rolling 24-hour window ending at the moment the cron fires (5:00 AM UTC = midnight ET).
-  // This covers exactly "yesterday" in Eastern time regardless of DST.
-  const windowEnd = now.toISOString().slice(0, 19) + "Z";
-  const windowStart = new Date(now.getTime() - 24 * 60 * 60 * 1000)
-    .toISOString()
-    .slice(0, 19) + "Z";
+  // Compute exact ET calendar-day boundaries for yesterday. Using explicit ET midnight
+  // instants (rather than a fixed 24h offset) handles DST transitions correctly:
+  // spring-forward days are 23h, fall-back days are 25h.
+  const todayEt = toEtDateStr(now);
+  const windowEnd = etMidnightToUtc(todayEt);
 
-  const reportDateLabel = new Date(now.getTime() - 24 * 60 * 60 * 1000).toLocaleDateString("en-US", {
+  // Go 12 hours before today's ET midnight to safely land in "yesterday" regardless of DST
+  const midYesterday = new Date(new Date(windowEnd).getTime() - 12 * 60 * 60 * 1000);
+  const yesterdayEt = toEtDateStr(midYesterday);
+  const windowStart = etMidnightToUtc(yesterdayEt);
+
+  const reportDateLabel = new Intl.DateTimeFormat("en-US", {
     timeZone: "America/New_York",
     weekday: "long",
     year: "numeric",
     month: "long",
     day: "numeric",
-  });
+  }).format(new Date(windowStart));
 
   return { windowStart, windowEnd, reportDateLabel };
 }
