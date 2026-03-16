@@ -24,7 +24,6 @@ crons = ["0 5 * * *"]
 [vars]
 CF_ACCESS_TEAM_DOMAIN = "mfaherty.cloudflareaccess.com"
 CF_ACCESS_AUD = "5a28edb4368d3cfc1971089b60cc3a4444d93fd54d256e55bf9736fd6c8c4ad1"
-REPORT_FROM_EMAIL = "Baby Tracker <mike@mfaherty.net>"
 AWS_SES_REGION = "us-east-1"
 
 # For local dev, create server/.dev.vars to override:
@@ -32,3 +31,4 @@ AWS_SES_REGION = "us-east-1"
 # Secrets (never put in wrangler.toml — set via CLI):
 #   wrangler secret put AWS_SES_ACCESS_KEY
 #   wrangler secret put AWS_SES_SECRET_KEY
+#   wrangler secret put REPORT_FROM_EMAIL
