@@ -340,13 +340,17 @@ async function sendEmail(
   subject: string,
   html: string,
 ): Promise<void> {
-  const region = env.AWS_SES_REGION;
+  const region = env.AWS_SES_REGION ?? (() => { throw new Error("AWS_SES_REGION is not set") })();
+  const accessKey = env.AWS_SES_ACCESS_KEY ?? (() => { throw new Error("AWS_SES_ACCESS_KEY is not set") })();
+  const secretKey = env.AWS_SES_SECRET_KEY ?? (() => { throw new Error("AWS_SES_SECRET_KEY is not set") })();
+  const fromEmail = env.REPORT_FROM_EMAIL ?? (() => { throw new Error("REPORT_FROM_EMAIL is not set") })();
+
   const service = "ses";
   const host = `email.${region}.amazonaws.com`;
   const url = `https://${host}/v2/email/outbound-emails`;
 
   const payload = JSON.stringify({
-    FromEmailAddress: env.REPORT_FROM_EMAIL,
+    FromEmailAddress: fromEmail,
     Destination: { ToAddresses: [to] },
     Content: {
       Simple: {
@@ -381,11 +385,11 @@ async function sendEmail(
     await sha256Hex(canonicalRequest),
   ].join("\n");
 
-  const key = await signingKey(env.AWS_SES_SECRET_KEY, dateStamp, region, service);
+  const key = await signingKey(secretKey, dateStamp, region, service);
   const signature = toHex(await hmacSha256(key, stringToSign));
 
   const authHeader =
-    `AWS4-HMAC-SHA256 Credential=${env.AWS_SES_ACCESS_KEY}/${credentialScope}, ` +
+    `AWS4-HMAC-SHA256 Credential=${accessKey}/${credentialScope}, ` +
     `SignedHeaders=${signedHeaders}, Signature=${signature}`;
 
   const response = await fetch(url, {
