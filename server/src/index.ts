@@ -38,6 +38,12 @@ app.route("/api/notes", notes);
 app.route("/api/timers", timers);
 app.route("/api/settings", settings);
 
+// TODO: remove this once the scheduled email has been verified in production
+app.post("/api/admin/trigger-daily-summary", async (c) => {
+  await sendDailySummary(c.env);
+  return c.json({ ok: true });
+});
+
 // Global error handler
 app.onError((err, c) => {
   console.error("Unhandled error:", err);
