@@ -385,7 +385,6 @@ async function sendEmail(
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Host: host,
       "X-Amz-Date": amzDate,
       Authorization: authHeader,
     },
