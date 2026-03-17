@@ -241,15 +241,15 @@ function buildChildSection(
   return `
     <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 28px;border-radius:8px;overflow:hidden">
       <tr>
-        <td style="background:#fce4ec;padding:12px 16px;border-radius:8px 8px 0 0">
-          <h2 style="margin:0;font-size:19px;color:#c2185b;font-family:sans-serif">
+        <td style="background:#e3f2fd;padding:12px 16px;border-radius:8px 8px 0 0">
+          <h2 style="margin:0;font-size:19px;color:#1565c0;font-family:sans-serif">
             ${name}
-            <span style="font-size:13px;color:#e91e63;font-weight:normal;margin-left:8px">${age}</span>
+            <span style="font-size:13px;color:#1976d2;font-weight:normal;margin-left:8px">${age}</span>
           </h2>
         </td>
       </tr>
       <tr>
-        <td style="background:#fffbfc;padding:4px 16px 16px;border:1px solid #f8bbd0;border-top:none;border-radius:0 0 8px 8px">
+        <td style="background:#f8fbff;padding:4px 16px 16px;border:1px solid #bbdefb;border-top:none;border-radius:0 0 8px 8px">
           <table width="100%" cellpadding="0" cellspacing="0">
             ${rows.join("\n")}
           </table>
@@ -274,9 +274,9 @@ function buildEmailHtml(
 
           <!-- Header -->
           <tr>
-            <td style="background:#c2185b;padding:24px 28px;border-radius:8px 8px 0 0;text-align:center">
+            <td style="background:#1565c0;padding:24px 28px;border-radius:8px 8px 0 0;text-align:center">
               <h1 style="margin:0;font-size:24px;color:#fff;font-family:sans-serif">👶 Baby Tracker</h1>
-              <p style="margin:6px 0 0;font-size:14px;color:#f8bbd0">Daily Summary &mdash; ${esc(reportDateLabel)}</p>
+              <p style="margin:6px 0 0;font-size:14px;color:#bbdefb">Daily Summary &mdash; ${esc(reportDateLabel)}</p>
             </td>
           </tr>
 
