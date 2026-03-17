@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { MemoryRouter } from "react-router-dom";
 import { ThemeProvider, createTheme } from "@mui/material/styles";
 import Dashboard from "../src/pages/Dashboard";
 import type { Child, Feeding } from "../src/types/models";
@@ -51,7 +52,11 @@ const mockApi = vi.mocked(api);
 
 const theme = createTheme();
 function Wrapper({ children }: { children: React.ReactNode }) {
-  return <ThemeProvider theme={theme}>{children}</ThemeProvider>;
+  return (
+    <MemoryRouter>
+      <ThemeProvider theme={theme}>{children}</ThemeProvider>
+    </MemoryRouter>
+  );
 }
 
 const baseChild: Child = {
