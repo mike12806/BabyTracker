@@ -1,4 +1,5 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitForElementToBeRemoved } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import { ThemeProvider, createTheme } from "@mui/material/styles";
@@ -184,5 +185,120 @@ describe("Dashboard – Recent Feedings amount display", () => {
     expect(amountDuration).toBeTruthy();
     // Should not have a double space
     expect(screen.queryByText(/5  ·/)).toBeNull();
+  });
+});
+
+describe("Dashboard – quick action buttons", () => {
+  it("renders the Feeding, Diaper, and Sleep quick action buttons", async () => {
+    render(<Dashboard />, { wrapper: Wrapper });
+
+    expect(await screen.findByRole("button", { name: /^feeding$/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^diaper$/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^sleep$/i })).toBeTruthy();
+  });
+
+  it("opens the Add Feeding dialog when the Feeding button is clicked", async () => {
+    const user = userEvent.setup();
+    render(<Dashboard />, { wrapper: Wrapper });
+
+    await user.click(await screen.findByRole("button", { name: /^feeding$/i }));
+
+    expect(await screen.findByRole("dialog")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: /add feeding/i })).toBeTruthy();
+  });
+
+  it("opens the Add Diaper Change dialog when the Diaper button is clicked", async () => {
+    const user = userEvent.setup();
+    render(<Dashboard />, { wrapper: Wrapper });
+
+    await user.click(await screen.findByRole("button", { name: /^diaper$/i }));
+
+    expect(await screen.findByRole("dialog")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: /add diaper change/i })).toBeTruthy();
+  });
+
+  it("opens the Add Sleep dialog when the Sleep button is clicked", async () => {
+    const user = userEvent.setup();
+    render(<Dashboard />, { wrapper: Wrapper });
+
+    await user.click(await screen.findByRole("button", { name: /^sleep$/i }));
+
+    expect(await screen.findByRole("dialog")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: /add sleep/i })).toBeTruthy();
+  });
+
+  it("submits the feeding form, calls api.post, and refreshes dashboard data", async () => {
+    const user = userEvent.setup();
+    mockApi.post.mockResolvedValue({});
+    render(<Dashboard />, { wrapper: Wrapper });
+
+    await user.click(await screen.findByRole("button", { name: /^feeding$/i }));
+
+    // Fill in start time
+    const startTimeInput = await screen.findByLabelText(/start time/i);
+    await user.type(startTimeInput, "2024-12-01T10:00");
+
+    // Save
+    await user.click(screen.getByRole("button", { name: /^save$/i }));
+
+    expect(mockApi.post).toHaveBeenCalledWith(
+      "/feedings",
+      expect.objectContaining({ child_id: 1, type: "bottle" })
+    );
+    // Dashboard data should be refreshed
+    expect(mockApi.get).toHaveBeenCalledWith(expect.stringContaining("/feedings"));
+  });
+
+  it("submits the diaper form, calls api.post, and refreshes dashboard data", async () => {
+    const user = userEvent.setup();
+    mockApi.post.mockResolvedValue({});
+    render(<Dashboard />, { wrapper: Wrapper });
+
+    await user.click(await screen.findByRole("button", { name: /^diaper$/i }));
+
+    // Fill in time
+    const timeInput = await screen.findByLabelText(/^time/i);
+    await user.type(timeInput, "2024-12-01T10:00");
+
+    // Save
+    await user.click(screen.getByRole("button", { name: /^save$/i }));
+
+    expect(mockApi.post).toHaveBeenCalledWith(
+      "/diaper-changes",
+      expect.objectContaining({ child_id: 1, type: "wet" })
+    );
+    expect(mockApi.get).toHaveBeenCalledWith(expect.stringContaining("/diaper-changes"));
+  });
+
+  it("submits the sleep form, calls api.post, and refreshes dashboard data", async () => {
+    const user = userEvent.setup();
+    mockApi.post.mockResolvedValue({});
+    render(<Dashboard />, { wrapper: Wrapper });
+
+    await user.click(await screen.findByRole("button", { name: /^sleep$/i }));
+
+    // Fill in start time
+    const startTimeInput = await screen.findByLabelText(/start time/i);
+    await user.type(startTimeInput, "2024-12-01T22:00");
+
+    // Save
+    await user.click(screen.getByRole("button", { name: /^save$/i }));
+
+    expect(mockApi.post).toHaveBeenCalledWith(
+      "/sleep",
+      expect.objectContaining({ child_id: 1, is_nap: 0 })
+    );
+    expect(mockApi.get).toHaveBeenCalledWith(expect.stringContaining("/sleep"));
+  });
+
+  it("closes the feeding dialog when Cancel is clicked", async () => {
+    const user = userEvent.setup();
+    render(<Dashboard />, { wrapper: Wrapper });
+
+    await user.click(await screen.findByRole("button", { name: /^feeding$/i }));
+    expect(await screen.findByRole("dialog")).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: /cancel/i }));
+    await waitForElementToBeRemoved(() => screen.queryByRole("dialog"));
   });
 });
