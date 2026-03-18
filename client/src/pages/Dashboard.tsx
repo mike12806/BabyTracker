@@ -303,9 +303,6 @@ export default function Dashboard() {
   return (
     <Box>
       <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 1.5, mb: 2 }}>
-        <Typography variant="h4" sx={{ flex: 1, minWidth: 0 }}>
-          {selectedChild.first_name}'s Dashboard
-        </Typography>
         <Stack direction="row" spacing={1} flexWrap="wrap">
           <Button
             variant="contained"
