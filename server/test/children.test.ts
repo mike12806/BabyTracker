@@ -100,4 +100,32 @@ describe("Children API", () => {
     const res = await api.get("/api/children/999");
     expect(res.status).toBe(404);
   });
+
+  it("GET /api/children returns children created by another user", async () => {
+    // User A creates a child
+    await api.post("/api/children", {
+      first_name: "Emma",
+      birth_date: "2024-06-15",
+    });
+
+    // User B (different email) should still see the child
+    const res = await api.get("/api/children", { "X-Test-Email": "other@example.com" });
+    expect(res.status).toBe(200);
+    const children = (await res.json()) as unknown[];
+    expect(children).toHaveLength(1);
+  });
+
+  it("GET /api/children/:id returns a child created by another user", async () => {
+    const createRes = await api.post("/api/children", {
+      first_name: "Emma",
+      birth_date: "2024-06-15",
+    });
+    const created = (await createRes.json()) as { id: number };
+
+    // User B (different email) should still be able to fetch this child
+    const res = await api.get(`/api/children/${created.id}`, { "X-Test-Email": "other@example.com" });
+    expect(res.status).toBe(200);
+    const child = (await res.json()) as Record<string, unknown>;
+    expect(child.first_name).toBe("Emma");
+  });
 });

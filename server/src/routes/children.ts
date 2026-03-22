@@ -5,27 +5,24 @@ type AppEnv = { Bindings: Env; Variables: { userId: number; userEmail: string; u
 
 const children = new Hono<AppEnv>();
 
-// GET /api/children — list children for the current user
+// GET /api/children — list all children visible to any logged-in user
 children.get("/", async (c) => {
-  const userId = c.get("userId");
   const { results } = await c.env.DB.prepare(
-    "SELECT c.* FROM children c JOIN user_children uc ON c.id = uc.child_id WHERE uc.user_id = ? ORDER BY c.first_name"
+    "SELECT * FROM children ORDER BY first_name"
   )
-    .bind(userId)
     .all();
 
   return c.json(results);
 });
 
-// GET /api/children/:id — get a single child
+// GET /api/children/:id — get a single child (accessible to any logged-in user)
 children.get("/:id", async (c) => {
-  const userId = c.get("userId");
   const childId = parseInt(c.req.param("id"), 10);
 
   const child = await c.env.DB.prepare(
-    "SELECT c.* FROM children c JOIN user_children uc ON c.id = uc.child_id WHERE c.id = ? AND uc.user_id = ?"
+    "SELECT * FROM children WHERE id = ?"
   )
-    .bind(childId, userId)
+    .bind(childId)
     .first();
 
   if (!child) {
@@ -63,19 +60,18 @@ children.post("/", async (c) => {
   return c.json(child, 201);
 });
 
-// PUT /api/children/:id — update a child
+// PUT /api/children/:id — update a child (accessible to any logged-in user)
 children.put("/:id", async (c) => {
-  const userId = c.get("userId");
   const childId = parseInt(c.req.param("id"), 10);
 
-  // Verify access
-  const access = await c.env.DB.prepare(
-    "SELECT 1 FROM user_children WHERE user_id = ? AND child_id = ?"
+  // Verify child exists
+  const exists = await c.env.DB.prepare(
+    "SELECT 1 FROM children WHERE id = ?"
   )
-    .bind(userId, childId)
+    .bind(childId)
     .first();
 
-  if (!access) {
+  if (!exists) {
     return c.json({ error: "Child not found" }, 404);
   }
 
@@ -94,18 +90,17 @@ children.put("/:id", async (c) => {
   return c.json(child);
 });
 
-// DELETE /api/children/:id — delete a child
+// DELETE /api/children/:id — delete a child (accessible to any logged-in user)
 children.delete("/:id", async (c) => {
-  const userId = c.get("userId");
   const childId = parseInt(c.req.param("id"), 10);
 
-  const access = await c.env.DB.prepare(
-    "SELECT 1 FROM user_children WHERE user_id = ? AND child_id = ?"
+  const exists = await c.env.DB.prepare(
+    "SELECT 1 FROM children WHERE id = ?"
   )
-    .bind(userId, childId)
+    .bind(childId)
     .first();
 
-  if (!access) {
+  if (!exists) {
     return c.json({ error: "Child not found" }, 404);
   }
 
@@ -123,16 +118,15 @@ function photoKey(childId: number): string {
 
 // POST /api/children/:id/photo — upload a photo (stored in R2)
 children.post("/:id/photo", async (c) => {
-  const userId = c.get("userId");
   const childId = parseInt(c.req.param("id"), 10);
 
-  const access = await c.env.DB.prepare(
-    "SELECT 1 FROM user_children WHERE user_id = ? AND child_id = ?"
+  const exists = await c.env.DB.prepare(
+    "SELECT 1 FROM children WHERE id = ?"
   )
-    .bind(userId, childId)
+    .bind(childId)
     .first();
 
-  if (!access) {
+  if (!exists) {
     return c.json({ error: "Child not found" }, 404);
   }
 
@@ -168,17 +162,16 @@ children.post("/:id/photo", async (c) => {
 
 // GET /api/children/:id/photo — serve the photo from R2
 children.get("/:id/photo", async (c) => {
-  const userId = c.get("userId");
   const childId = parseInt(c.req.param("id"), 10);
 
-  // Verify access
-  const access = await c.env.DB.prepare(
-    "SELECT 1 FROM user_children WHERE user_id = ? AND child_id = ?"
+  // Verify child exists
+  const exists = await c.env.DB.prepare(
+    "SELECT 1 FROM children WHERE id = ?"
   )
-    .bind(userId, childId)
+    .bind(childId)
     .first();
 
-  if (!access) {
+  if (!exists) {
     return c.json({ error: "Child not found" }, 404);
   }
 
@@ -198,16 +191,15 @@ children.get("/:id/photo", async (c) => {
 
 // DELETE /api/children/:id/photo — remove the photo from R2
 children.delete("/:id/photo", async (c) => {
-  const userId = c.get("userId");
   const childId = parseInt(c.req.param("id"), 10);
 
-  const access = await c.env.DB.prepare(
-    "SELECT 1 FROM user_children WHERE user_id = ? AND child_id = ?"
+  const exists = await c.env.DB.prepare(
+    "SELECT 1 FROM children WHERE id = ?"
   )
-    .bind(userId, childId)
+    .bind(childId)
     .first();
 
-  if (!access) {
+  if (!exists) {
     return c.json({ error: "Child not found" }, 404);
   }
 

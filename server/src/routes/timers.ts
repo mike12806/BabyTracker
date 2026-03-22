@@ -1,30 +1,29 @@
 import { Hono } from "hono";
 import type { Env } from "../types/env.js";
-import { verifyChildAccess } from "./crud.js";
+import { verifyChildExists } from "./crud.js";
 
 type AppEnv = { Bindings: Env; Variables: { userId: number; userEmail: string; userName: string } };
 
 const timers = new Hono<AppEnv>();
 
-// GET /api/timers — list active timers for the user
+// GET /api/timers — list timers for a child
 timers.get("/", async (c) => {
-  const userId = c.get("userId");
   const childId = c.req.query("child_id");
 
-  let sql = `SELECT t.* FROM timers t JOIN user_children uc ON t.child_id = uc.child_id WHERE uc.user_id = ?`;
-  const params: unknown[] = [userId];
+  let sql = `SELECT * FROM timers WHERE 1=1`;
+  const params: unknown[] = [];
 
   if (childId) {
-    sql += " AND t.child_id = ?";
+    sql += " AND child_id = ?";
     params.push(parseInt(childId, 10));
   }
 
   const activeOnly = c.req.query("active");
   if (activeOnly === "true") {
-    sql += " AND t.is_active = 1";
+    sql += " AND is_active = 1";
   }
 
-  sql += " ORDER BY t.start_time DESC";
+  sql += " ORDER BY start_time DESC";
 
   const { results } = await c.env.DB.prepare(sql).bind(...params).all();
   return c.json(results);
@@ -39,7 +38,7 @@ timers.post("/", async (c) => {
     return c.json({ error: "child_id and name are required" }, 400);
   }
 
-  if (!(await verifyChildAccess(c.env.DB, userId, body.child_id))) {
+  if (!(await verifyChildExists(c.env.DB, body.child_id))) {
     return c.json({ error: "Child not found" }, 404);
   }
 
