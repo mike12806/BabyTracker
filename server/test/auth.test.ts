@@ -41,7 +41,7 @@ describe("Access Control", () => {
     api = testRequest(app, env.DB);
   });
 
-  it("users cannot see other users' children", async () => {
+  it("users can see children created by other users", async () => {
     // User A creates a child
     const createRes = await api.post(
       "/api/children",
@@ -50,14 +50,14 @@ describe("Access Control", () => {
     );
     const child = (await createRes.json()) as { id: number };
 
-    // User B cannot see the child
+    // User B can also see the child
     const getRes = await api.get(`/api/children/${child.id}`, {
       "X-Test-Email": "userB@example.com",
     });
-    expect(getRes.status).toBe(404);
+    expect(getRes.status).toBe(200);
   });
 
-  it("users cannot access feedings for other users' children", async () => {
+  it("users can access feedings for any child", async () => {
     // User A creates a child
     const createRes = await api.post(
       "/api/children",
@@ -66,14 +66,14 @@ describe("Access Control", () => {
     );
     const child = (await createRes.json()) as { id: number };
 
-    // User B cannot list feedings for that child
+    // User B can list feedings for that child
     const feedingsRes = await api.get(`/api/feedings?child_id=${child.id}`, {
       "X-Test-Email": "userB@example.com",
     });
-    expect(feedingsRes.status).toBe(404);
+    expect(feedingsRes.status).toBe(200);
   });
 
-  it("users cannot create feedings for other users' children", async () => {
+  it("users can create feedings for any child", async () => {
     // User A creates a child
     const createRes = await api.post(
       "/api/children",
@@ -82,12 +82,12 @@ describe("Access Control", () => {
     );
     const child = (await createRes.json()) as { id: number };
 
-    // User B cannot create a feeding for that child
+    // User B can create a feeding for that child
     const feedingRes = await api.post(
       "/api/feedings",
       { child_id: child.id, type: "bottle", start_time: "2024-12-01T08:00:00Z" },
       { "X-Test-Email": "userB@example.com" }
     );
-    expect(feedingRes.status).toBe(404);
+    expect(feedingRes.status).toBe(201);
   });
 });

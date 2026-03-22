@@ -3,12 +3,12 @@ import type { Env } from "../types/env.js";
 
 type AppEnv = { Bindings: Env; Variables: { userId: number; userEmail: string; userName: string } };
 
-/** Verify the current user has access to the given child */
-export async function verifyChildAccess(db: D1Database, userId: number, childId: number): Promise<boolean> {
+/** Verify the given child exists */
+export async function verifyChildExists(db: D1Database, childId: number): Promise<boolean> {
   const row = await db.prepare(
-    "SELECT 1 FROM user_children WHERE user_id = ? AND child_id = ?"
+    "SELECT 1 FROM children WHERE id = ?"
   )
-    .bind(userId, childId)
+    .bind(childId)
     .first();
   return !!row;
 }
@@ -32,10 +32,9 @@ export function createChildScopedCrud(config: CrudRouteConfig) {
 
   // GET / — list entries, filtered by child_id query param
   router.get("/", async (c) => {
-    const userId = c.get("userId");
     const childId = parseInt(c.req.query("child_id") || "0", 10);
 
-    if (!childId || !(await verifyChildAccess(c.env.DB, userId, childId))) {
+    if (!childId || !(await verifyChildExists(c.env.DB, childId))) {
       return c.json({ error: "Child not found" }, 404);
     }
 
@@ -53,13 +52,12 @@ export function createChildScopedCrud(config: CrudRouteConfig) {
 
   // GET /:id — get single entry
   router.get("/:id", async (c) => {
-    const userId = c.get("userId");
     const id = parseInt(c.req.param("id"), 10);
 
     const row = await c.env.DB.prepare(
-      `SELECT t.* FROM ${table} t JOIN user_children uc ON t.child_id = uc.child_id WHERE t.id = ? AND uc.user_id = ?`
+      `SELECT * FROM ${table} WHERE id = ?`
     )
-      .bind(id, userId)
+      .bind(id)
       .first();
 
     if (!row) {
@@ -71,11 +69,10 @@ export function createChildScopedCrud(config: CrudRouteConfig) {
 
   // POST / — create entry
   router.post("/", async (c) => {
-    const userId = c.get("userId");
     const body = await c.req.json<Record<string, unknown>>();
     const childId = body.child_id as number;
 
-    if (!childId || !(await verifyChildAccess(c.env.DB, userId, childId))) {
+    if (!childId || !(await verifyChildExists(c.env.DB, childId))) {
       return c.json({ error: "Child not found" }, 404);
     }
 
@@ -105,14 +102,13 @@ export function createChildScopedCrud(config: CrudRouteConfig) {
 
   // PUT /:id — update entry
   router.put("/:id", async (c) => {
-    const userId = c.get("userId");
     const id = parseInt(c.req.param("id"), 10);
 
-    // Verify access
+    // Verify entry exists
     const existing = await c.env.DB.prepare(
-      `SELECT t.child_id FROM ${table} t JOIN user_children uc ON t.child_id = uc.child_id WHERE t.id = ? AND uc.user_id = ?`
+      `SELECT child_id FROM ${table} WHERE id = ?`
     )
-      .bind(id, userId)
+      .bind(id)
       .first();
 
     if (!existing) {
@@ -144,13 +140,12 @@ export function createChildScopedCrud(config: CrudRouteConfig) {
 
   // DELETE /:id
   router.delete("/:id", async (c) => {
-    const userId = c.get("userId");
     const id = parseInt(c.req.param("id"), 10);
 
     const existing = await c.env.DB.prepare(
-      `SELECT t.child_id FROM ${table} t JOIN user_children uc ON t.child_id = uc.child_id WHERE t.id = ? AND uc.user_id = ?`
+      `SELECT child_id FROM ${table} WHERE id = ?`
     )
-      .bind(id, userId)
+      .bind(id)
       .first();
 
     if (!existing) {
