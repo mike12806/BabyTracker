@@ -46,7 +46,7 @@ describe("App", () => {
     render(<App />);
 
     await waitFor(() => {
-      expect(screen.getByText("Welcome to Baby Tracker")).toBeInTheDocument();
+      expect(screen.getByText("No children added yet")).toBeInTheDocument();
     });
   });
 });

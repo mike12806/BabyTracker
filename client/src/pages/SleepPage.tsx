@@ -27,7 +27,9 @@ import { api } from "../api/client";
 import { useChildren } from "../hooks/useChildren";
 import { useNotification } from "../hooks/useNotification";
 import NowButton from "../components/NowButton";
-import NoChildSelected from "../components/NoChildSelected";
+
+import NoChildPlaceholder from "../components/NoChildPlaceholder";
+
 import type { SleepEntry } from "../types/models";
 import { isoToLocal } from "../utils/dateTime";
 
@@ -97,7 +99,9 @@ export default function SleepPage() {
   };
 
   if (!selectedChild) {
-    return <NoChildSelected />;
+
+    return <NoChildPlaceholder />;
+
   }
 
   return (

@@ -26,7 +26,9 @@ import { api } from "../api/client";
 import { useChildren } from "../hooks/useChildren";
 import { useNotification } from "../hooks/useNotification";
 import NowButton from "../components/NowButton";
-import NoChildSelected from "../components/NoChildSelected";
+
+import NoChildPlaceholder from "../components/NoChildPlaceholder";
+
 import type { Growth } from "../types/models";
 
 export default function GrowthPage() {
@@ -112,7 +114,9 @@ export default function GrowthPage() {
   };
 
   if (!selectedChild) {
-    return <NoChildSelected />;
+
+    return <NoChildPlaceholder />;
+
   }
 
   return (
