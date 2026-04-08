@@ -36,6 +36,7 @@ import MonitorWeightIcon from "@mui/icons-material/MonitorWeight";
 import { api } from "../api/client";
 import { useChildren } from "../hooks/useChildren";
 import NowButton from "../components/NowButton";
+import NoChildPlaceholder from "../components/NoChildPlaceholder";
 import {
   FeedingChart,
   DiaperChart,
@@ -223,16 +224,7 @@ export default function Dashboard() {
   }, [selectedChild]);
 
   if (!selectedChild) {
-    return (
-      <Box sx={{ textAlign: "center", mt: 8 }}>
-        <Typography variant="h5" gutterBottom>
-          Welcome to Baby Tracker
-        </Typography>
-        <Typography color="text.secondary">
-          Add a child to get started.
-        </Typography>
-      </Box>
-    );
+    return <NoChildPlaceholder />;
   }
 
   // Today's stats

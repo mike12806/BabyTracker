@@ -25,6 +25,7 @@ import EditIcon from "@mui/icons-material/Edit";
 import { api } from "../api/client";
 import { useChildren } from "../hooks/useChildren";
 import NowButton from "../components/NowButton";
+import NoChildPlaceholder from "../components/NoChildPlaceholder";
 import type { Growth } from "../types/models";
 
 export default function GrowthPage() {
@@ -97,7 +98,7 @@ export default function GrowthPage() {
   };
 
   if (!selectedChild) {
-    return <Typography color="text.secondary">Select a child first.</Typography>;
+    return <NoChildPlaceholder />;
   }
 
   return (
