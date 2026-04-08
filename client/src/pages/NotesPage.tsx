@@ -23,12 +23,15 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import EditIcon from "@mui/icons-material/Edit";
 import { api } from "../api/client";
 import { useChildren } from "../hooks/useChildren";
+import { useNotification } from "../hooks/useNotification";
 import NowButton from "../components/NowButton";
+import NoChildSelected from "../components/NoChildSelected";
 import type { Note } from "../types/models";
 import { isoToLocal } from "../utils/dateTime";
 
 export default function NotesPage() {
   const { selectedChild } = useChildren();
+  const { notify } = useNotification();
   const [entries, setEntries] = useState<Note[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState<Note | null>(null);
@@ -36,8 +39,12 @@ export default function NotesPage() {
 
   const load = async () => {
     if (!selectedChild) return;
-    const data = await api.get<Note[]>(`/notes?child_id=${selectedChild.id}`);
-    setEntries(data);
+    try {
+      const data = await api.get<Note[]>(`/notes?child_id=${selectedChild.id}`);
+      setEntries(data);
+    } catch (err) {
+      notify(err instanceof Error ? err.message : "Failed to load notes.", "error");
+    }
   };
 
   useEffect(() => {
@@ -61,24 +68,32 @@ export default function NotesPage() {
       title: form.title || null,
       content: form.content,
     };
-    if (editingEntry) {
-      await api.put(`/notes/${editingEntry.id}`, payload);
-    } else {
-      await api.post("/notes", { child_id: selectedChild.id, ...payload });
+    try {
+      if (editingEntry) {
+        await api.put(`/notes/${editingEntry.id}`, payload);
+      } else {
+        await api.post("/notes", { child_id: selectedChild.id, ...payload });
+      }
+      setDialogOpen(false);
+      setEditingEntry(null);
+      setForm({ time: "", title: "", content: "" });
+      await load();
+    } catch (err) {
+      notify(err instanceof Error ? err.message : "Failed to save note.", "error");
     }
-    setDialogOpen(false);
-    setEditingEntry(null);
-    setForm({ time: "", title: "", content: "" });
-    await load();
   };
 
   const handleDelete = async (id: number) => {
-    await api.delete(`/notes/${id}`);
-    await load();
+    try {
+      await api.delete(`/notes/${id}`);
+      await load();
+    } catch (err) {
+      notify(err instanceof Error ? err.message : "Failed to delete note.", "error");
+    }
   };
 
   if (!selectedChild) {
-    return <Typography color="text.secondary">Select a child first.</Typography>;
+    return <NoChildSelected />;
   }
 
   return (

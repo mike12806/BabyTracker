@@ -25,18 +25,25 @@ import StopIcon from "@mui/icons-material/Stop";
 import DeleteIcon from "@mui/icons-material/Delete";
 import { api } from "../api/client";
 import { useChildren } from "../hooks/useChildren";
+import { useNotification } from "../hooks/useNotification";
+import NoChildSelected from "../components/NoChildSelected";
 import type { Timer } from "../types/models";
 
 export default function TimersPage() {
   const { selectedChild } = useChildren();
+  const { notify } = useNotification();
   const [timers, setTimers] = useState<Timer[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [form, setForm] = useState({ name: "", notes: "" });
 
   const load = async () => {
     if (!selectedChild) return;
-    const data = await api.get<Timer[]>(`/timers?child_id=${selectedChild.id}`);
-    setTimers(data);
+    try {
+      const data = await api.get<Timer[]>(`/timers?child_id=${selectedChild.id}`);
+      setTimers(data);
+    } catch (err) {
+      notify(err instanceof Error ? err.message : "Failed to load timers.", "error");
+    }
   };
 
   useEffect(() => {
@@ -45,28 +52,40 @@ export default function TimersPage() {
 
   const handleStart = async () => {
     if (!selectedChild) return;
-    await api.post("/timers", {
-      child_id: selectedChild.id,
-      name: form.name,
-      notes: form.notes || null,
-    });
-    setDialogOpen(false);
-    setForm({ name: "", notes: "" });
-    await load();
+    try {
+      await api.post("/timers", {
+        child_id: selectedChild.id,
+        name: form.name,
+        notes: form.notes || null,
+      });
+      setDialogOpen(false);
+      setForm({ name: "", notes: "" });
+      await load();
+    } catch (err) {
+      notify(err instanceof Error ? err.message : "Failed to start timer.", "error");
+    }
   };
 
   const handleStop = async (id: number) => {
-    await api.put(`/timers/${id}/stop`, {});
-    await load();
+    try {
+      await api.put(`/timers/${id}/stop`, {});
+      await load();
+    } catch (err) {
+      notify(err instanceof Error ? err.message : "Failed to stop timer.", "error");
+    }
   };
 
   const handleDelete = async (id: number) => {
-    await api.delete(`/timers/${id}`);
-    await load();
+    try {
+      await api.delete(`/timers/${id}`);
+      await load();
+    } catch (err) {
+      notify(err instanceof Error ? err.message : "Failed to delete timer.", "error");
+    }
   };
 
   if (!selectedChild) {
-    return <Typography color="text.secondary">Select a child first.</Typography>;
+    return <NoChildSelected />;
   }
 
   const activeTimers = timers.filter((t) => t.is_active);

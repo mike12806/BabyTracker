@@ -23,12 +23,15 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import EditIcon from "@mui/icons-material/Edit";
 import { api } from "../api/client";
 import { useChildren } from "../hooks/useChildren";
+import { useNotification } from "../hooks/useNotification";
 import NowButton from "../components/NowButton";
+import NoChildSelected from "../components/NoChildSelected";
 import type { TummyTime } from "../types/models";
 import { isoToLocal } from "../utils/dateTime";
 
 export default function TummyTimePage() {
   const { selectedChild } = useChildren();
+  const { notify } = useNotification();
   const [entries, setEntries] = useState<TummyTime[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState<TummyTime | null>(null);
@@ -36,8 +39,12 @@ export default function TummyTimePage() {
 
   const load = async () => {
     if (!selectedChild) return;
-    const data = await api.get<TummyTime[]>(`/tummy-time?child_id=${selectedChild.id}`);
-    setEntries(data);
+    try {
+      const data = await api.get<TummyTime[]>(`/tummy-time?child_id=${selectedChild.id}`);
+      setEntries(data);
+    } catch (err) {
+      notify(err instanceof Error ? err.message : "Failed to load tummy time entries.", "error");
+    }
   };
 
   useEffect(() => {
@@ -63,24 +70,32 @@ export default function TummyTimePage() {
       milestone: form.milestone || null,
       notes: form.notes || null,
     };
-    if (editingEntry) {
-      await api.put(`/tummy-time/${editingEntry.id}`, payload);
-    } else {
-      await api.post("/tummy-time", { child_id: selectedChild.id, ...payload });
+    try {
+      if (editingEntry) {
+        await api.put(`/tummy-time/${editingEntry.id}`, payload);
+      } else {
+        await api.post("/tummy-time", { child_id: selectedChild.id, ...payload });
+      }
+      setDialogOpen(false);
+      setEditingEntry(null);
+      setForm({ start_time: "", end_time: "", milestone: "", notes: "" });
+      await load();
+    } catch (err) {
+      notify(err instanceof Error ? err.message : "Failed to save tummy time entry.", "error");
     }
-    setDialogOpen(false);
-    setEditingEntry(null);
-    setForm({ start_time: "", end_time: "", milestone: "", notes: "" });
-    await load();
   };
 
   const handleDelete = async (id: number) => {
-    await api.delete(`/tummy-time/${id}`);
-    await load();
+    try {
+      await api.delete(`/tummy-time/${id}`);
+      await load();
+    } catch (err) {
+      notify(err instanceof Error ? err.message : "Failed to delete tummy time entry.", "error");
+    }
   };
 
   if (!selectedChild) {
-    return <Typography color="text.secondary">Select a child first.</Typography>;
+    return <NoChildSelected />;
   }
 
   return (

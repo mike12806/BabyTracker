@@ -24,12 +24,15 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import EditIcon from "@mui/icons-material/Edit";
 import { api } from "../api/client";
 import { useChildren } from "../hooks/useChildren";
+import { useNotification } from "../hooks/useNotification";
 import NowButton from "../components/NowButton";
+import NoChildSelected from "../components/NoChildSelected";
 import type { Pumping } from "../types/models";
 import { isoToLocal } from "../utils/dateTime";
 
 export default function PumpingPage() {
   const { selectedChild } = useChildren();
+  const { notify } = useNotification();
   const [entries, setEntries] = useState<Pumping[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState<Pumping | null>(null);
@@ -37,8 +40,12 @@ export default function PumpingPage() {
 
   const load = async () => {
     if (!selectedChild) return;
-    const data = await api.get<Pumping[]>(`/pumping?child_id=${selectedChild.id}`);
-    setEntries(data);
+    try {
+      const data = await api.get<Pumping[]>(`/pumping?child_id=${selectedChild.id}`);
+      setEntries(data);
+    } catch (err) {
+      notify(err instanceof Error ? err.message : "Failed to load pumping sessions.", "error");
+    }
   };
 
   useEffect(() => {
@@ -66,24 +73,32 @@ export default function PumpingPage() {
       amount_unit: form.amount ? form.amount_unit : null,
       notes: form.notes || null,
     };
-    if (editingEntry) {
-      await api.put(`/pumping/${editingEntry.id}`, payload);
-    } else {
-      await api.post("/pumping", { child_id: selectedChild.id, ...payload });
+    try {
+      if (editingEntry) {
+        await api.put(`/pumping/${editingEntry.id}`, payload);
+      } else {
+        await api.post("/pumping", { child_id: selectedChild.id, ...payload });
+      }
+      setDialogOpen(false);
+      setEditingEntry(null);
+      setForm({ start_time: "", end_time: "", amount: "", amount_unit: "oz", notes: "" });
+      await load();
+    } catch (err) {
+      notify(err instanceof Error ? err.message : "Failed to save pumping session.", "error");
     }
-    setDialogOpen(false);
-    setEditingEntry(null);
-    setForm({ start_time: "", end_time: "", amount: "", amount_unit: "oz", notes: "" });
-    await load();
   };
 
   const handleDelete = async (id: number) => {
-    await api.delete(`/pumping/${id}`);
-    await load();
+    try {
+      await api.delete(`/pumping/${id}`);
+      await load();
+    } catch (err) {
+      notify(err instanceof Error ? err.message : "Failed to delete pumping session.", "error");
+    }
   };
 
   if (!selectedChild) {
-    return <Typography color="text.secondary">Select a child first.</Typography>;
+    return <NoChildSelected />;
   }
 
   return (

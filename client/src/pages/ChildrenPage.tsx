@@ -26,10 +26,12 @@ import StarIcon from "@mui/icons-material/Star";
 import StarBorderIcon from "@mui/icons-material/StarBorder";
 import { api, API_BASE } from "../api/client";
 import { useChildren } from "../hooks/useChildren";
+import { useNotification } from "../hooks/useNotification";
 import type { Child } from "../types/models";
 
 export default function ChildrenPage() {
   const { children, refreshChildren, defaultChildId, setDefaultChild } = useChildren();
+  const { notify } = useNotification();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Child | null>(null);
   const [form, setForm] = useState({ first_name: "", last_name: "", birth_date: "" });
@@ -53,19 +55,27 @@ export default function ChildrenPage() {
   };
 
   const handleSave = async () => {
-    if (editing) {
-      await api.put(`/children/${editing.id}`, form);
-    } else {
-      await api.post("/children", form);
+    try {
+      if (editing) {
+        await api.put(`/children/${editing.id}`, form);
+      } else {
+        await api.post("/children", form);
+      }
+      setDialogOpen(false);
+      await refreshChildren();
+    } catch (err) {
+      notify(err instanceof Error ? err.message : "Failed to save child.", "error");
     }
-    setDialogOpen(false);
-    await refreshChildren();
   };
 
   const handleDelete = async (id: number) => {
     if (!confirm("Are you sure you want to delete this child and all their data?")) return;
-    await api.delete(`/children/${id}`);
-    await refreshChildren();
+    try {
+      await api.delete(`/children/${id}`);
+      await refreshChildren();
+    } catch (err) {
+      notify(err instanceof Error ? err.message : "Failed to delete child.", "error");
+    }
   };
 
   const handlePhotoClick = (childId: number) => {
@@ -80,14 +90,22 @@ export default function ChildrenPage() {
     const formData = new FormData();
     formData.append("photo", file);
 
-    await api.upload(`/children/${uploadTargetId}/photo`, formData);
-    setUploadTargetId(null);
-    if (fileInputRef.current) fileInputRef.current.value = "";
-    await refreshChildren();
+    try {
+      await api.upload(`/children/${uploadTargetId}/photo`, formData);
+      setUploadTargetId(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      await refreshChildren();
+    } catch (err) {
+      notify(err instanceof Error ? err.message : "Failed to upload photo.", "error");
+    }
   };
 
   const handleToggleDefault = async (childId: number) => {
-    await setDefaultChild(defaultChildId === childId ? null : childId);
+    try {
+      await setDefaultChild(defaultChildId === childId ? null : childId);
+    } catch (err) {
+      notify(err instanceof Error ? err.message : "Failed to update default child.", "error");
+    }
   };
 
   const photoUrl = (child: Child) =>

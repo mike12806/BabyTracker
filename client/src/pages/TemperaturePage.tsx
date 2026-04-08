@@ -24,12 +24,15 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import EditIcon from "@mui/icons-material/Edit";
 import { api } from "../api/client";
 import { useChildren } from "../hooks/useChildren";
+import { useNotification } from "../hooks/useNotification";
 import NowButton from "../components/NowButton";
+import NoChildSelected from "../components/NoChildSelected";
 import type { Temperature } from "../types/models";
 import { isoToLocal } from "../utils/dateTime";
 
 export default function TemperaturePage() {
   const { selectedChild } = useChildren();
+  const { notify } = useNotification();
   const [entries, setEntries] = useState<Temperature[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState<Temperature | null>(null);
@@ -37,8 +40,12 @@ export default function TemperaturePage() {
 
   const load = async () => {
     if (!selectedChild) return;
-    const data = await api.get<Temperature[]>(`/temperature?child_id=${selectedChild.id}`);
-    setEntries(data);
+    try {
+      const data = await api.get<Temperature[]>(`/temperature?child_id=${selectedChild.id}`);
+      setEntries(data);
+    } catch (err) {
+      notify(err instanceof Error ? err.message : "Failed to load temperature readings.", "error");
+    }
   };
 
   useEffect(() => {
@@ -64,24 +71,32 @@ export default function TemperaturePage() {
       reading_unit: form.reading_unit,
       notes: form.notes || null,
     };
-    if (editingEntry) {
-      await api.put(`/temperature/${editingEntry.id}`, payload);
-    } else {
-      await api.post("/temperature", { child_id: selectedChild.id, ...payload });
+    try {
+      if (editingEntry) {
+        await api.put(`/temperature/${editingEntry.id}`, payload);
+      } else {
+        await api.post("/temperature", { child_id: selectedChild.id, ...payload });
+      }
+      setDialogOpen(false);
+      setEditingEntry(null);
+      setForm({ time: "", reading: "", reading_unit: "F", notes: "" });
+      await load();
+    } catch (err) {
+      notify(err instanceof Error ? err.message : "Failed to save temperature reading.", "error");
     }
-    setDialogOpen(false);
-    setEditingEntry(null);
-    setForm({ time: "", reading: "", reading_unit: "F", notes: "" });
-    await load();
   };
 
   const handleDelete = async (id: number) => {
-    await api.delete(`/temperature/${id}`);
-    await load();
+    try {
+      await api.delete(`/temperature/${id}`);
+      await load();
+    } catch (err) {
+      notify(err instanceof Error ? err.message : "Failed to delete temperature reading.", "error");
+    }
   };
 
   if (!selectedChild) {
-    return <Typography color="text.secondary">Select a child first.</Typography>;
+    return <NoChildSelected />;
   }
 
   return (
