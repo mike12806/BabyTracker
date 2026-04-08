@@ -309,7 +309,7 @@ export default function Dashboard() {
   return (
     <Box>
       <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 1.5, mb: 2 }}>
-        <Stack direction="row" spacing={1} flexWrap="wrap">
+        <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap" }}>
           <Button
             variant="contained"
             size="small"
@@ -351,7 +351,7 @@ export default function Dashboard() {
       {/* Active Timers */}
       {timers.length > 0 && (
         <Box sx={{ mb: 3 }}>
-          <Stack direction="row" spacing={1} flexWrap="wrap">
+          <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap" }}>
             {timers.map((t) => (
               <Chip
                 key={t.id}
@@ -383,8 +383,8 @@ export default function Dashboard() {
                 <Box sx={{ color: stat.color }}>{stat.icon}</Box>
                 <Typography
                   variant="h6"
-                  fontWeight="bold"
                   sx={{
+                    fontWeight: "bold",
                     lineHeight: 1.2,
                     fontSize: { xs: "0.95rem", sm: "1.15rem" },
                   }}
@@ -418,7 +418,7 @@ export default function Dashboard() {
         <Grid size={{ xs: 12, md: 6 }}>
           <Card>
             <CardContent>
-              <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1.5 }}>
+              <Stack direction="row" spacing={1} sx={{ mb: 1.5, alignItems: "center" }}>
                 <RestaurantIcon color="primary" />
                 <Typography variant="h6" sx={{ flex: 1 }}>
                   Feedings
@@ -489,7 +489,7 @@ export default function Dashboard() {
         <Grid size={{ xs: 12, md: 6 }}>
           <Card>
             <CardContent>
-              <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1.5 }}>
+              <Stack direction="row" spacing={1} sx={{ mb: 1.5, alignItems: "center" }}>
                 <BabyChangingStationIcon color="primary" />
                 <Typography variant="h6" sx={{ flex: 1 }}>
                   Diapers
@@ -559,7 +559,7 @@ export default function Dashboard() {
         <Grid size={{ xs: 12, md: 6 }}>
           <Card>
             <CardContent>
-              <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1.5 }}>
+              <Stack direction="row" spacing={1} sx={{ mb: 1.5, alignItems: "center" }}>
                 <BedtimeIcon color="primary" />
                 <Typography variant="h6" sx={{ flex: 1 }}>
                   Sleep
@@ -609,7 +609,7 @@ export default function Dashboard() {
                           {formatRelativeTime(s.start_time)}
                         </Typography>
                       </Box>
-                      <Stack direction="row" alignItems="center" spacing={0.5} sx={{ flexShrink: 0 }}>
+                      <Stack direction="row" spacing={0.5} sx={{ flexShrink: 0, alignItems: "center" }}>
                         {!s.end_time && (
                           <Chip
                             label="Active"
@@ -636,7 +636,7 @@ export default function Dashboard() {
           <Grid size={{ xs: 12, md: 6 }}>
             <Card>
               <CardContent>
-                <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1.5 }}>
+                <Stack direction="row" spacing={1} sx={{ mb: 1.5, alignItems: "center" }}>
                   <AccessibilityNewIcon color="primary" />
                   <Typography variant="h6" sx={{ flex: 1 }}>
                     Tummy Time
@@ -685,7 +685,7 @@ export default function Dashboard() {
           <Grid size={{ xs: 12, md: 6 }}>
             <Card>
               <CardContent>
-                <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1.5 }}>
+                <Stack direction="row" spacing={1} sx={{ mb: 1.5, alignItems: "center" }}>
                   <OpacityIcon color="primary" />
                   <Typography variant="h6" sx={{ flex: 1 }}>
                     Pumping
@@ -742,7 +742,7 @@ export default function Dashboard() {
         <Grid size={{ xs: 12, lg: 6 }}>
           <Card>
             <CardContent>
-              <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
+              <Stack direction="row" spacing={1} sx={{ mb: 2, alignItems: "center" }}>
                 <RestaurantIcon color="primary" />
                 <Typography variant="h6">Feedings</Typography>
               </Stack>
@@ -755,7 +755,7 @@ export default function Dashboard() {
         <Grid size={{ xs: 12, lg: 6 }}>
           <Card>
             <CardContent>
-              <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
+              <Stack direction="row" spacing={1} sx={{ mb: 2, alignItems: "center" }}>
                 <BabyChangingStationIcon color="primary" />
                 <Typography variant="h6">Diapers</Typography>
               </Stack>
@@ -768,7 +768,7 @@ export default function Dashboard() {
         <Grid size={{ xs: 12, lg: 6 }}>
           <Card>
             <CardContent>
-              <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
+              <Stack direction="row" spacing={1} sx={{ mb: 2, alignItems: "center" }}>
                 <BedtimeIcon color="primary" />
                 <Typography variant="h6">Sleep</Typography>
               </Stack>
@@ -781,7 +781,7 @@ export default function Dashboard() {
         <Grid size={{ xs: 12, lg: 6 }}>
           <Card>
             <CardContent>
-              <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
+              <Stack direction="row" spacing={1} sx={{ mb: 2, alignItems: "center" }}>
                 <AccessibilityNewIcon color="primary" />
                 <Typography variant="h6">Tummy Time</Typography>
               </Stack>
@@ -794,7 +794,7 @@ export default function Dashboard() {
         <Grid size={{ xs: 12, lg: 6 }}>
           <Card>
             <CardContent>
-              <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
+              <Stack direction="row" spacing={1} sx={{ mb: 2, alignItems: "center" }}>
                 <OpacityIcon color="primary" />
                 <Typography variant="h6">Pumping</Typography>
               </Stack>
@@ -808,7 +808,7 @@ export default function Dashboard() {
           <Grid size={{ xs: 12, lg: 6 }}>
             <Card>
               <CardContent>
-                <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
+                <Stack direction="row" spacing={1} sx={{ mb: 2, alignItems: "center" }}>
                   <MonitorWeightIcon color="primary" />
                   <Typography variant="h6">Growth</Typography>
                 </Stack>
