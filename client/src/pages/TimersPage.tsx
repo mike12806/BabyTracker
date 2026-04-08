@@ -25,6 +25,7 @@ import StopIcon from "@mui/icons-material/Stop";
 import DeleteIcon from "@mui/icons-material/Delete";
 import { api } from "../api/client";
 import { useChildren } from "../hooks/useChildren";
+import NoChildPlaceholder from "../components/NoChildPlaceholder";
 import type { Timer } from "../types/models";
 
 export default function TimersPage() {
@@ -66,7 +67,7 @@ export default function TimersPage() {
   };
 
   if (!selectedChild) {
-    return <Typography color="text.secondary">Select a child first.</Typography>;
+    return <NoChildPlaceholder />;
   }
 
   const activeTimers = timers.filter((t) => t.is_active);

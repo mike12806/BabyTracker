@@ -25,6 +25,7 @@ import EditIcon from "@mui/icons-material/Edit";
 import { api } from "../api/client";
 import { useChildren } from "../hooks/useChildren";
 import NowButton from "../components/NowButton";
+import NoChildPlaceholder from "../components/NoChildPlaceholder";
 import type { Feeding } from "../types/models";
 import { isoToLocal } from "../utils/dateTime";
 
@@ -101,7 +102,7 @@ export default function FeedingsPage() {
   };
 
   if (!selectedChild) {
-    return <Typography color="text.secondary">Select a child first.</Typography>;
+    return <NoChildPlaceholder />;
   }
 
   return (
