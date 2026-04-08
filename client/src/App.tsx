@@ -3,6 +3,7 @@ import { CssBaseline } from "@mui/material";
 import { AppThemeProvider } from "./hooks/useTheme";
 import { AuthProvider, useAuth } from "./hooks/useAuth";
 import { ChildProvider } from "./hooks/useChildren";
+import { NotificationProvider } from "./hooks/useNotification";
 import Layout from "./components/Layout";
 import Dashboard from "./pages/Dashboard";
 import ChildrenPage from "./pages/ChildrenPage";
@@ -48,21 +49,23 @@ export default function App() {
         <AuthProvider>
           <AuthGate>
             <ChildProvider>
-              <Routes>
-                <Route element={<Layout />}>
-                  <Route path="/" element={<Dashboard />} />
-                  <Route path="/children" element={<ChildrenPage />} />
-                  <Route path="/feedings" element={<FeedingsPage />} />
-                  <Route path="/diapers" element={<DiapersPage />} />
-                  <Route path="/sleep" element={<SleepPage />} />
-                  <Route path="/tummy-time" element={<TummyTimePage />} />
-                  <Route path="/pumping" element={<PumpingPage />} />
-                  <Route path="/growth" element={<GrowthPage />} />
-                  <Route path="/temperature" element={<TemperaturePage />} />
-                  <Route path="/notes" element={<NotesPage />} />
-                  <Route path="/timers" element={<TimersPage />} />
-                </Route>
-              </Routes>
+              <NotificationProvider>
+                <Routes>
+                  <Route element={<Layout />}>
+                    <Route path="/" element={<Dashboard />} />
+                    <Route path="/children" element={<ChildrenPage />} />
+                    <Route path="/feedings" element={<FeedingsPage />} />
+                    <Route path="/diapers" element={<DiapersPage />} />
+                    <Route path="/sleep" element={<SleepPage />} />
+                    <Route path="/tummy-time" element={<TummyTimePage />} />
+                    <Route path="/pumping" element={<PumpingPage />} />
+                    <Route path="/growth" element={<GrowthPage />} />
+                    <Route path="/temperature" element={<TemperaturePage />} />
+                    <Route path="/notes" element={<NotesPage />} />
+                    <Route path="/timers" element={<TimersPage />} />
+                  </Route>
+                </Routes>
+              </NotificationProvider>
             </ChildProvider>
           </AuthGate>
         </AuthProvider>

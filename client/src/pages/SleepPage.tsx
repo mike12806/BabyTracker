@@ -25,13 +25,17 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import EditIcon from "@mui/icons-material/Edit";
 import { api } from "../api/client";
 import { useChildren } from "../hooks/useChildren";
+import { useNotification } from "../hooks/useNotification";
 import NowButton from "../components/NowButton";
+
 import NoChildPlaceholder from "../components/NoChildPlaceholder";
+
 import type { SleepEntry } from "../types/models";
 import { isoToLocal } from "../utils/dateTime";
 
 export default function SleepPage() {
   const { selectedChild } = useChildren();
+  const { notify } = useNotification();
   const [entries, setEntries] = useState<SleepEntry[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState<SleepEntry | null>(null);
@@ -39,8 +43,12 @@ export default function SleepPage() {
 
   const load = async () => {
     if (!selectedChild) return;
-    const data = await api.get<SleepEntry[]>(`/sleep?child_id=${selectedChild.id}`);
-    setEntries(data);
+    try {
+      const data = await api.get<SleepEntry[]>(`/sleep?child_id=${selectedChild.id}`);
+      setEntries(data);
+    } catch (err) {
+      notify(err instanceof Error ? err.message : "Failed to load sleep entries.", "error");
+    }
   };
 
   useEffect(() => {
@@ -66,24 +74,34 @@ export default function SleepPage() {
       is_nap: form.is_nap ? 1 : 0,
       notes: form.notes || null,
     };
-    if (editingEntry) {
-      await api.put(`/sleep/${editingEntry.id}`, payload);
-    } else {
-      await api.post("/sleep", { child_id: selectedChild.id, ...payload });
+    try {
+      if (editingEntry) {
+        await api.put(`/sleep/${editingEntry.id}`, payload);
+      } else {
+        await api.post("/sleep", { child_id: selectedChild.id, ...payload });
+      }
+      setDialogOpen(false);
+      setEditingEntry(null);
+      setForm({ start_time: "", end_time: "", is_nap: false, notes: "" });
+      await load();
+    } catch (err) {
+      notify(err instanceof Error ? err.message : "Failed to save sleep entry.", "error");
     }
-    setDialogOpen(false);
-    setEditingEntry(null);
-    setForm({ start_time: "", end_time: "", is_nap: false, notes: "" });
-    await load();
   };
 
   const handleDelete = async (id: number) => {
-    await api.delete(`/sleep/${id}`);
-    await load();
+    try {
+      await api.delete(`/sleep/${id}`);
+      await load();
+    } catch (err) {
+      notify(err instanceof Error ? err.message : "Failed to delete sleep entry.", "error");
+    }
   };
 
   if (!selectedChild) {
+
     return <NoChildPlaceholder />;
+
   }
 
   return (
