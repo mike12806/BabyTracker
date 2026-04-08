@@ -35,6 +35,7 @@ import OpacityIcon from "@mui/icons-material/Opacity";
 import MonitorWeightIcon from "@mui/icons-material/MonitorWeight";
 import { api } from "../api/client";
 import { useChildren } from "../hooks/useChildren";
+import { useNotification } from "../hooks/useNotification";
 import NowButton from "../components/NowButton";
 import NoChildPlaceholder from "../components/NoChildPlaceholder";
 import {
@@ -128,6 +129,7 @@ function getDiaperChipColor(type: string): ChipColor {
 
 export default function Dashboard() {
   const { selectedChild } = useChildren();
+  const { notify } = useNotification();
   const navigate = useNavigate();
   const theme = useTheme();
   const [feedings, setFeedings] = useState<Feeding[]>([]);
@@ -184,10 +186,14 @@ export default function Dashboard() {
       amount_unit: feedingForm.amount ? feedingForm.amount_unit : null,
       notes: feedingForm.notes || null,
     };
-    await api.post("/feedings", { child_id: selectedChild.id, ...payload });
-    setFeedingDialogOpen(false);
-    setFeedingForm({ type: "bottle", start_time: "", end_time: "", amount: "", amount_unit: "oz", notes: "" });
-    await reloadAll(selectedChild.id);
+    try {
+      await api.post("/feedings", { child_id: selectedChild.id, ...payload });
+      setFeedingDialogOpen(false);
+      setFeedingForm({ type: "bottle", start_time: "", end_time: "", amount: "", amount_unit: "oz", notes: "" });
+      await reloadAll(selectedChild.id);
+    } catch (err) {
+      notify(err instanceof Error ? err.message : "Failed to save feeding.", "error");
+    }
   };
 
   const handleDiaperSave = async () => {
@@ -198,10 +204,14 @@ export default function Dashboard() {
       color: diaperForm.color || null,
       notes: diaperForm.notes || null,
     };
-    await api.post("/diaper-changes", { child_id: selectedChild.id, ...payload });
-    setDiaperDialogOpen(false);
-    setDiaperForm({ time: "", type: "wet", color: "", notes: "" });
-    await reloadAll(selectedChild.id);
+    try {
+      await api.post("/diaper-changes", { child_id: selectedChild.id, ...payload });
+      setDiaperDialogOpen(false);
+      setDiaperForm({ time: "", type: "wet", color: "", notes: "" });
+      await reloadAll(selectedChild.id);
+    } catch (err) {
+      notify(err instanceof Error ? err.message : "Failed to save diaper change.", "error");
+    }
   };
 
   const handleSleepSave = async () => {
@@ -212,10 +222,14 @@ export default function Dashboard() {
       is_nap: sleepForm.is_nap ? 1 : 0,
       notes: sleepForm.notes || null,
     };
-    await api.post("/sleep", { child_id: selectedChild.id, ...payload });
-    setSleepDialogOpen(false);
-    setSleepForm({ start_time: "", end_time: "", is_nap: false, notes: "" });
-    await reloadAll(selectedChild.id);
+    try {
+      await api.post("/sleep", { child_id: selectedChild.id, ...payload });
+      setSleepDialogOpen(false);
+      setSleepForm({ start_time: "", end_time: "", is_nap: false, notes: "" });
+      await reloadAll(selectedChild.id);
+    } catch (err) {
+      notify(err instanceof Error ? err.message : "Failed to save sleep entry.", "error");
+    }
   };
 
   useEffect(() => {

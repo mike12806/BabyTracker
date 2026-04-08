@@ -24,12 +24,16 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import EditIcon from "@mui/icons-material/Edit";
 import { api } from "../api/client";
 import { useChildren } from "../hooks/useChildren";
+import { useNotification } from "../hooks/useNotification";
 import NowButton from "../components/NowButton";
+
 import NoChildPlaceholder from "../components/NoChildPlaceholder";
+
 import type { Growth } from "../types/models";
 
 export default function GrowthPage() {
   const { selectedChild } = useChildren();
+  const { notify } = useNotification();
   const [entries, setEntries] = useState<Growth[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState<Growth | null>(null);
@@ -46,8 +50,12 @@ export default function GrowthPage() {
 
   const load = async () => {
     if (!selectedChild) return;
-    const data = await api.get<Growth[]>(`/growth?child_id=${selectedChild.id}`);
-    setEntries(data);
+    try {
+      const data = await api.get<Growth[]>(`/growth?child_id=${selectedChild.id}`);
+      setEntries(data);
+    } catch (err) {
+      notify(err instanceof Error ? err.message : "Failed to load growth measurements.", "error");
+    }
   };
 
   useEffect(() => {
@@ -81,24 +89,34 @@ export default function GrowthPage() {
       head_circumference_unit: form.head_circumference ? form.head_circumference_unit : null,
       notes: form.notes || null,
     };
-    if (editingEntry) {
-      await api.put(`/growth/${editingEntry.id}`, payload);
-    } else {
-      await api.post("/growth", { child_id: selectedChild.id, ...payload });
+    try {
+      if (editingEntry) {
+        await api.put(`/growth/${editingEntry.id}`, payload);
+      } else {
+        await api.post("/growth", { child_id: selectedChild.id, ...payload });
+      }
+      setDialogOpen(false);
+      setEditingEntry(null);
+      setForm({ date: "", weight: "", weight_unit: "lb", height: "", height_unit: "in", head_circumference: "", head_circumference_unit: "in", notes: "" });
+      await load();
+    } catch (err) {
+      notify(err instanceof Error ? err.message : "Failed to save growth measurement.", "error");
     }
-    setDialogOpen(false);
-    setEditingEntry(null);
-    setForm({ date: "", weight: "", weight_unit: "lb", height: "", height_unit: "in", head_circumference: "", head_circumference_unit: "in", notes: "" });
-    await load();
   };
 
   const handleDelete = async (id: number) => {
-    await api.delete(`/growth/${id}`);
-    await load();
+    try {
+      await api.delete(`/growth/${id}`);
+      await load();
+    } catch (err) {
+      notify(err instanceof Error ? err.message : "Failed to delete growth measurement.", "error");
+    }
   };
 
   if (!selectedChild) {
+
     return <NoChildPlaceholder />;
+
   }
 
   return (

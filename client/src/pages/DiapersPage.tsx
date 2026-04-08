@@ -24,13 +24,17 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import EditIcon from "@mui/icons-material/Edit";
 import { api } from "../api/client";
 import { useChildren } from "../hooks/useChildren";
+import { useNotification } from "../hooks/useNotification";
 import NowButton from "../components/NowButton";
+
 import NoChildPlaceholder from "../components/NoChildPlaceholder";
+
 import type { DiaperChange } from "../types/models";
 import { isoToLocal } from "../utils/dateTime";
 
 export default function DiapersPage() {
   const { selectedChild } = useChildren();
+  const { notify } = useNotification();
   const [diapers, setDiapers] = useState<DiaperChange[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState<DiaperChange | null>(null);
@@ -38,8 +42,12 @@ export default function DiapersPage() {
 
   const load = async () => {
     if (!selectedChild) return;
-    const data = await api.get<DiaperChange[]>(`/diaper-changes?child_id=${selectedChild.id}`);
-    setDiapers(data);
+    try {
+      const data = await api.get<DiaperChange[]>(`/diaper-changes?child_id=${selectedChild.id}`);
+      setDiapers(data);
+    } catch (err) {
+      notify(err instanceof Error ? err.message : "Failed to load diaper changes.", "error");
+    }
   };
 
   useEffect(() => {
@@ -65,24 +73,34 @@ export default function DiapersPage() {
       color: form.color || null,
       notes: form.notes || null,
     };
-    if (editingEntry) {
-      await api.put(`/diaper-changes/${editingEntry.id}`, payload);
-    } else {
-      await api.post("/diaper-changes", { child_id: selectedChild.id, ...payload });
+    try {
+      if (editingEntry) {
+        await api.put(`/diaper-changes/${editingEntry.id}`, payload);
+      } else {
+        await api.post("/diaper-changes", { child_id: selectedChild.id, ...payload });
+      }
+      setDialogOpen(false);
+      setEditingEntry(null);
+      setForm({ time: "", type: "wet", color: "", notes: "" });
+      await load();
+    } catch (err) {
+      notify(err instanceof Error ? err.message : "Failed to save diaper change.", "error");
     }
-    setDialogOpen(false);
-    setEditingEntry(null);
-    setForm({ time: "", type: "wet", color: "", notes: "" });
-    await load();
   };
 
   const handleDelete = async (id: number) => {
-    await api.delete(`/diaper-changes/${id}`);
-    await load();
+    try {
+      await api.delete(`/diaper-changes/${id}`);
+      await load();
+    } catch (err) {
+      notify(err instanceof Error ? err.message : "Failed to delete diaper change.", "error");
+    }
   };
 
   if (!selectedChild) {
+
     return <NoChildPlaceholder />;
+
   }
 
   return (

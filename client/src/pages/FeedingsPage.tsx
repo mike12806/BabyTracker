@@ -24,8 +24,11 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import EditIcon from "@mui/icons-material/Edit";
 import { api } from "../api/client";
 import { useChildren } from "../hooks/useChildren";
+import { useNotification } from "../hooks/useNotification";
 import NowButton from "../components/NowButton";
+
 import NoChildPlaceholder from "../components/NoChildPlaceholder";
+
 import type { Feeding } from "../types/models";
 import { isoToLocal } from "../utils/dateTime";
 
@@ -40,6 +43,7 @@ const FEEDING_TYPES = [
 
 export default function FeedingsPage() {
   const { selectedChild } = useChildren();
+  const { notify } = useNotification();
   const [feedings, setFeedings] = useState<Feeding[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState<Feeding | null>(null);
@@ -54,8 +58,12 @@ export default function FeedingsPage() {
 
   const load = async () => {
     if (!selectedChild) return;
-    const data = await api.get<Feeding[]>(`/feedings?child_id=${selectedChild.id}`);
-    setFeedings(data);
+    try {
+      const data = await api.get<Feeding[]>(`/feedings?child_id=${selectedChild.id}`);
+      setFeedings(data);
+    } catch (err) {
+      notify(err instanceof Error ? err.message : "Failed to load feedings.", "error");
+    }
   };
 
   useEffect(() => {
@@ -85,24 +93,34 @@ export default function FeedingsPage() {
       amount_unit: form.amount ? form.amount_unit : null,
       notes: form.notes || null,
     };
-    if (editingEntry) {
-      await api.put(`/feedings/${editingEntry.id}`, payload);
-    } else {
-      await api.post("/feedings", { child_id: selectedChild.id, ...payload });
+    try {
+      if (editingEntry) {
+        await api.put(`/feedings/${editingEntry.id}`, payload);
+      } else {
+        await api.post("/feedings", { child_id: selectedChild.id, ...payload });
+      }
+      setDialogOpen(false);
+      setEditingEntry(null);
+      setForm({ type: "bottle", start_time: "", end_time: "", amount: "", amount_unit: "oz", notes: "" });
+      await load();
+    } catch (err) {
+      notify(err instanceof Error ? err.message : "Failed to save feeding.", "error");
     }
-    setDialogOpen(false);
-    setEditingEntry(null);
-    setForm({ type: "bottle", start_time: "", end_time: "", amount: "", amount_unit: "oz", notes: "" });
-    await load();
   };
 
   const handleDelete = async (id: number) => {
-    await api.delete(`/feedings/${id}`);
-    await load();
+    try {
+      await api.delete(`/feedings/${id}`);
+      await load();
+    } catch (err) {
+      notify(err instanceof Error ? err.message : "Failed to delete feeding.", "error");
+    }
   };
 
   if (!selectedChild) {
+
     return <NoChildPlaceholder />;
+
   }
 
   return (
