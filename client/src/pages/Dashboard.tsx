@@ -308,6 +308,9 @@ export default function Dashboard() {
 
   return (
     <Box>
+      <Typography variant="subtitle1" color="text.secondary" sx={{ mb: 1, fontWeight: 500 }}>
+        Quick Actions
+      </Typography>
       <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 1.5, mb: 2 }}>
         <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap" }}>
           <Button
