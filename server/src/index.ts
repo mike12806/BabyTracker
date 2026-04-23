@@ -14,6 +14,7 @@ import { temperature } from "./routes/temperature.js";
 import { notes } from "./routes/notes.js";
 import { timers } from "./routes/timers.js";
 import { settings } from "./routes/settings.js";
+import { medications } from "./routes/medications.js";
 
 type AppEnv = { Bindings: Env; Variables: { userId: number; userEmail: string; userName: string } };
 
@@ -37,6 +38,7 @@ app.route("/api/temperature", temperature);
 app.route("/api/notes", notes);
 app.route("/api/timers", timers);
 app.route("/api/settings", settings);
+app.route("/api/medications", medications);
 
 // Global error handler
 app.onError((err, c) => {
