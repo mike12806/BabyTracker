@@ -99,6 +99,18 @@ export interface Temperature {
   updated_at: string;
 }
 
+export interface Medication {
+  id: number;
+  child_id: number;
+  time: string;
+  name: string;
+  dosage: number | null;
+  dosage_unit: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Note {
   id: number;
   child_id: number;
