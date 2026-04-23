@@ -365,6 +365,11 @@ export default function Dashboard() {
         </Box>
       )}
 
+      {/* Today's Summary */}
+      <Typography variant="subtitle1" color="text.secondary" sx={{ mb: 2, fontWeight: 500 }}>
+        Today's Summary
+      </Typography>
+
       {/* Today at a Glance */}
       <Grid container spacing={2} sx={{ mb: 4 }}>
         {statCards.map((stat) => (
