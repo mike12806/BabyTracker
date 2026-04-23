@@ -57,6 +57,11 @@ export default function MedicationsPage() {
     setDialogOpen(true);
   };
 
+  const handleCloseDialog = () => {
+    setDialogOpen(false);
+    setEditingEntry(null);
+  };
+
   const handleEdit = (entry: Medication) => {
     setEditingEntry(entry);
     setForm({
@@ -162,7 +167,7 @@ export default function MedicationsPage() {
 
       <Dialog
         open={dialogOpen}
-        onClose={() => { setDialogOpen(false); setEditingEntry(null); }}
+        onClose={handleCloseDialog}
         maxWidth="sm"
         fullWidth
       >
@@ -217,7 +222,7 @@ export default function MedicationsPage() {
           />
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => { setDialogOpen(false); setEditingEntry(null); }}>Cancel</Button>
+        <Button onClick={handleCloseDialog}>Cancel</Button>
           <Button onClick={handleSave} variant="contained" disabled={!form.time || !form.name}>
             Save
           </Button>
