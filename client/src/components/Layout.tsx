@@ -31,6 +31,7 @@ import ThermostatIcon from "@mui/icons-material/Thermostat";
 import NoteIcon from "@mui/icons-material/Note";
 import TimerIcon from "@mui/icons-material/Timer";
 import ChildCareIcon from "@mui/icons-material/ChildCare";
+import MedicationIcon from "@mui/icons-material/Medication";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
 import LightModeIcon from "@mui/icons-material/LightMode";
 import SettingsBrightnessIcon from "@mui/icons-material/SettingsBrightness";
@@ -50,6 +51,7 @@ const navItems = [
   { label: "Pumping", icon: <OpacityIcon />, path: "/pumping" },
   { label: "Growth", icon: <MonitorWeightIcon />, path: "/growth" },
   { label: "Temperature", icon: <ThermostatIcon />, path: "/temperature" },
+  { label: "Medications", icon: <MedicationIcon />, path: "/medications" },
   { label: "Notes", icon: <NoteIcon />, path: "/notes" },
   { label: "Timers", icon: <TimerIcon />, path: "/timers" },
   { label: "Children", icon: <ChildCareIcon />, path: "/children" },
