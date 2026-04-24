@@ -9,6 +9,7 @@ import {
   DialogContent,
   DialogTitle,
   IconButton,
+  MenuItem,
   Table,
   TableBody,
   TableCell,
@@ -204,12 +205,24 @@ export default function MedicationsPage() {
               onChange={(e) => setForm({ ...form, dosage: e.target.value })}
             />
             <TextField
+              select
               margin="dense"
-              label="Unit (e.g. mg, ml)"
+              label="Unit"
               sx={{ flex: 1 }}
               value={form.dosage_unit}
               onChange={(e) => setForm({ ...form, dosage_unit: e.target.value })}
-            />
+            >
+              <MenuItem value="">—</MenuItem>
+              <MenuItem value="mg">mg</MenuItem>
+              <MenuItem value="mcg">mcg</MenuItem>
+              <MenuItem value="g">g</MenuItem>
+              <MenuItem value="ml">ml</MenuItem>
+              <MenuItem value="oz">oz</MenuItem>
+              <MenuItem value="tsp">tsp</MenuItem>
+              <MenuItem value="tbsp">tbsp</MenuItem>
+              <MenuItem value="IU">IU</MenuItem>
+              <MenuItem value="units">units</MenuItem>
+            </TextField>
           </Box>
           <TextField
             margin="dense"
