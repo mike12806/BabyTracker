@@ -43,6 +43,7 @@ import { usePullToRefresh } from "../hooks/usePullToRefresh";
 import { API_BASE } from "../api/client";
 
 const DRAWER_WIDTH = 240;
+const PULL_INDICATOR_HEIGHT = 48;
 
 const navItems = [
   { label: "Dashboard", icon: <DashboardIcon />, path: "/" },
@@ -188,8 +189,8 @@ export default function Layout() {
           display: "flex",
           justifyContent: "center",
           alignItems: "center",
-          height: 48,
-          transform: `translateY(${Math.min(pullDistance - 48, 0)}px)`,
+          height: PULL_INDICATOR_HEIGHT,
+          transform: `translateY(${Math.min(pullDistance - PULL_INDICATOR_HEIGHT, 0)}px)`,
           transition: pullDistance === 0 ? "transform 0.3s ease" : "none",
           zIndex: (theme) => theme.zIndex.drawer + 2,
           pointerEvents: "none",

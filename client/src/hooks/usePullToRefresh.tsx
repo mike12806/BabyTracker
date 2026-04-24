@@ -46,6 +46,8 @@ export function usePullToRefresh(): PullToRefreshState {
       if (!activeRef.current) return;
       activeRef.current = false;
       if (pullDistanceRef.current >= PULL_THRESHOLD) {
+        // Set refreshing state before reload for immediate visual feedback in the brief
+        // moment before the browser navigation takes effect.
         setIsRefreshing(true);
         window.location.reload();
       } else {
