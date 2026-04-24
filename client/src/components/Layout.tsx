@@ -4,7 +4,6 @@ import {
   AppBar,
   Avatar,
   Box,
-  CircularProgress,
   CssBaseline,
   Divider,
   Drawer,
@@ -39,11 +38,9 @@ import SettingsBrightnessIcon from "@mui/icons-material/SettingsBrightness";
 import { useAuth } from "../hooks/useAuth";
 import { useChildren } from "../hooks/useChildren";
 import { useThemeMode } from "../hooks/useTheme";
-import { usePullToRefresh } from "../hooks/usePullToRefresh";
 import { API_BASE } from "../api/client";
 
 const DRAWER_WIDTH = 240;
-const PULL_INDICATOR_HEIGHT = 48;
 
 const navItems = [
   { label: "Dashboard", icon: <DashboardIcon />, path: "/" },
@@ -69,8 +66,6 @@ export default function Layout() {
   const { mode, preference, setPreference } = useThemeMode();
   const muiTheme = useTheme();
   const isMobile = useMediaQuery(muiTheme.breakpoints.down("md"));
-  const { pullDistance, isRefreshing, threshold } = usePullToRefresh();
-
   const cycleTheme = () => {
     const order: Array<"system" | "light" | "dark"> = ["system", "light", "dark"];
     const next = order[(order.indexOf(preference) + 1) % order.length];
@@ -178,31 +173,6 @@ export default function Layout() {
           </IconButton>
         </Toolbar>
       </AppBar>
-
-      {/* Pull-to-refresh indicator */}
-      <Box
-        sx={{
-          position: "fixed",
-          top: 64,
-          left: 0,
-          right: 0,
-          display: "flex",
-          justifyContent: "center",
-          alignItems: "center",
-          height: PULL_INDICATOR_HEIGHT,
-          transform: `translateY(${Math.min(pullDistance - PULL_INDICATOR_HEIGHT, 0)}px)`,
-          transition: pullDistance === 0 ? "transform 0.3s ease" : "none",
-          zIndex: (theme) => theme.zIndex.drawer + 2,
-          pointerEvents: "none",
-        }}
-      >
-        <CircularProgress
-          size={32}
-          variant={isRefreshing ? "indeterminate" : "determinate"}
-          value={isRefreshing ? undefined : Math.min((pullDistance / threshold) * 100, 100)}
-          sx={{ opacity: Math.min(pullDistance / (threshold * 0.4), 1) }}
-        />
-      </Box>
 
       {/* Mobile drawer */}
       <Drawer
