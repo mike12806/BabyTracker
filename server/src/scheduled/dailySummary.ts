@@ -112,7 +112,7 @@ async function fetchChildData(
 // ── Activity history fetching ─────────────────────────────────────────────────
 
 const childNameExpr = `TRIM(c.first_name || CASE WHEN c.last_name != '' THEN ' ' || c.last_name ELSE '' END)`;
-const loggedByExpr = `COALESCE(u.name, 'Unknown')`;
+const loggedByExpr = `COALESCE(u.name, u.email, 'Unknown')`;
 
 async function fetchActivityHistory(
   env: Env,
@@ -154,7 +154,7 @@ async function fetchActivityHistory(
       `).bind(userId, windowStart, windowEnd).all<HistoryEntryRow>(),
       env.DB.prepare(`
         SELECT 'Tummy Time' AS activity_type, t.start_time AS event_time,
-          CASE WHEN t.milestone IS NOT NULL THEN 'tummy time — ' || t.milestone ELSE 'tummy time' END AS detail,
+          CASE WHEN t.milestone IS NOT NULL THEN 'tummy time - ' || t.milestone ELSE 'tummy time' END AS detail,
           ${childNameExpr} AS child_name, ${loggedByExpr} AS logged_by
         FROM tummy_time t
         JOIN children c ON c.id = t.child_id
