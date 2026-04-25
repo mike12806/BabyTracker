@@ -112,7 +112,7 @@ async function fetchChildData(
 // ── Activity history fetching ─────────────────────────────────────────────────
 
 const childNameExpr = `TRIM(c.first_name || CASE WHEN c.last_name != '' THEN ' ' || c.last_name ELSE '' END)`;
-const loggedByExpr = `COALESCE(u.name, 'Unknown')`;
+const loggedByExpr = `COALESCE(u.name, u.email, 'Unknown')`;
 
 async function fetchActivityHistory(
   env: Env,

@@ -32,6 +32,7 @@ import NoteIcon from "@mui/icons-material/Note";
 import TimerIcon from "@mui/icons-material/Timer";
 import ChildCareIcon from "@mui/icons-material/ChildCare";
 import MedicationIcon from "@mui/icons-material/Medication";
+import HistoryIcon from "@mui/icons-material/History";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
 import LightModeIcon from "@mui/icons-material/LightMode";
 import SettingsBrightnessIcon from "@mui/icons-material/SettingsBrightness";
@@ -54,6 +55,7 @@ const navItems = [
   { label: "Medications", icon: <MedicationIcon />, path: "/medications" },
   { label: "Notes", icon: <NoteIcon />, path: "/notes" },
   { label: "Timers", icon: <TimerIcon />, path: "/timers" },
+  { label: "Activity", icon: <HistoryIcon />, path: "/activity" },
   { label: "Children", icon: <ChildCareIcon />, path: "/children" },
 ];
 
