@@ -83,9 +83,14 @@ export function createChildScopedCrud(config: CrudRouteConfig) {
       }
     }
 
-    const insertCols = ["child_id", ...columns.filter((col) => body[col] !== undefined)];
+    const userId = c.get("userId");
+    const insertCols = ["child_id", "created_by_user_id", ...columns.filter((col) => body[col] !== undefined)];
     const placeholders = insertCols.map(() => "?").join(", ");
-    const values = insertCols.map((col) => (col === "child_id" ? childId : body[col]));
+    const values = insertCols.map((col) => {
+      if (col === "child_id") return childId;
+      if (col === "created_by_user_id") return userId;
+      return body[col];
+    });
 
     const result = await c.env.DB.prepare(
       `INSERT INTO ${table} (${insertCols.join(", ")}) VALUES (${placeholders})`

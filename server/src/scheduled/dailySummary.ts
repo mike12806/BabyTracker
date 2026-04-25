@@ -55,6 +55,7 @@ interface TummyRow { start_time: string; end_time: string | null; milestone: str
 interface PumpingRow { start_time: string; end_time: string | null; amount: number | null; amount_unit: string | null }
 interface TemperatureRow { time: string; reading: number; reading_unit: string }
 interface NoteRow { time: string; title: string | null; content: string }
+interface HistoryEntryRow { activity_type: string; event_time: string; detail: string; child_name: string; logged_by: string }
 
 // ── Data fetching ─────────────────────────────────────────────────────────────
 
@@ -106,6 +107,115 @@ async function fetchChildData(
     temperatures: temperatures.results,
     notes: notes.results,
   };
+}
+
+// ── Activity history fetching ─────────────────────────────────────────────────
+
+const childNameExpr = `TRIM(c.first_name || CASE WHEN c.last_name != '' THEN ' ' || c.last_name ELSE '' END)`;
+const loggedByExpr = `COALESCE(u.name, 'Unknown')`;
+
+async function fetchActivityHistory(
+  env: Env,
+  userId: number,
+  windowStart: string,
+  windowEnd: string,
+): Promise<HistoryEntryRow[]> {
+  const [feedings, diapers, sleepSessions, tummyTimes, pumping, temperatures, notes, medications] =
+    await Promise.all([
+      env.DB.prepare(`
+        SELECT 'Feeding' AS activity_type, f.start_time AS event_time,
+          REPLACE(f.type, '_', ' ') AS detail,
+          ${childNameExpr} AS child_name, ${loggedByExpr} AS logged_by
+        FROM feedings f
+        JOIN children c ON c.id = f.child_id
+        LEFT JOIN users u ON u.id = f.created_by_user_id
+        JOIN user_children uc ON uc.child_id = f.child_id
+        WHERE uc.user_id = ? AND f.created_at >= ? AND f.created_at < ?
+      `).bind(userId, windowStart, windowEnd).all<HistoryEntryRow>(),
+      env.DB.prepare(`
+        SELECT 'Diaper Change' AS activity_type, d.time AS event_time,
+          d.type || CASE WHEN d.color IS NOT NULL AND d.color != '' THEN ' (' || d.color || ')' ELSE '' END AS detail,
+          ${childNameExpr} AS child_name, ${loggedByExpr} AS logged_by
+        FROM diaper_changes d
+        JOIN children c ON c.id = d.child_id
+        LEFT JOIN users u ON u.id = d.created_by_user_id
+        JOIN user_children uc ON uc.child_id = d.child_id
+        WHERE uc.user_id = ? AND d.created_at >= ? AND d.created_at < ?
+      `).bind(userId, windowStart, windowEnd).all<HistoryEntryRow>(),
+      env.DB.prepare(`
+        SELECT 'Sleep' AS activity_type, s.start_time AS event_time,
+          CASE WHEN s.is_nap = 1 THEN 'nap' ELSE 'night sleep' END AS detail,
+          ${childNameExpr} AS child_name, ${loggedByExpr} AS logged_by
+        FROM sleep s
+        JOIN children c ON c.id = s.child_id
+        LEFT JOIN users u ON u.id = s.created_by_user_id
+        JOIN user_children uc ON uc.child_id = s.child_id
+        WHERE uc.user_id = ? AND s.created_at >= ? AND s.created_at < ?
+      `).bind(userId, windowStart, windowEnd).all<HistoryEntryRow>(),
+      env.DB.prepare(`
+        SELECT 'Tummy Time' AS activity_type, t.start_time AS event_time,
+          CASE WHEN t.milestone IS NOT NULL THEN 'tummy time — ' || t.milestone ELSE 'tummy time' END AS detail,
+          ${childNameExpr} AS child_name, ${loggedByExpr} AS logged_by
+        FROM tummy_time t
+        JOIN children c ON c.id = t.child_id
+        LEFT JOIN users u ON u.id = t.created_by_user_id
+        JOIN user_children uc ON uc.child_id = t.child_id
+        WHERE uc.user_id = ? AND t.created_at >= ? AND t.created_at < ?
+      `).bind(userId, windowStart, windowEnd).all<HistoryEntryRow>(),
+      env.DB.prepare(`
+        SELECT 'Pumping' AS activity_type, p.start_time AS event_time,
+          CASE WHEN p.amount IS NOT NULL THEN 'pumped ' || p.amount || ' ' || COALESCE(p.amount_unit, '') ELSE 'pumping' END AS detail,
+          ${childNameExpr} AS child_name, ${loggedByExpr} AS logged_by
+        FROM pumping p
+        JOIN children c ON c.id = p.child_id
+        LEFT JOIN users u ON u.id = p.created_by_user_id
+        JOIN user_children uc ON uc.child_id = p.child_id
+        WHERE uc.user_id = ? AND p.created_at >= ? AND p.created_at < ?
+      `).bind(userId, windowStart, windowEnd).all<HistoryEntryRow>(),
+      env.DB.prepare(`
+        SELECT 'Temperature' AS activity_type, t.time AS event_time,
+          t.reading || '°' || t.reading_unit AS detail,
+          ${childNameExpr} AS child_name, ${loggedByExpr} AS logged_by
+        FROM temperature t
+        JOIN children c ON c.id = t.child_id
+        LEFT JOIN users u ON u.id = t.created_by_user_id
+        JOIN user_children uc ON uc.child_id = t.child_id
+        WHERE uc.user_id = ? AND t.created_at >= ? AND t.created_at < ?
+      `).bind(userId, windowStart, windowEnd).all<HistoryEntryRow>(),
+      env.DB.prepare(`
+        SELECT 'Note' AS activity_type, n.time AS event_time,
+          COALESCE(n.title, SUBSTR(n.content, 1, 60)) AS detail,
+          ${childNameExpr} AS child_name, ${loggedByExpr} AS logged_by
+        FROM notes n
+        JOIN children c ON c.id = n.child_id
+        LEFT JOIN users u ON u.id = n.created_by_user_id
+        JOIN user_children uc ON uc.child_id = n.child_id
+        WHERE uc.user_id = ? AND n.created_at >= ? AND n.created_at < ?
+      `).bind(userId, windowStart, windowEnd).all<HistoryEntryRow>(),
+      env.DB.prepare(`
+        SELECT 'Medication' AS activity_type, m.time AS event_time,
+          m.name || CASE WHEN m.dosage IS NOT NULL THEN ' ' || m.dosage || COALESCE(' ' || m.dosage_unit, '') ELSE '' END AS detail,
+          ${childNameExpr} AS child_name, ${loggedByExpr} AS logged_by
+        FROM medications m
+        JOIN children c ON c.id = m.child_id
+        LEFT JOIN users u ON u.id = m.created_by_user_id
+        JOIN user_children uc ON uc.child_id = m.child_id
+        WHERE uc.user_id = ? AND m.created_at >= ? AND m.created_at < ?
+      `).bind(userId, windowStart, windowEnd).all<HistoryEntryRow>(),
+    ]);
+
+  const all: HistoryEntryRow[] = [
+    ...feedings.results,
+    ...diapers.results,
+    ...sleepSessions.results,
+    ...tummyTimes.results,
+    ...pumping.results,
+    ...temperatures.results,
+    ...notes.results,
+    ...medications.results,
+  ];
+
+  return all.sort((a, b) => a.event_time.localeCompare(b.event_time));
 }
 
 // ── Email HTML builder ────────────────────────────────────────────────────────
@@ -258,10 +368,56 @@ function buildChildSection(
     </table>`;
 }
 
+function buildHistorySection(entries: HistoryEntryRow[]): string {
+  if (entries.length === 0) return "";
+
+  const headerCell = (text: string) =>
+    `<th style="padding:6px 8px;font-size:12px;color:#fff;background:#388e3c;text-align:left;white-space:nowrap">${text}</th>`;
+
+  const dataCell = (text: string, muted = false) =>
+    `<td style="padding:5px 8px;font-size:12px;color:${muted ? "#888" : "#444"};border-bottom:1px solid #e8f5e9;vertical-align:top">${text}</td>`;
+
+  const tableRows = entries.map((e, i) => {
+    const bg = i % 2 === 0 ? "#f9fef9" : "#ffffff";
+    return `<tr style="background:${bg}">
+      ${dataCell(esc(formatTime(e.event_time)))}
+      ${dataCell(esc(e.child_name))}
+      ${dataCell(esc(e.activity_type))}
+      ${dataCell(esc(e.detail))}
+      ${dataCell(esc(e.logged_by), true)}
+    </tr>`;
+  });
+
+  return `
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 28px;border-radius:8px;overflow:hidden">
+      <tr>
+        <td style="background:#2e7d32;padding:12px 16px;border-radius:8px 8px 0 0">
+          <h2 style="margin:0;font-size:19px;color:#fff;font-family:sans-serif">📋 Change History</h2>
+          <p style="margin:4px 0 0;font-size:12px;color:#c8e6c9">All entries logged yesterday &mdash; with who recorded them</p>
+        </td>
+      </tr>
+      <tr>
+        <td style="background:#f9fef9;padding:0;border:1px solid #c8e6c9;border-top:none;border-radius:0 0 8px 8px;overflow:hidden">
+          <table width="100%" cellpadding="0" cellspacing="0">
+            <tr>
+              ${headerCell("Time")}
+              ${headerCell("Child")}
+              ${headerCell("Activity")}
+              ${headerCell("Details")}
+              ${headerCell("Logged by")}
+            </tr>
+            ${tableRows.join("\n")}
+          </table>
+        </td>
+      </tr>
+    </table>`;
+}
+
 function buildEmailHtml(
   userName: string,
   reportDateLabel: string,
   childSections: string[],
+  historySection: string,
 ): string {
   return `<!DOCTYPE html>
 <html lang="en">
@@ -285,6 +441,7 @@ function buildEmailHtml(
             <td style="background:#fff;padding:24px 28px;border:1px solid #e0e0e0;border-top:none;border-radius:0 0 8px 8px">
               <p style="margin:0 0 20px;font-size:15px;color:#444">Hi ${esc(userName)}, here&rsquo;s a summary of yesterday&rsquo;s activity.</p>
               ${childSections.join("\n")}
+              ${historySection}
             </td>
           </tr>
 
@@ -485,13 +642,10 @@ export async function sendDailySummary(env: Env): Promise<void> {
   const now = new Date();
   const { windowStart, windowEnd, reportDateLabel } = computeDailyWindow(now);
 
-  // Fetch users who have email reports enabled (default = enabled when no settings row exists)
-  const { results: users } = await env.DB.prepare(`
-    SELECT u.id, u.email, u.name
-    FROM users u
-    LEFT JOIN user_settings us ON us.user_id = u.id
-    WHERE COALESCE(us.email_reports, 1) = 1
-  `).all<UserRow>();
+  // Fetch all users — every user receives the daily summary
+  const { results: users } = await env.DB.prepare(
+    "SELECT id, email, name FROM users"
+  ).all<UserRow>();
 
   for (const user of users) {
     try {
@@ -541,7 +695,10 @@ export async function sendDailySummary(env: Env): Promise<void> {
         )
       );
 
-      const html = buildEmailHtml(user.name, reportDateLabel, childSections);
+      const historyEntries = await fetchActivityHistory(env, user.id, windowStart, windowEnd);
+      const historySection = buildHistorySection(historyEntries);
+
+      const html = buildEmailHtml(user.name, reportDateLabel, childSections, historySection);
       const subject = `Baby Tracker: Daily Summary – ${reportDateLabel}`;
 
       await sendEmail(env, user.email, subject, html);
