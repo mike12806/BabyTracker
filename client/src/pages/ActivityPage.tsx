@@ -175,7 +175,7 @@ export default function ActivityPage() {
               </TableHead>
               <TableBody>
                 {entries.map((entry, i) => (
-                  <TableRow key={i}>
+                  <TableRow key={`${entry.activity_type}-${entry.event_time}-${i}`}>
                     <TableCell sx={{ whiteSpace: "nowrap" }}>
                       {new Date(entry.event_time).toLocaleString()}
                     </TableCell>
