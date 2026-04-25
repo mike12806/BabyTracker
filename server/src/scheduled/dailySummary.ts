@@ -393,7 +393,7 @@ function buildHistorySection(entries: HistoryEntryRow[]): string {
       <tr>
         <td style="background:#2e7d32;padding:12px 16px;border-radius:8px 8px 0 0">
           <h2 style="margin:0;font-size:19px;color:#fff;font-family:sans-serif">📋 Change History</h2>
-          <p style="margin:4px 0 0;font-size:12px;color:#c8e6c9">All entries logged yesterday &mdash; with who recorded them</p>
+          <p style="margin:4px 0 0;font-size:12px;color:#c8e6c9">All entries logged yesterday &mdash; showing who recorded them</p>
         </td>
       </tr>
       <tr>
