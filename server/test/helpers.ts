@@ -19,6 +19,8 @@ import migration0001 from "../migrations/0001_initial_schema.sql?raw";
 import migration0002 from "../migrations/0002_add_picture_blob.sql?raw";
 import migration0003 from "../migrations/0003_add_user_settings.sql?raw";
 import migration0004 from "../migrations/0004_add_email_reports.sql?raw";
+import migration0005 from "../migrations/0005_add_medications.sql?raw";
+import migration0006 from "../migrations/0006_add_created_by_user_id.sql?raw";
 
 type AppEnv = { Bindings: Env; Variables: { userId: number; userEmail: string; userName: string } };
 
@@ -80,6 +82,7 @@ export async function applyMigrations(db: D1Database) {
   const dropSQL = `
     DROP TABLE IF EXISTS user_settings;
     DROP TABLE IF EXISTS timers;
+    DROP TABLE IF EXISTS medications;
     DROP TABLE IF EXISTS notes;
     DROP TABLE IF EXISTS temperature;
     DROP TABLE IF EXISTS growth;
@@ -94,7 +97,7 @@ export async function applyMigrations(db: D1Database) {
   `;
 
   // Execute the real migration files in order to keep test schema in sync
-  const migrations = [migration0001, migration0002, migration0003, migration0004];
+  const migrations = [migration0001, migration0002, migration0003, migration0004, migration0005, migration0006];
 
   // D1 batch doesn't support multi-statement, so split and execute individually
   const allSQL = dropSQL + migrations.join("\n");

@@ -96,24 +96,35 @@ describe("sendDailySummary", () => {
     vi.restoreAllMocks();
   });
 
-  it("skips users with email_reports opted out", async () => {
-    // Create user with email_reports = 0
+  it("sends email to users regardless of email_reports opt-out setting", async () => {
+    // Create user with email_reports = 0 — should still receive the email now
     await env.DB.prepare(
       "INSERT INTO users (id, email, name) VALUES (1, 'opted-out@example.com', 'Opted Out')"
     ).run();
     await env.DB.prepare(
       "INSERT INTO user_settings (user_id, email_reports) VALUES (1, 0)"
     ).run();
+    await env.DB.prepare(
+      "INSERT INTO children (id, first_name, last_name, birth_date) VALUES (1, 'Baby', 'Test', '2024-01-01')"
+    ).run();
+    await env.DB.prepare(
+      "INSERT INTO user_children (user_id, child_id) VALUES (1, 1)"
+    ).run();
+    await env.DB.prepare(
+      "INSERT INTO diaper_changes (child_id, time, type) VALUES (1, '2024-01-14T12:00:00.000Z', 'wet')"
+    ).run();
 
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(null, { status: 200 })
     );
 
+    vi.setSystemTime(new Date("2024-01-15T05:00:00.000Z"));
+
     const testEnv = { ...env, AWS_SES_ACCESS_KEY: "key", AWS_SES_SECRET_KEY: "secret", AWS_SES_REGION: "us-east-1", REPORT_FROM_EMAIL: "from@example.com" };
     await sendDailySummary(testEnv as typeof env);
 
-    // fetch should never be called (SES email send) for an opted-out user
-    expect(fetchSpy).not.toHaveBeenCalled();
+    // opted-out user should now receive the email
+    expect(fetchSpy).toHaveBeenCalledOnce();
   });
 
   it("skips users with no children", async () => {
@@ -186,6 +197,39 @@ describe("sendDailySummary", () => {
     const bodyStr = init.body as string;
     const body = JSON.parse(bodyStr) as { Destination: { ToAddresses: string[] } };
     expect(body.Destination.ToAddresses).toContain("parent@example.com");
+  });
+
+  it("includes change history section with user attribution in email body", async () => {
+    await env.DB.prepare(
+      "INSERT INTO users (id, email, name) VALUES (1, 'parent@example.com', 'Test Parent')"
+    ).run();
+    await env.DB.prepare(
+      "INSERT INTO children (id, first_name, last_name, birth_date) VALUES (1, 'Baby', 'Test', '2024-01-01')"
+    ).run();
+    await env.DB.prepare(
+      "INSERT INTO user_children (user_id, child_id) VALUES (1, 1)"
+    ).run();
+
+    // Insert a diaper change logged (created_at) within the window, attributed to user 1
+    await env.DB.prepare(
+      "INSERT INTO diaper_changes (child_id, time, type, created_by_user_id, created_at, updated_at) VALUES (1, '2024-01-14T12:00:00.000Z', 'wet', 1, '2024-01-14T12:01:00.000Z', '2024-01-14T12:01:00.000Z')"
+    ).run();
+
+    let capturedHtml = "";
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+      const b = JSON.parse(init!.body as string) as { Content: { Simple: { Body: { Html: { Data: string } } } } };
+      capturedHtml = b.Content.Simple.Body.Html.Data;
+      return new Response(null, { status: 200 });
+    });
+
+    vi.setSystemTime(new Date("2024-01-15T05:00:00.000Z"));
+
+    const testEnv = { ...env, AWS_SES_ACCESS_KEY: "key", AWS_SES_SECRET_KEY: "secret", AWS_SES_REGION: "us-east-1", REPORT_FROM_EMAIL: "from@example.com" };
+    await sendDailySummary(testEnv as typeof env);
+
+    expect(capturedHtml).toContain("Change History");
+    expect(capturedHtml).toContain("Test Parent");
+    expect(capturedHtml).toContain("Diaper Change");
   });
 
   it("continues to remaining users when one fails", async () => {
