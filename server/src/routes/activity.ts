@@ -76,7 +76,7 @@ activity.get("/", async (c) => {
       `).bind(childId, fromDate, toDate).all<ActivityEntry>(),
       c.env.DB.prepare(`
         SELECT 'Tummy Time' AS activity_type, t.start_time AS event_time,
-          CASE WHEN t.milestone IS NOT NULL AND t.milestone != '' THEN 'tummy time — ' || t.milestone ELSE 'tummy time' END AS detail,
+          CASE WHEN t.milestone IS NOT NULL AND t.milestone != '' THEN 'tummy time - ' || t.milestone ELSE 'tummy time' END AS detail,
           ${childNameExpr} AS child_name, ${loggedByExpr} AS logged_by
         FROM tummy_time t
         JOIN children c ON c.id = t.child_id
