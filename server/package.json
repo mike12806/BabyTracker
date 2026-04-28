@@ -12,13 +12,13 @@
     "db:seed": "wrangler d1 execute baby-tracker-db --local --file=seed/seed.sql"
   },
   "dependencies": {
-    "hono": "^4.12.14"
+    "hono": "4.12.15"
   },
   "devDependencies": {
-    "@cloudflare/vitest-pool-workers": "^0.15.0",
-    "@cloudflare/workers-types": "^4.0.0",
-    "typescript": "^6.0.0",
-    "vitest": "^4.1.0",
-    "wrangler": "^4.0.0"
+    "@cloudflare/vitest-pool-workers": "0.15.1",
+    "@cloudflare/workers-types": "4.20260426.1",
+    "typescript": "6.0.3",
+    "vitest": "4.1.5",
+    "wrangler": "4.86.0"
   }
 }
