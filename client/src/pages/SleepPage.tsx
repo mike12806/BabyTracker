@@ -1,16 +1,22 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type MouseEvent } from "react";
 import {
   Box,
   Button,
   Card,
+  CardActionArea,
   CardContent,
   Checkbox,
+  Chip,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
+  Fab,
   FormControlLabel,
   IconButton,
+  Menu,
+  MenuItem,
+  Stack,
   Table,
   TableBody,
   TableCell,
@@ -19,10 +25,15 @@ import {
   TableRow,
   TextField,
   Typography,
+  useMediaQuery,
+  useTheme,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
+import BedtimeIcon from "@mui/icons-material/Bedtime";
 import DeleteIcon from "@mui/icons-material/Delete";
 import EditIcon from "@mui/icons-material/Edit";
+import MoreVertIcon from "@mui/icons-material/MoreVert";
+import NightlightIcon from "@mui/icons-material/Nightlight";
 import { api } from "../api/client";
 import { useChildren } from "../hooks/useChildren";
 import { useNotification } from "../hooks/useNotification";
@@ -33,13 +44,79 @@ import NoChildPlaceholder from "../components/NoChildPlaceholder";
 import type { SleepEntry } from "../types/models";
 import { isoToLocal } from "../utils/dateTime";
 
+function humanDuration(ms: number): string {
+  if (ms < 0) ms = 0;
+  const totalMinutes = Math.floor(ms / 60000);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (hours === 0) return `${minutes}m`;
+  if (minutes === 0) return `${hours}h`;
+  return `${hours}h ${minutes}m`;
+}
+
+function relativeTime(iso: string): string {
+  const then = new Date(iso).getTime();
+  const now = Date.now();
+  const diff = Math.max(0, now - then);
+  const minutes = Math.floor(diff / 60000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+function isSameDay(a: Date, b: Date): boolean {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
+}
+
+function dayLabel(date: Date): string {
+  const now = new Date();
+  if (isSameDay(date, now)) return "Today";
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  if (isSameDay(date, yesterday)) return "Yesterday";
+  const sixDaysAgo = new Date(now);
+  sixDaysAgo.setDate(now.getDate() - 6);
+  if (date >= sixDaysAgo) {
+    return date.toLocaleDateString(undefined, { weekday: "short" });
+  }
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+function formatTimeRange(startIso: string, endIso: string | null): string {
+  const start = new Date(startIso);
+  const timeFmt: Intl.DateTimeFormatOptions = { hour: "numeric", minute: "2-digit" };
+  const startStr = start.toLocaleTimeString(undefined, timeFmt);
+  if (!endIso) {
+    return `${dayLabel(start)} ${startStr} – now`;
+  }
+  const end = new Date(endIso);
+  const endStr = end.toLocaleTimeString(undefined, timeFmt);
+  if (isSameDay(start, end)) {
+    return `${dayLabel(start)} ${startStr} – ${endStr}`;
+  }
+  return `${dayLabel(start)} ${startStr} – ${dayLabel(end)} ${endStr}`;
+}
+
 export default function SleepPage() {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+  const isCompact = useMediaQuery(theme.breakpoints.down("md"));
   const { selectedChild } = useChildren();
   const { notify } = useNotification();
   const [entries, setEntries] = useState<SleepEntry[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState<SleepEntry | null>(null);
   const [form, setForm] = useState({ start_time: "", end_time: "", is_nap: false, notes: "" });
+  const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
+  const [menuEntry, setMenuEntry] = useState<SleepEntry | null>(null);
 
   const load = async () => {
     if (!selectedChild) return;
@@ -55,6 +132,12 @@ export default function SleepPage() {
     load();
   }, [selectedChild]);
 
+  const openAdd = () => {
+    setEditingEntry(null);
+    setForm({ start_time: "", end_time: "", is_nap: false, notes: "" });
+    setDialogOpen(true);
+  };
+
   const handleEdit = (entry: SleepEntry) => {
     setEditingEntry(entry);
     setForm({
@@ -64,6 +147,11 @@ export default function SleepPage() {
       notes: entry.notes || "",
     });
     setDialogOpen(true);
+  };
+
+  const closeDialog = () => {
+    setDialogOpen(false);
+    setEditingEntry(null);
   };
 
   const handleSave = async () => {
@@ -98,73 +186,234 @@ export default function SleepPage() {
     }
   };
 
+  const openMenu = (event: MouseEvent<HTMLElement>, entry: SleepEntry) => {
+    event.stopPropagation();
+    setMenuAnchor(event.currentTarget);
+    setMenuEntry(entry);
+  };
+
+  const closeMenu = () => {
+    setMenuAnchor(null);
+    setMenuEntry(null);
+  };
+
+  const menuEdit = () => {
+    if (menuEntry) handleEdit(menuEntry);
+    closeMenu();
+  };
+
+  const menuDelete = () => {
+    if (menuEntry) handleDelete(menuEntry.id);
+    closeMenu();
+  };
+
   if (!selectedChild) {
 
     return <NoChildPlaceholder />;
 
   }
 
+  const renderCardList = () => (
+    <Stack spacing={1.5}>
+      {entries.map((s) => {
+        const isNap = Boolean(s.is_nap);
+        const start = new Date(s.start_time);
+        const end = s.end_time ? new Date(s.end_time) : null;
+        const inProgress = !end;
+        const durationMs = end ? end.getTime() - start.getTime() : Date.now() - start.getTime();
+        const durationText = inProgress
+          ? `Active — started ${relativeTime(s.start_time)}`
+          : humanDuration(durationMs);
+        return (
+          <Card key={s.id} elevation={1} sx={{ borderRadius: 3, overflow: "hidden" }}>
+            <CardActionArea onClick={() => handleEdit(s)} sx={{ alignItems: "stretch" }}>
+              <CardContent sx={{ py: 2, "&:last-child": { pb: 2 } }}>
+                <Stack
+                  direction="row"
+                  sx={{ justifyContent: "space-between", alignItems: "center", mb: 1 }}
+                >
+                  <Chip
+                    icon={isNap ? <BedtimeIcon /> : <NightlightIcon />}
+                    label={isNap ? "Nap" : "Night"}
+                    color={isNap ? "success" : "info"}
+                    size="small"
+                    sx={{ fontWeight: 600 }}
+                  />
+                  <Stack direction="row" sx={{ alignItems: "center", gap: 0.5 }}>
+                    <Typography variant="caption" color="text.secondary">
+                      {relativeTime(s.start_time)}
+                    </Typography>
+                    <IconButton
+                      aria-label="more"
+                      onClick={(e) => openMenu(e, s)}
+                      sx={{ width: 44, height: 44 }}
+                    >
+                      <MoreVertIcon />
+                    </IconButton>
+                  </Stack>
+                </Stack>
+                <Typography
+                  variant="h6"
+                  sx={{
+                    fontWeight: 700,
+                    color: inProgress ? "warning.main" : "text.primary",
+                    lineHeight: 1.2,
+                  }}
+                >
+                  {durationText}
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                  {formatTimeRange(s.start_time, s.end_time)}
+                </Typography>
+                {s.notes && (
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      mt: 1,
+                      color: "text.secondary",
+                      display: "-webkit-box",
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: "vertical",
+                      overflow: "hidden",
+                    }}
+                  >
+                    {s.notes}
+                  </Typography>
+                )}
+              </CardContent>
+            </CardActionArea>
+          </Card>
+        );
+      })}
+    </Stack>
+  );
+
+  const renderEmpty = () => (
+    <Box sx={{ textAlign: "center", py: { xs: 6, md: 8 } }}>
+      <BedtimeIcon sx={{ fontSize: 64, color: "text.disabled", mb: 2 }} />
+      <Typography variant="h6" gutterBottom>
+        No sleep recorded yet
+      </Typography>
+      <Typography color="text.secondary">
+        Tap + to log the first one
+      </Typography>
+    </Box>
+  );
+
+  const renderTable = () => (
+    <Card>
+      <CardContent>
+        <TableContainer>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableCell>Start</TableCell>
+                <TableCell>End</TableCell>
+                <TableCell>Duration</TableCell>
+                <TableCell>Type</TableCell>
+                <TableCell>Notes</TableCell>
+                <TableCell />
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {entries.map((s) => {
+                const end = s.end_time ? new Date(s.end_time) : null;
+                const start = new Date(s.start_time);
+                const durationMs = end ? end.getTime() - start.getTime() : 0;
+                return (
+                  <TableRow
+                    key={s.id}
+                    hover
+                    sx={{ cursor: "pointer" }}
+                    onClick={() => handleEdit(s)}
+                  >
+                    <TableCell>{start.toLocaleString()}</TableCell>
+                    <TableCell>{end ? end.toLocaleString() : "In progress"}</TableCell>
+                    <TableCell>{end ? humanDuration(durationMs) : "—"}</TableCell>
+                    <TableCell>{s.is_nap ? "Nap" : "Night"}</TableCell>
+                    <TableCell>{s.notes || "—"}</TableCell>
+                    <TableCell align="right" onClick={(e) => e.stopPropagation()}>
+                      <IconButton size="small" onClick={() => handleEdit(s)} aria-label="edit">
+                        <EditIcon fontSize="small" />
+                      </IconButton>
+                      <IconButton size="small" onClick={() => handleDelete(s.id)} aria-label="delete">
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </CardContent>
+    </Card>
+  );
+
   return (
-    <Box>
-      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 3 }}>
+    <Box sx={{ pb: { xs: 12, md: 0 } }}>
+      <Box
+        sx={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          mb: 3,
+        }}
+      >
         <Typography variant="h4">Sleep</Typography>
         <Button
           variant="contained"
           startIcon={<AddIcon />}
-          onClick={() => {
-            setEditingEntry(null);
-            setForm({ start_time: "", end_time: "", is_nap: false, notes: "" });
-            setDialogOpen(true);
-          }}
+          onClick={openAdd}
+          sx={{ display: { xs: "none", md: "inline-flex" } }}
         >
           Add Sleep
         </Button>
       </Box>
 
-      <Card>
-        <CardContent>
-          <TableContainer>
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Start</TableCell>
-                  <TableCell>End</TableCell>
-                  <TableCell>Type</TableCell>
-                  <TableCell>Notes</TableCell>
-                  <TableCell />
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {entries.map((s) => (
-                  <TableRow key={s.id}>
-                    <TableCell>{new Date(s.start_time).toLocaleString()}</TableCell>
-                    <TableCell>{s.end_time ? new Date(s.end_time).toLocaleString() : "In progress"}</TableCell>
-                    <TableCell>{s.is_nap ? "Nap" : "Night"}</TableCell>
-                    <TableCell>{s.notes || "—"}</TableCell>
-                    <TableCell>
-                      <IconButton size="small" onClick={() => handleEdit(s)}>
-                        <EditIcon fontSize="small" />
-                      </IconButton>
-                      <IconButton size="small" onClick={() => handleDelete(s.id)}>
-                        <DeleteIcon fontSize="small" />
-                      </IconButton>
-                    </TableCell>
-                  </TableRow>
-                ))}
-                {entries.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={5} align="center">
-                      <Typography color="text.secondary">No sleep recorded.</Typography>
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        </CardContent>
-      </Card>
+      {entries.length === 0 ? (
+        <Card sx={{ borderRadius: 3 }}>
+          <CardContent>{renderEmpty()}</CardContent>
+        </Card>
+      ) : (
+        <>
+          <Box sx={{ display: { xs: "block", md: "none" } }}>{renderCardList()}</Box>
+          <Box sx={{ display: { xs: "none", md: "block" } }}>{renderTable()}</Box>
+        </>
+      )}
 
-      <Dialog open={dialogOpen} onClose={() => { setDialogOpen(false); setEditingEntry(null); }} maxWidth="sm" fullWidth>
+      <Fab
+        color="primary"
+        aria-label="add sleep"
+        onClick={openAdd}
+        sx={{
+          position: "fixed",
+          bottom: { xs: 80, md: 24 },
+          right: 16,
+          display: { xs: "flex", md: "none" },
+        }}
+      >
+        <AddIcon />
+      </Fab>
+
+      <Menu anchorEl={menuAnchor} open={Boolean(menuAnchor)} onClose={closeMenu}>
+        <MenuItem onClick={menuEdit} sx={{ minHeight: 44 }}>
+          <EditIcon fontSize="small" sx={{ mr: 1.5 }} />
+          Edit
+        </MenuItem>
+        <MenuItem onClick={menuDelete} sx={{ minHeight: 44, color: "error.main" }}>
+          <DeleteIcon fontSize="small" sx={{ mr: 1.5 }} />
+          Delete
+        </MenuItem>
+      </Menu>
+
+      <Dialog
+        open={dialogOpen}
+        onClose={closeDialog}
+        maxWidth="sm"
+        fullWidth
+        fullScreen={isMobile}
+      >
         <DialogTitle>{editingEntry ? "Edit Sleep" : "Add Sleep"}</DialogTitle>
         <DialogContent>
           <Box sx={{ display: "flex", gap: 1, alignItems: "flex-start" }}>
@@ -206,13 +455,13 @@ export default function SleepPage() {
             label="Notes"
             fullWidth
             multiline
-            rows={2}
+            rows={isCompact ? 3 : 2}
             value={form.notes}
             onChange={(e) => setForm({ ...form, notes: e.target.value })}
           />
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => { setDialogOpen(false); setEditingEntry(null); }}>Cancel</Button>
+          <Button onClick={closeDialog}>Cancel</Button>
           <Button onClick={handleSave} variant="contained" disabled={!form.start_time}>
             Save
           </Button>
