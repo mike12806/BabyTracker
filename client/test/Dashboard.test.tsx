@@ -1,4 +1,4 @@
-import { render, screen, waitForElementToBeRemoved } from "@testing-library/react";
+import { render, screen, within, waitForElementToBeRemoved } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { MemoryRouter } from "react-router-dom";
@@ -256,8 +256,9 @@ describe("Dashboard – quick action buttons", () => {
 
     await user.click(await screen.findByRole("button", { name: /^diaper$/i }));
 
-    // Fill in time
-    const timeInput = await screen.findByLabelText(/^time/i);
+    // Fill in time — scope to dialog to avoid matching the Timer quick-log tile
+    const dialog = await screen.findByRole("dialog");
+    const timeInput = within(dialog).getByLabelText(/^time/i);
     await user.type(timeInput, "2024-12-01T10:00");
 
     // Save
