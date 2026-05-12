@@ -29,6 +29,7 @@ import ChildCareIcon from "@mui/icons-material/ChildCare";
 import { api, API_BASE } from "../api/client";
 import { useChildren } from "../hooks/useChildren";
 import { useNotification } from "../hooks/useNotification";
+import { FAB_BOTTOM_OFFSET } from "../components/Layout";
 import type { Child } from "../types/models";
 
 function formatAge(birthDateStr: string): string {
@@ -279,7 +280,7 @@ export default function ChildrenPage() {
         color="primary"
         aria-label="Add child"
         onClick={openCreate}
-        sx={{ position: "fixed", bottom: { xs: "calc(56px + env(safe-area-inset-bottom) + 16px)", md: 24 }, right: 16, display: { xs: "flex", md: "none" } }}
+        sx={{ position: "fixed", bottom: { xs: FAB_BOTTOM_OFFSET, md: 24 }, right: 16, display: { xs: "flex", md: "none" } }}
       >
         <AddIcon />
       </Fab>

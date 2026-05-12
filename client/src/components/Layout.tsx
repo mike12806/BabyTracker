@@ -47,6 +47,7 @@ import { API_BASE } from "../api/client";
 
 const DRAWER_WIDTH = 240;
 const BOTTOM_NAV_HEIGHT = 56;
+export const FAB_BOTTOM_OFFSET = `calc(${BOTTOM_NAV_HEIGHT}px + env(safe-area-inset-bottom) + 16px)`;
 
 const navItems = [
   { label: "Dashboard", icon: <DashboardIcon />, path: "/" },
