@@ -337,7 +337,7 @@ export default function MedicationsPage() {
         onClick={openAdd}
         sx={{
           position: "fixed",
-          bottom: { xs: 80, md: 24 },
+          bottom: { xs: "calc(56px + env(safe-area-inset-bottom) + 16px)", md: 24 },
           right: 16,
           display: { xs: "flex", md: "none" },
         }}
