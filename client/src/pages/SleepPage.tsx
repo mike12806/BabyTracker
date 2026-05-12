@@ -9,6 +9,7 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  Fab,
   FormControlLabel,
   IconButton,
   Table,
@@ -111,6 +112,7 @@ export default function SleepPage() {
         <Button
           variant="contained"
           startIcon={<AddIcon />}
+          sx={{ display: { xs: "none", md: "inline-flex" } }}
           onClick={() => {
             setEditingEntry(null);
             setForm({ start_time: "", end_time: "", is_nap: false, notes: "" });
@@ -163,6 +165,19 @@ export default function SleepPage() {
           </TableContainer>
         </CardContent>
       </Card>
+
+      <Fab
+        color="primary"
+        aria-label="Add sleep"
+        onClick={() => {
+          setEditingEntry(null);
+          setForm({ start_time: "", end_time: "", is_nap: false, notes: "" });
+          setDialogOpen(true);
+        }}
+        sx={{ position: "fixed", bottom: { xs: "calc(56px + env(safe-area-inset-bottom) + 16px)", md: 24 }, right: 16, display: { xs: "flex", md: "none" } }}
+      >
+        <AddIcon />
+      </Fab>
 
       <Dialog open={dialogOpen} onClose={() => { setDialogOpen(false); setEditingEntry(null); }} maxWidth="sm" fullWidth>
         <DialogTitle>{editingEntry ? "Edit Sleep" : "Add Sleep"}</DialogTitle>
