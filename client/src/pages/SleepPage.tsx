@@ -38,6 +38,7 @@ import { api } from "../api/client";
 import { useChildren } from "../hooks/useChildren";
 import { useNotification } from "../hooks/useNotification";
 import NowButton from "../components/NowButton";
+import { FAB_BOTTOM_OFFSET } from "../components/Layout";
 
 import NoChildPlaceholder from "../components/NoChildPlaceholder";
 
@@ -388,7 +389,7 @@ export default function SleepPage() {
         onClick={openAdd}
         sx={{
           position: "fixed",
-          bottom: { xs: "calc(56px + env(safe-area-inset-bottom) + 16px)", md: 24 },
+          bottom: { xs: FAB_BOTTOM_OFFSET, md: 24 },
           right: 16,
           display: { xs: "flex", md: "none" },
         }}
