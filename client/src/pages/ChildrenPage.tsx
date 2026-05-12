@@ -4,19 +4,20 @@ import {
   Box,
   Button,
   Card,
+  CardActionArea,
   CardContent,
   Chip,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
+  Fab,
+  Grid,
   IconButton,
-  List,
-  ListItem,
-  ListItemAvatar,
-  ListItemText,
   TextField,
   Typography,
+  useMediaQuery,
+  useTheme,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
@@ -24,13 +25,35 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import PhotoCameraIcon from "@mui/icons-material/PhotoCamera";
 import StarIcon from "@mui/icons-material/Star";
 import StarBorderIcon from "@mui/icons-material/StarBorder";
+import ChildCareIcon from "@mui/icons-material/ChildCare";
 import { api, API_BASE } from "../api/client";
 import { useChildren } from "../hooks/useChildren";
 import { useNotification } from "../hooks/useNotification";
 import type { Child } from "../types/models";
 
+function formatAge(birthDateStr: string): string {
+  const [y, m, d] = birthDateStr.split("T")[0].split("-").map(Number);
+  const birth = new Date(y, m - 1, d);
+  const now = new Date();
+  const diffMs = now.getTime() - birth.getTime();
+  const diffDays = Math.floor(diffMs / 86400000);
+  const diffWeeks = Math.floor(diffDays / 7);
+  const diffMonths = Math.floor(diffDays / 30.44);
+  const diffYears = Math.floor(diffDays / 365.25);
+  if (diffWeeks < 8) return `${diffWeeks} week${diffWeeks === 1 ? "" : "s"} old`;
+  if (diffMonths < 24) return `${diffMonths} month${diffMonths === 1 ? "" : "s"} old`;
+  return `${diffYears} year${diffYears === 1 ? "" : "s"} old`;
+}
+
+function formatBirthDate(birthDateStr: string): string {
+  const [y, m, d] = birthDateStr.split("T")[0].split("-").map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" });
+}
+
 export default function ChildrenPage() {
-  const { children, refreshChildren, defaultChildId, setDefaultChild } = useChildren();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+  const { children, selectedChild, selectChild, refreshChildren, defaultChildId, setDefaultChild } = useChildren();
   const { notify } = useNotification();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Child | null>(null);
@@ -86,10 +109,8 @@ export default function ChildrenPage() {
   const handlePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !uploadTargetId) return;
-
     const formData = new FormData();
     formData.append("photo", file);
-
     try {
       await api.upload(`/children/${uploadTargetId}/photo`, formData);
       setUploadTargetId(null);
@@ -109,74 +130,142 @@ export default function ChildrenPage() {
   };
 
   const photoUrl = (child: Child) =>
-    child.picture_content_type ? `${API_BASE}/children/${child.id}/photo?v=${encodeURIComponent(child.updated_at)}` : undefined;
+    child.picture_content_type
+      ? `${API_BASE}/children/${child.id}/photo?v=${encodeURIComponent(child.updated_at)}`
+      : undefined;
 
   return (
     <Box>
       <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 3 }}>
         <Typography variant="h4">Children</Typography>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={openCreate}>
+        <Button
+          variant="contained"
+          startIcon={<AddIcon />}
+          onClick={openCreate}
+          sx={{ display: { xs: "none", md: "inline-flex" } }}
+        >
           Add Child
         </Button>
       </Box>
 
-      <Card>
-        <CardContent>
-          {children.length === 0 ? (
-            <Typography color="text.secondary">No children added yet.</Typography>
-          ) : (
-            <List>
-              {children.map((child) => (
-                <ListItem
-                  key={child.id}
-                  sx={{ pr: 22 }}
-                  secondaryAction={
-                    <Box>
-                      <IconButton
-                        onClick={() => handleToggleDefault(child.id)}
-                        title={defaultChildId === child.id ? "Remove as default" : "Set as default"}
-                        color={defaultChildId === child.id ? "primary" : "default"}
-                      >
-                        {defaultChildId === child.id ? <StarIcon /> : <StarBorderIcon />}
-                      </IconButton>
-                      <IconButton onClick={() => handlePhotoClick(child.id)} title="Upload photo">
-                        <PhotoCameraIcon />
-                      </IconButton>
-                      <IconButton onClick={() => openEdit(child)}>
-                        <EditIcon />
-                      </IconButton>
-                      <IconButton onClick={() => handleDelete(child.id)}>
-                        <DeleteIcon />
-                      </IconButton>
-                    </Box>
-                  }
+      {children.length === 0 ? (
+        <Box sx={{ textAlign: "center", py: 10, px: 3, color: "text.secondary" }}>
+          <ChildCareIcon sx={{ fontSize: 80, opacity: 0.25, mb: 2 }} />
+          <Typography variant="h5" gutterBottom>Add your first child</Typography>
+          <Typography variant="body1" sx={{ mb: 3 }}>Tap + to get started tracking.</Typography>
+          <Button variant="contained" size="large" startIcon={<AddIcon />} onClick={openCreate}>
+            Add Child
+          </Button>
+        </Box>
+      ) : (
+        <Grid container spacing={2} sx={{ pb: 12 }}>
+          {children.map((child) => {
+            const isActive = selectedChild?.id === child.id;
+            const isDefault = defaultChildId === child.id;
+            return (
+              <Grid key={child.id} size={{ xs: 12, sm: 6, md: 4 }}>
+                <Card
+                  sx={{
+                    border: 2,
+                    borderColor: isActive ? "primary.main" : "transparent",
+                    transition: "border-color 0.15s",
+                  }}
                 >
-                  <ListItemAvatar>
-                    <Avatar
-                      src={photoUrl(child)}
-                      alt={child.first_name}
-                      sx={{ width: 48, height: 48, mr: 1 }}
-                    >
-                      {child.first_name[0]}
-                    </Avatar>
-                  </ListItemAvatar>
-                  <ListItemText
-                    primary={
-                      <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                        {`${child.first_name} ${child.last_name}`}
-                        {defaultChildId === child.id && (
-                          <Chip label="Default" size="small" color="primary" variant="outlined" />
-                        )}
+                  <CardActionArea
+                    onClick={() => selectChild(child)}
+                    sx={{ pb: 0 }}
+                  >
+                    <CardContent sx={{ textAlign: "center", pt: 3, pb: 1 }}>
+                      {/* Tappable avatar for photo change */}
+                      <Box
+                        onClick={(e) => { e.stopPropagation(); handlePhotoClick(child.id); }}
+                        sx={{
+                          display: "inline-block",
+                          position: "relative",
+                          cursor: "pointer",
+                          mb: 1.5,
+                          "&:hover .photo-overlay": { opacity: 1 },
+                        }}
+                      >
+                        <Avatar
+                          src={photoUrl(child)}
+                          alt={child.first_name}
+                          sx={{ width: 96, height: 96, fontSize: 36, mx: "auto" }}
+                        >
+                          {child.first_name[0]}
+                        </Avatar>
+                        <Box
+                          className="photo-overlay"
+                          sx={{
+                            position: "absolute",
+                            inset: 0,
+                            borderRadius: "50%",
+                            backgroundColor: "rgba(0,0,0,0.45)",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            opacity: 0,
+                            transition: "opacity 0.15s",
+                            color: "#fff",
+                          }}
+                        >
+                          <PhotoCameraIcon />
+                        </Box>
                       </Box>
-                    }
-                    secondary={`Born ${(() => { const [y, m, d] = child.birth_date.split('T')[0].split('-').map(Number); return new Date(y, m - 1, d).toLocaleDateString(); })()}`}
-                  />
-                </ListItem>
-              ))}
-            </List>
-          )}
-        </CardContent>
-      </Card>
+
+                      <Typography variant="h6">{`${child.first_name} ${child.last_name}`}</Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Born {formatBirthDate(child.birth_date)}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                        {formatAge(child.birth_date)}
+                      </Typography>
+
+                      {isDefault && (
+                        <Chip label="Default" size="small" color="primary" variant="outlined" sx={{ mb: 1 }} />
+                      )}
+                    </CardContent>
+                  </CardActionArea>
+
+                  {/* Action row */}
+                  <Box
+                    sx={{
+                      display: "flex",
+                      justifyContent: "center",
+                      gap: 0.5,
+                      pb: 1.5,
+                      pt: 0.5,
+                      borderTop: 1,
+                      borderColor: "divider",
+                    }}
+                  >
+                    <IconButton
+                      onClick={() => handleToggleDefault(child.id)}
+                      title={isDefault ? "Remove as default" : "Set as default"}
+                      color={isDefault ? "primary" : "default"}
+                      sx={{ minWidth: 44, minHeight: 44 }}
+                    >
+                      {isDefault ? <StarIcon /> : <StarBorderIcon />}
+                    </IconButton>
+                    <IconButton
+                      onClick={(e) => { e.stopPropagation(); openEdit(child); }}
+                      sx={{ minWidth: 44, minHeight: 44 }}
+                    >
+                      <EditIcon />
+                    </IconButton>
+                    <IconButton
+                      onClick={(e) => { e.stopPropagation(); handleDelete(child.id); }}
+                      sx={{ minWidth: 44, minHeight: 44 }}
+                    >
+                      <DeleteIcon />
+                    </IconButton>
+                  </Box>
+                </Card>
+              </Grid>
+            );
+          })}
+        </Grid>
+      )}
 
       <input
         ref={fileInputRef}
@@ -186,9 +275,62 @@ export default function ChildrenPage() {
         onChange={handlePhotoChange}
       />
 
-      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
+      <Fab
+        color="primary"
+        aria-label="Add child"
+        onClick={openCreate}
+        sx={{ position: "fixed", bottom: { xs: 80, md: 24 }, right: 16, display: { xs: "flex", md: "none" } }}
+      >
+        <AddIcon />
+      </Fab>
+
+      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth fullScreen={isMobile}>
         <DialogTitle>{editing ? "Edit Child" : "Add Child"}</DialogTitle>
-        <DialogContent>
+        <DialogContent sx={{ p: 2 }}>
+          {/* Photo tap-to-upload inside dialog (for editing) */}
+          {editing && (
+            <Box
+              sx={{ textAlign: "center", mb: 2 }}
+              onClick={() => handlePhotoClick(editing.id)}
+            >
+              <Box
+                sx={{
+                  display: "inline-block",
+                  position: "relative",
+                  cursor: "pointer",
+                  "&:hover .photo-overlay": { opacity: 1 },
+                }}
+              >
+                <Avatar
+                  src={photoUrl(editing)}
+                  sx={{ width: 120, height: 120, fontSize: 48, mx: "auto" }}
+                >
+                  {editing.first_name[0]}
+                </Avatar>
+                <Box
+                  className="photo-overlay"
+                  sx={{
+                    position: "absolute",
+                    inset: 0,
+                    borderRadius: "50%",
+                    backgroundColor: "rgba(0,0,0,0.45)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    opacity: 0,
+                    transition: "opacity 0.15s",
+                    color: "#fff",
+                  }}
+                >
+                  <PhotoCameraIcon sx={{ fontSize: 32 }} />
+                </Box>
+              </Box>
+              <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>
+                Tap to change photo
+              </Typography>
+            </Box>
+          )}
+
           <TextField
             autoFocus
             margin="dense"
