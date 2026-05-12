@@ -1,14 +1,21 @@
 import { useEffect, useState } from "react";
+import type { MouseEvent } from "react";
 import {
   Box,
   Button,
   Card,
+  CardActionArea,
   CardContent,
+  Chip,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
+  Fab,
   IconButton,
+  Menu,
+  MenuItem,
+  Stack,
   Table,
   TableBody,
   TableCell,
@@ -17,10 +24,15 @@ import {
   TableRow,
   TextField,
   Typography,
+  useMediaQuery,
+  useTheme,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
 import EditIcon from "@mui/icons-material/Edit";
+import MoreVertIcon from "@mui/icons-material/MoreVert";
+import AccessibilityNewIcon from "@mui/icons-material/AccessibilityNew";
+import EmojiEventsIcon from "@mui/icons-material/EmojiEvents";
 import { api } from "../api/client";
 import { useChildren } from "../hooks/useChildren";
 import { useNotification } from "../hooks/useNotification";
@@ -31,13 +43,63 @@ import NoChildPlaceholder from "../components/NoChildPlaceholder";
 import type { TummyTime } from "../types/models";
 import { isoToLocal } from "../utils/dateTime";
 
+function relativeTime(iso: string): string {
+  const ms = Date.now() - new Date(iso).getTime();
+  if (ms < 0) return "just now";
+  const mins = Math.round(ms / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  const remMins = mins % 60;
+  if (hrs < 24) return remMins > 0 ? `${hrs}h ${remMins}m ago` : `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days === 1) return "Yesterday";
+  if (days < 7) return `${days}d ago`;
+  return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+function humanDuration(start: string, end: string | null): string {
+  const endMs = end ? new Date(end).getTime() : Date.now();
+  const ms = endMs - new Date(start).getTime();
+  if (ms <= 0) return "0m";
+  const mins = Math.round(ms / 60000);
+  if (mins < 60) return `${mins}m`;
+  const hrs = Math.floor(mins / 60);
+  const remMins = mins % 60;
+  return remMins > 0 ? `${hrs}h ${remMins}m` : `${hrs}h`;
+}
+
+function formatTimeRange(start: string, end: string | null): string {
+  const startDate = new Date(start);
+  const now = new Date();
+  const isToday = startDate.toDateString() === now.toDateString();
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const isYesterday = startDate.toDateString() === yesterday.toDateString();
+  const dayLabel = isToday
+    ? "Today"
+    : isYesterday
+      ? "Yesterday"
+      : startDate.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  const timeOpts: Intl.DateTimeFormatOptions = { hour: "numeric", minute: "2-digit" };
+  const startStr = startDate.toLocaleTimeString(undefined, timeOpts);
+  if (!end) return `${dayLabel} ${startStr} – now`;
+  const endStr = new Date(end).toLocaleTimeString(undefined, timeOpts);
+  return `${dayLabel} ${startStr} – ${endStr}`;
+}
+
 export default function TummyTimePage() {
   const { selectedChild } = useChildren();
   const { notify } = useNotification();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+  const isCompact = useMediaQuery(theme.breakpoints.down("md"));
   const [entries, setEntries] = useState<TummyTime[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState<TummyTime | null>(null);
   const [form, setForm] = useState({ start_time: "", end_time: "", milestone: "", notes: "" });
+  const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
+  const [menuEntry, setMenuEntry] = useState<TummyTime | null>(null);
 
   const load = async () => {
     if (!selectedChild) return;
@@ -52,6 +114,12 @@ export default function TummyTimePage() {
   useEffect(() => {
     load();
   }, [selectedChild]);
+
+  const openAdd = () => {
+    setEditingEntry(null);
+    setForm({ start_time: "", end_time: "", milestone: "", notes: "" });
+    setDialogOpen(true);
+  };
 
   const handleEdit = (entry: TummyTime) => {
     setEditingEntry(entry);
@@ -96,6 +164,22 @@ export default function TummyTimePage() {
     }
   };
 
+  const openMenu = (e: MouseEvent<HTMLElement>, entry: TummyTime) => {
+    e.stopPropagation();
+    setMenuAnchor(e.currentTarget);
+    setMenuEntry(entry);
+  };
+
+  const closeMenu = () => {
+    setMenuAnchor(null);
+    setMenuEntry(null);
+  };
+
+  const closeDialog = () => {
+    setDialogOpen(false);
+    setEditingEntry(null);
+  };
+
   if (!selectedChild) {
 
     return <NoChildPlaceholder />;
@@ -103,23 +187,21 @@ export default function TummyTimePage() {
   }
 
   return (
-    <Box>
+    <Box sx={{ pb: { xs: 10, md: 0 } }}>
       <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 3 }}>
         <Typography variant="h4">Tummy Time</Typography>
         <Button
           variant="contained"
           startIcon={<AddIcon />}
-          onClick={() => {
-            setEditingEntry(null);
-            setForm({ start_time: "", end_time: "", milestone: "", notes: "" });
-            setDialogOpen(true);
-          }}
+          onClick={openAdd}
+          sx={{ display: { xs: "none", md: "inline-flex" } }}
         >
           Add Session
         </Button>
       </Box>
 
-      <Card>
+      {/* Desktop table */}
+      <Card sx={{ display: { xs: "none", md: "block" } }}>
         <CardContent>
           <TableContainer>
             <Table>
@@ -127,6 +209,7 @@ export default function TummyTimePage() {
                 <TableRow>
                   <TableCell>Start</TableCell>
                   <TableCell>End</TableCell>
+                  <TableCell>Duration</TableCell>
                   <TableCell>Milestone</TableCell>
                   <TableCell>Notes</TableCell>
                   <TableCell />
@@ -137,13 +220,14 @@ export default function TummyTimePage() {
                   <TableRow key={t.id}>
                     <TableCell>{new Date(t.start_time).toLocaleString()}</TableCell>
                     <TableCell>{t.end_time ? new Date(t.end_time).toLocaleString() : "In progress"}</TableCell>
+                    <TableCell>{humanDuration(t.start_time, t.end_time)}</TableCell>
                     <TableCell>{t.milestone || "—"}</TableCell>
                     <TableCell>{t.notes || "—"}</TableCell>
                     <TableCell>
-                      <IconButton size="small" onClick={() => handleEdit(t)}>
+                      <IconButton size="small" onClick={() => handleEdit(t)} aria-label="edit">
                         <EditIcon fontSize="small" />
                       </IconButton>
-                      <IconButton size="small" onClick={() => handleDelete(t.id)}>
+                      <IconButton size="small" onClick={() => handleDelete(t.id)} aria-label="delete">
                         <DeleteIcon fontSize="small" />
                       </IconButton>
                     </TableCell>
@@ -151,7 +235,7 @@ export default function TummyTimePage() {
                 ))}
                 {entries.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={5} align="center">
+                    <TableCell colSpan={6} align="center">
                       <Typography color="text.secondary">No tummy time recorded.</Typography>
                     </TableCell>
                   </TableRow>
@@ -162,7 +246,154 @@ export default function TummyTimePage() {
         </CardContent>
       </Card>
 
-      <Dialog open={dialogOpen} onClose={() => { setDialogOpen(false); setEditingEntry(null); }} maxWidth="sm" fullWidth>
+      {/* Mobile/tablet card stack */}
+      <Box sx={{ display: { xs: "block", md: "none" } }}>
+        {entries.length === 0 ? (
+          <Box
+            sx={{
+              textAlign: "center",
+              py: 8,
+              px: 2,
+              color: "text.secondary",
+            }}
+          >
+            <AccessibilityNewIcon sx={{ fontSize: 64, color: "text.disabled", mb: 2 }} />
+            <Typography variant="h6" gutterBottom>
+              No tummy time logged yet
+            </Typography>
+            <Typography variant="body2">Tap + to start tracking</Typography>
+          </Box>
+        ) : (
+          <Stack spacing={1.5}>
+            {entries.map((t) => {
+              const inProgress = !t.end_time;
+              return (
+                <Card key={t.id} elevation={1} sx={{ borderRadius: 2, overflow: "visible" }}>
+                  <Box sx={{ display: "flex", alignItems: "stretch" }}>
+                    <CardActionArea
+                      onClick={() => handleEdit(t)}
+                      sx={{ flex: 1, p: 2, minHeight: 44, borderRadius: 2 }}
+                    >
+                      <Stack spacing={1}>
+                        <Box
+                          sx={{
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            gap: 1,
+                          }}
+                        >
+                          <Chip
+                            color="success"
+                            size="small"
+                            icon={<AccessibilityNewIcon />}
+                            label="Tummy Time"
+                            sx={{ fontWeight: 600 }}
+                          />
+                          <Typography variant="caption" color="text.secondary">
+                            {relativeTime(t.start_time)}
+                          </Typography>
+                        </Box>
+                        <Typography
+                          variant="h5"
+                          sx={{ fontWeight: 700, color: inProgress ? "success.main" : "text.primary" }}
+                        >
+                          {inProgress
+                            ? `Active — started ${relativeTime(t.start_time)}`
+                            : humanDuration(t.start_time, t.end_time)}
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          {formatTimeRange(t.start_time, t.end_time)}
+                        </Typography>
+                        {t.milestone && (
+                          <Box>
+                            <Chip
+                              variant="outlined"
+                              size="small"
+                              color="warning"
+                              icon={<EmojiEventsIcon />}
+                              label={t.milestone}
+                              sx={{ maxWidth: "100%", "& .MuiChip-label": { whiteSpace: "normal" } }}
+                            />
+                          </Box>
+                        )}
+                        {t.notes && (
+                          <Typography
+                            variant="body2"
+                            color="text.secondary"
+                            sx={{
+                              display: "-webkit-box",
+                              WebkitLineClamp: 2,
+                              WebkitBoxOrient: "vertical",
+                              overflow: "hidden",
+                            }}
+                          >
+                            {t.notes}
+                          </Typography>
+                        )}
+                      </Stack>
+                    </CardActionArea>
+                    <Box sx={{ display: "flex", alignItems: "flex-start", p: 0.5 }}>
+                      <IconButton
+                        aria-label="more"
+                        onClick={(e) => openMenu(e, t)}
+                        sx={{ width: 44, height: 44 }}
+                      >
+                        <MoreVertIcon />
+                      </IconButton>
+                    </Box>
+                  </Box>
+                </Card>
+              );
+            })}
+          </Stack>
+        )}
+      </Box>
+
+      <Menu anchorEl={menuAnchor} open={Boolean(menuAnchor)} onClose={closeMenu}>
+        <MenuItem
+          onClick={() => {
+            if (menuEntry) handleEdit(menuEntry);
+            closeMenu();
+          }}
+          sx={{ minHeight: 44 }}
+        >
+          <EditIcon fontSize="small" sx={{ mr: 1 }} />
+          Edit
+        </MenuItem>
+        <MenuItem
+          onClick={() => {
+            if (menuEntry) handleDelete(menuEntry.id);
+            closeMenu();
+          }}
+          sx={{ minHeight: 44, color: "error.main" }}
+        >
+          <DeleteIcon fontSize="small" sx={{ mr: 1 }} />
+          Delete
+        </MenuItem>
+      </Menu>
+
+      <Fab
+        color="primary"
+        aria-label="add tummy time"
+        onClick={openAdd}
+        sx={{
+          position: "fixed",
+          bottom: { xs: "calc(56px + env(safe-area-inset-bottom) + 16px)", md: 24 },
+          right: 16,
+          display: { xs: "flex", md: "none" },
+        }}
+      >
+        <AddIcon />
+      </Fab>
+
+      <Dialog
+        open={dialogOpen}
+        onClose={closeDialog}
+        maxWidth="sm"
+        fullWidth
+        fullScreen={isMobile}
+      >
         <DialogTitle>{editingEntry ? "Edit Tummy Time" : "Add Tummy Time"}</DialogTitle>
         <DialogContent>
           <Box sx={{ display: "flex", gap: 1, alignItems: "flex-start" }}>
@@ -202,13 +433,13 @@ export default function TummyTimePage() {
             label="Notes"
             fullWidth
             multiline
-            rows={2}
+            rows={isCompact ? 3 : 2}
             value={form.notes}
             onChange={(e) => setForm({ ...form, notes: e.target.value })}
           />
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => { setDialogOpen(false); setEditingEntry(null); }}>Cancel</Button>
+          <Button onClick={closeDialog}>Cancel</Button>
           <Button onClick={handleSave} variant="contained" disabled={!form.start_time}>
             Save
           </Button>
