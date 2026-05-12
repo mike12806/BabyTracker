@@ -1,8 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
+  Avatar,
   Box,
   Button,
+  ButtonBase,
   Card,
   CardContent,
   Checkbox,
@@ -13,6 +15,8 @@ import {
   FormControlLabel,
   Grid,
   MenuItem,
+  Tab,
+  Tabs,
   Typography,
   Chip,
   Stack,
@@ -22,6 +26,7 @@ import {
   TextField,
   Tooltip,
   alpha,
+  useMediaQuery,
   useTheme,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
@@ -33,7 +38,9 @@ import TimerIcon from "@mui/icons-material/Timer";
 import AccessibilityNewIcon from "@mui/icons-material/AccessibilityNew";
 import OpacityIcon from "@mui/icons-material/Opacity";
 import MonitorWeightIcon from "@mui/icons-material/MonitorWeight";
-import { api } from "../api/client";
+import ThermostatIcon from "@mui/icons-material/Thermostat";
+import NoteIcon from "@mui/icons-material/Note";
+import { api, API_BASE } from "../api/client";
 import { useChildren } from "../hooks/useChildren";
 import { useNotification } from "../hooks/useNotification";
 import NowButton from "../components/NowButton";
@@ -127,11 +134,42 @@ function getDiaperChipColor(type: string): ChipColor {
   return "default";
 }
 
+function getGreeting(hour: number): string {
+  if (hour < 5) return "Good night";
+  if (hour < 12) return "Good morning";
+  if (hour < 17) return "Good afternoon";
+  if (hour < 21) return "Good evening";
+  return "Good night";
+}
+
+function formatAge(birthDate: string): string {
+  const birth = new Date(birthDate);
+  const now = new Date();
+  const diffMs = now.getTime() - birth.getTime();
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  const diffWeeks = Math.floor(diffDays / 7);
+  if (diffWeeks < 8) {
+    if (diffWeeks < 1) return diffDays === 1 ? "1 day old" : `${diffDays} days old`;
+    return diffWeeks === 1 ? "1 week old" : `${diffWeeks} weeks old`;
+  }
+  // Months calculation: use calendar months
+  let months =
+    (now.getFullYear() - birth.getFullYear()) * 12 +
+    (now.getMonth() - birth.getMonth());
+  if (now.getDate() < birth.getDate()) months--;
+  if (months < 12) return months === 1 ? "1 month old" : `${months} months old`;
+  const years = Math.floor(months / 12);
+  const remMonths = months % 12;
+  if (remMonths === 0) return years === 1 ? "1 year old" : `${years} years old`;
+  return `${years}y ${remMonths}m old`;
+}
+
 export default function Dashboard() {
   const { selectedChild } = useChildren();
   const { notify } = useNotification();
   const navigate = useNavigate();
   const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("md"));
   const [feedings, setFeedings] = useState<Feeding[]>([]);
   const [diapers, setDiapers] = useState<DiaperChange[]>([]);
   const [sleeps, setSleeps] = useState<SleepEntry[]>([]);
@@ -139,6 +177,7 @@ export default function Dashboard() {
   const [tummyTimes, setTummyTimes] = useState<TummyTime[]>([]);
   const [pumpings, setPumpings] = useState<Pumping[]>([]);
   const [growths, setGrowths] = useState<Growth[]>([]);
+  const [activityTab, setActivityTab] = useState(0);
 
   // Quick action dialog state
   const [feedingDialogOpen, setFeedingDialogOpen] = useState(false);
@@ -237,6 +276,8 @@ export default function Dashboard() {
     reloadAll(selectedChild.id);
   }, [selectedChild]);
 
+  const greeting = useMemo(() => getGreeting(new Date().getHours()), []);
+
   if (!selectedChild) {
     return <NoChildPlaceholder />;
   }
@@ -260,6 +301,11 @@ export default function Dashboard() {
   const recentSleeps = sleeps.slice(0, 5);
   const recentTummyTimes = tummyTimes.slice(0, 5);
   const recentPumpings = pumpings.slice(0, 5);
+  const recentGrowths = growths.slice(0, 5);
+
+  const childPhotoUrl = selectedChild.picture_content_type
+    ? `${API_BASE}/children/${selectedChild.id}/photo?v=${encodeURIComponent(selectedChild.updated_at)}`
+    : undefined;
 
   const statCards = [
     {
@@ -306,55 +352,388 @@ export default function Dashboard() {
     },
   ];
 
+  type QuickLogTile = {
+    name: string;
+    label: string;
+    icon: typeof RestaurantIcon;
+    color: string;
+    onClick: () => void;
+  };
+
+  const quickLogTiles: QuickLogTile[] = [
+    {
+      name: "Feeding",
+      label: "Feeding",
+      icon: RestaurantIcon,
+      color: theme.palette.primary.main,
+      onClick: () => {
+        setFeedingForm({ type: "bottle", start_time: "", end_time: "", amount: "", amount_unit: "oz", notes: "" });
+        setFeedingDialogOpen(true);
+      },
+    },
+    {
+      name: "Diaper",
+      label: "Diaper",
+      icon: BabyChangingStationIcon,
+      color: theme.palette.warning.main,
+      onClick: () => {
+        setDiaperForm({ time: "", type: "wet", color: "", notes: "" });
+        setDiaperDialogOpen(true);
+      },
+    },
+    {
+      name: "Sleep",
+      label: "Sleep",
+      icon: BedtimeIcon,
+      color: theme.palette.secondary.main,
+      onClick: () => {
+        setSleepForm({ start_time: "", end_time: "", is_nap: false, notes: "" });
+        setSleepDialogOpen(true);
+      },
+    },
+    {
+      name: "Tummy Time",
+      label: "Tummy Time",
+      icon: AccessibilityNewIcon,
+      color: theme.palette.success.main,
+      onClick: () => navigate("/tummy-time"),
+    },
+    {
+      name: "Pumping",
+      label: "Pumping",
+      icon: OpacityIcon,
+      color: theme.palette.info.main,
+      onClick: () => navigate("/pumping"),
+    },
+    {
+      name: "Temperature",
+      label: "Temperature",
+      icon: ThermostatIcon,
+      color: theme.palette.error.main,
+      onClick: () => navigate("/temperature"),
+    },
+    {
+      name: "Notes",
+      label: "Notes",
+      icon: NoteIcon,
+      color: theme.palette.text.secondary,
+      onClick: () => navigate("/notes"),
+    },
+    {
+      name: "Timer",
+      label: "Timer",
+      icon: TimerIcon,
+      color: theme.palette.primary.main,
+      onClick: () => navigate("/timers"),
+    },
+  ];
+
+  // ── Recent activity sections (reused by mobile tabs + desktop grid) ──
+  const renderFeedingList = () =>
+    recentFeedings.length === 0 ? (
+      <Typography color="text.secondary" variant="body2">
+        No feedings recorded yet.
+      </Typography>
+    ) : (
+      recentFeedings.map((f, idx) => (
+        <Box key={f.id}>
+          {idx > 0 && <Divider />}
+          <Box
+            sx={{
+              py: 0.75,
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              gap: 1,
+            }}
+          >
+            <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, minWidth: 0 }}>
+              <Chip
+                label={prettifyType(f.type)}
+                size="small"
+                color={getFeedingChipColor(f.type)}
+                sx={{ flexShrink: 0, fontSize: "0.7rem" }}
+              />
+              <Typography variant="body2" color="text.secondary" noWrap>
+                {formatRelativeTime(f.start_time)}
+              </Typography>
+            </Box>
+            <Typography variant="body2" color="text.secondary" sx={{ flexShrink: 0 }}>
+              {f.amount != null
+                ? `${f.amount}${f.amount_unit ? ` ${f.amount_unit}` : ""} · ${formatDuration(f.start_time, f.end_time)}`
+                : formatDuration(f.start_time, f.end_time)}
+            </Typography>
+          </Box>
+        </Box>
+      ))
+    );
+
+  const renderDiaperList = () =>
+    recentDiapers.length === 0 ? (
+      <Typography color="text.secondary" variant="body2">
+        No diaper changes recorded yet.
+      </Typography>
+    ) : (
+      recentDiapers.map((d, idx) => (
+        <Box key={d.id}>
+          {idx > 0 && <Divider />}
+          <Box
+            sx={{
+              py: 0.75,
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              gap: 1,
+            }}
+          >
+            <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, minWidth: 0 }}>
+              <Chip
+                label={prettifyType(d.type)}
+                size="small"
+                color={getDiaperChipColor(d.type)}
+                sx={{ flexShrink: 0, fontSize: "0.7rem" }}
+              />
+              <Typography variant="body2" color="text.secondary" noWrap>
+                {formatRelativeTime(d.time)}
+              </Typography>
+            </Box>
+            {d.color && (
+              <Chip label={d.color} size="small" variant="outlined" sx={{ flexShrink: 0 }} />
+            )}
+          </Box>
+        </Box>
+      ))
+    );
+
+  const renderSleepList = () =>
+    recentSleeps.length === 0 ? (
+      <Typography color="text.secondary" variant="body2">
+        No sleep recorded yet.
+      </Typography>
+    ) : (
+      recentSleeps.map((s, idx) => (
+        <Box key={s.id}>
+          {idx > 0 && <Divider />}
+          <Box
+            sx={{
+              py: 0.75,
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              gap: 1,
+            }}
+          >
+            <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, minWidth: 0 }}>
+              <Chip
+                label={s.is_nap ? "Nap" : "Night"}
+                size="small"
+                color={s.is_nap ? "success" : "secondary"}
+                sx={{ flexShrink: 0, fontSize: "0.7rem" }}
+              />
+              <Typography variant="body2" color="text.secondary" noWrap>
+                {formatRelativeTime(s.start_time)}
+              </Typography>
+            </Box>
+            <Stack direction="row" spacing={0.5} sx={{ flexShrink: 0, alignItems: "center" }}>
+              {!s.end_time && (
+                <Chip
+                  label="Active"
+                  size="small"
+                  color="success"
+                  variant="outlined"
+                  sx={{ fontSize: "0.65rem", height: 20 }}
+                />
+              )}
+              <Typography variant="body2" color="text.secondary">
+                {formatDuration(s.start_time, s.end_time)}
+              </Typography>
+            </Stack>
+          </Box>
+        </Box>
+      ))
+    );
+
+  const renderTummyTimeList = () =>
+    recentTummyTimes.length === 0 ? (
+      <Typography color="text.secondary" variant="body2">
+        No tummy time recorded yet.
+      </Typography>
+    ) : (
+      recentTummyTimes.map((tt, idx) => (
+        <Box key={tt.id}>
+          {idx > 0 && <Divider />}
+          <Box
+            sx={{
+              py: 0.75,
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              gap: 1,
+            }}
+          >
+            <Typography variant="body2" color="text.secondary">
+              {formatRelativeTime(tt.start_time)}
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ flexShrink: 0 }}>
+              {formatDuration(tt.start_time, tt.end_time)}
+            </Typography>
+          </Box>
+        </Box>
+      ))
+    );
+
+  const renderPumpingList = () =>
+    recentPumpings.length === 0 ? (
+      <Typography color="text.secondary" variant="body2">
+        No pumping recorded yet.
+      </Typography>
+    ) : (
+      recentPumpings.map((p, idx) => (
+        <Box key={p.id}>
+          {idx > 0 && <Divider />}
+          <Box
+            sx={{
+              py: 0.75,
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              gap: 1,
+            }}
+          >
+            <Typography variant="body2" color="text.secondary">
+              {formatRelativeTime(p.start_time)}
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ flexShrink: 0 }}>
+              {p.amount != null
+                ? `${p.amount}${p.amount_unit ? ` ${p.amount_unit}` : ""} · ${formatDuration(p.start_time, p.end_time)}`
+                : formatDuration(p.start_time, p.end_time)}
+            </Typography>
+          </Box>
+        </Box>
+      ))
+    );
+
+  const renderGrowthList = () =>
+    recentGrowths.length === 0 ? (
+      <Typography color="text.secondary" variant="body2">
+        No growth records yet.
+      </Typography>
+    ) : (
+      recentGrowths.map((g, idx) => (
+        <Box key={g.id}>
+          {idx > 0 && <Divider />}
+          <Box
+            sx={{
+              py: 0.75,
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              gap: 1,
+            }}
+          >
+            <Typography variant="body2" color="text.secondary">
+              {formatTime(g.date)}
+            </Typography>
+            <Stack direction="row" spacing={1} sx={{ flexShrink: 0, flexWrap: "wrap" }}>
+              {g.weight != null && (
+                <Typography variant="body2" color="text.secondary">
+                  {g.weight}
+                  {g.weight_unit ?? ""}
+                </Typography>
+              )}
+              {g.height != null && (
+                <Typography variant="body2" color="text.secondary">
+                  {g.height}
+                  {g.height_unit ?? ""}
+                </Typography>
+              )}
+            </Stack>
+          </Box>
+        </Box>
+      ))
+    );
+
+  const activitySections = [
+    { key: "feedings", label: "Feedings", icon: <RestaurantIcon fontSize="small" />, path: "/feedings", render: renderFeedingList },
+    { key: "diapers", label: "Diapers", icon: <BabyChangingStationIcon fontSize="small" />, path: "/diapers", render: renderDiaperList },
+    { key: "sleep", label: "Sleep", icon: <BedtimeIcon fontSize="small" />, path: "/sleep", render: renderSleepList },
+    { key: "tummy", label: "Tummy Time", icon: <AccessibilityNewIcon fontSize="small" />, path: "/tummy-time", render: renderTummyTimeList },
+    { key: "pumping", label: "Pumping", icon: <OpacityIcon fontSize="small" />, path: "/pumping", render: renderPumpingList },
+    { key: "growth", label: "Growth", icon: <MonitorWeightIcon fontSize="small" />, path: "/growth", render: renderGrowthList },
+  ];
+
+  const activeActivity = activitySections[activityTab] ?? activitySections[0];
+
+  // Chart sections: shared rendering for mobile + desktop
+  const chartSections: { key: string; label: string; icon: React.ReactNode; node: React.ReactNode }[] = [
+    { key: "feedings", label: "Feedings", icon: <RestaurantIcon color="primary" />, node: <FeedingChart feedings={feedings} /> },
+    { key: "diapers", label: "Diapers", icon: <BabyChangingStationIcon color="primary" />, node: <DiaperChart diapers={diapers} /> },
+    { key: "sleep", label: "Sleep", icon: <BedtimeIcon color="primary" />, node: <SleepChart sleeps={sleeps} /> },
+    { key: "tummy", label: "Tummy Time", icon: <AccessibilityNewIcon color="primary" />, node: <TummyTimeChart tummyTimes={tummyTimes} /> },
+    { key: "pumping", label: "Pumping", icon: <OpacityIcon color="primary" />, node: <PumpingChart pumpings={pumpings} /> },
+    ...(growths.length > 0
+      ? [{ key: "growth", label: "Growth", icon: <MonitorWeightIcon color="primary" />, node: <GrowthChart growths={growths} /> }]
+      : []),
+  ];
+
+  // Override the Charts.tsx fixed 300px height on mobile to keep the page compact.
+  // ResponsiveContainer renders an inline height style — only !important wins.
+  const chartHeightSx = {
+    "& .recharts-responsive-container": {
+      height: { xs: "200px !important", md: "300px !important" },
+    },
+  };
+
   return (
     <Box>
-      <Typography variant="subtitle1" color="text.secondary" sx={{ mb: 1, fontWeight: 500 }}>
-        Quick Actions
-      </Typography>
-      <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 1.5, mb: 2 }}>
-        <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap" }}>
-          <Button
-            variant="contained"
-            size="small"
-            startIcon={<AddIcon />}
-            onClick={() => {
-              setFeedingForm({ type: "bottle", start_time: "", end_time: "", amount: "", amount_unit: "oz", notes: "" });
-              setFeedingDialogOpen(true);
+      {/* Hero greeting card */}
+      <Paper
+        elevation={0}
+        sx={{
+          p: { xs: 2, sm: 2.5 },
+          mb: { xs: 2, sm: 3 },
+          borderRadius: 3,
+          background: `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.18)} 0%, ${alpha(theme.palette.secondary.main, 0.18)} 100%)`,
+          border: `1px solid ${alpha(theme.palette.primary.main, 0.12)}`,
+        }}
+      >
+        <Stack direction="row" spacing={2} sx={{ alignItems: "center" }}>
+          <Avatar
+            src={childPhotoUrl}
+            sx={{
+              width: { xs: 56, sm: 64 },
+              height: { xs: 56, sm: 64 },
+              fontSize: { xs: 24, sm: 28 },
+              bgcolor: alpha(theme.palette.primary.main, 0.25),
+              color: theme.palette.primary.main,
+              border: `2px solid ${alpha(theme.palette.background.paper, 0.6)}`,
             }}
           >
-            Feeding
-          </Button>
-          <Button
-            variant="contained"
-            size="small"
-            color="warning"
-            startIcon={<AddIcon />}
-            onClick={() => {
-              setDiaperForm({ time: "", type: "wet", color: "", notes: "" });
-              setDiaperDialogOpen(true);
-            }}
-          >
-            Diaper
-          </Button>
-          <Button
-            variant="contained"
-            size="small"
-            color="secondary"
-            startIcon={<AddIcon />}
-            onClick={() => {
-              setSleepForm({ start_time: "", end_time: "", is_nap: false, notes: "" });
-              setSleepDialogOpen(true);
-            }}
-          >
-            Sleep
-          </Button>
+            {selectedChild.first_name[0]}
+          </Avatar>
+          <Box sx={{ minWidth: 0, flex: 1 }}>
+            <Typography
+              variant="h5"
+              sx={{
+                fontWeight: 700,
+                lineHeight: 1.15,
+                fontSize: { xs: "1.25rem", sm: "1.5rem" },
+              }}
+              noWrap
+            >
+              {greeting}, {selectedChild.first_name}!
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25 }}>
+              {formatAge(selectedChild.birth_date)}
+            </Typography>
+          </Box>
         </Stack>
-      </Box>
+      </Paper>
 
       {/* Active Timers */}
       {timers.length > 0 && (
-        <Box sx={{ mb: 3 }}>
-          <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap" }}>
+        <Box sx={{ mb: { xs: 2, sm: 3 } }}>
+          <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", gap: 1 }}>
             {timers.map((t) => (
               <Chip
                 key={t.id}
@@ -369,462 +748,242 @@ export default function Dashboard() {
       )}
 
       {/* Today's Summary */}
-      <Typography variant="subtitle1" color="text.secondary" sx={{ mb: 2, fontWeight: 500 }}>
+      <Typography
+        variant="subtitle1"
+        color="text.secondary"
+        sx={{ mb: { xs: 1.5, sm: 2 }, fontWeight: 500 }}
+      >
         Today's Summary
       </Typography>
 
-      {/* Today at a Glance */}
-      <Grid container spacing={2} sx={{ mb: 4 }}>
+      <Grid container spacing={{ xs: 1.5, sm: 2 }} sx={{ mb: { xs: 2, sm: 3 } }}>
         {statCards.map((stat) => (
-      <Grid key={stat.label} size={{ xs: 6, sm: 3 }}>
+          <Grid key={stat.label} size={{ xs: 6, sm: 3 }}>
             <Paper
               elevation={0}
               sx={{
-                p: { xs: 1.5, sm: 2 },
+                p: { xs: 1.75, sm: 2 },
                 borderRadius: 3,
-                bgcolor: alpha(stat.color, 0.1),
-                border: `1px solid ${alpha(stat.color, 0.2)}`,
+                bgcolor: alpha(stat.color, 0.08),
+                minHeight: { xs: 100, sm: 110 },
                 height: "100%",
+                display: "flex",
+                flexDirection: "column",
+                justifyContent: "space-between",
               }}
             >
-              <Stack spacing={0.5}>
-                <Box sx={{ color: stat.color }}>{stat.icon}</Box>
+              <Box sx={{ color: stat.color, display: "flex" }}>{stat.icon}</Box>
+              <Box>
                 <Typography
-                  variant="h6"
                   sx={{
-                    fontWeight: "bold",
-                    lineHeight: 1.2,
-                    fontSize: { xs: "0.95rem", sm: "1.15rem" },
+                    fontWeight: 700,
+                    lineHeight: 1.15,
+                    fontSize: { xs: "1.75rem", sm: "1.4rem" },
+                    color: stat.color,
                   }}
                 >
                   {stat.value}
                 </Typography>
-                <Typography variant="caption" color="text.secondary">
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  sx={{ display: "block" }}
+                >
                   {stat.label}
                 </Typography>
                 {stat.sub && (
                   <Typography
                     variant="caption"
                     color="text.secondary"
-                    sx={{ opacity: 0.75 }}
+                    sx={{ opacity: 0.75, display: "block" }}
                   >
                     {stat.sub}
                   </Typography>
                 )}
-              </Stack>
+              </Box>
             </Paper>
           </Grid>
         ))}
       </Grid>
 
-      {/* Recent Activity Cards */}
-      <Typography variant="subtitle1" color="text.secondary" sx={{ mb: 2, fontWeight: 500 }}>
+      {/* Quick Log */}
+      <Typography
+        variant="subtitle1"
+        color="text.secondary"
+        sx={{ mb: { xs: 1.5, sm: 2 }, fontWeight: 500 }}
+      >
+        Quick Log
+      </Typography>
+      <Box
+        sx={{
+          mb: { xs: 2, sm: 3 },
+          display: { xs: "flex", md: "grid" },
+          gridTemplateColumns: { md: "repeat(8, 1fr)" },
+          gap: { xs: 1.5, sm: 2 },
+          overflowX: { xs: "auto", md: "visible" },
+          pb: { xs: 1, md: 0 },
+          mx: { xs: -2, md: 0 },
+          px: { xs: 2, md: 0 },
+          // Hide scrollbar but keep scrolling
+          scrollbarWidth: "none",
+          "&::-webkit-scrollbar": { display: "none" },
+        }}
+      >
+        {quickLogTiles.map((tile) => {
+          const Icon = tile.icon;
+          return (
+            <ButtonBase
+              key={tile.name}
+              onClick={tile.onClick}
+              aria-label={tile.name}
+              sx={{
+                flexShrink: 0,
+                width: { xs: 100, md: "auto" },
+                minWidth: { xs: 100, md: 0 },
+                height: 100,
+                borderRadius: 3,
+                p: 1,
+                bgcolor: alpha(tile.color, 0.1),
+                border: `1px solid ${alpha(tile.color, 0.2)}`,
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 0.75,
+                transition: "transform 0.15s ease, background-color 0.15s ease",
+                "&:hover": {
+                  bgcolor: alpha(tile.color, 0.18),
+                },
+                "&:active": {
+                  transform: "scale(0.96)",
+                },
+              }}
+            >
+              <Box
+                sx={{
+                  width: 40,
+                  height: 40,
+                  borderRadius: "50%",
+                  bgcolor: alpha(tile.color, 0.2),
+                  color: tile.color,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Icon fontSize="small" />
+              </Box>
+              <Typography
+                variant="caption"
+                sx={{
+                  fontWeight: 600,
+                  color: "text.primary",
+                  textAlign: "center",
+                  lineHeight: 1.1,
+                }}
+              >
+                {tile.label}
+              </Typography>
+            </ButtonBase>
+          );
+        })}
+      </Box>
+
+      {/* Recent Activity */}
+      <Typography
+        variant="subtitle1"
+        color="text.secondary"
+        sx={{ mb: { xs: 1.5, sm: 2 }, fontWeight: 500 }}
+      >
         Recent Activity
       </Typography>
-      <Grid container spacing={3}>
-        {/* Feedings */}
-        <Grid size={{ xs: 12, md: 6 }}>
-          <Card>
-            <CardContent>
-              <Stack direction="row" spacing={1} sx={{ mb: 1.5, alignItems: "center" }}>
-                <RestaurantIcon color="primary" />
-                <Typography variant="h6" sx={{ flex: 1 }}>
-                  Feedings
-                </Typography>
-                <Tooltip title="View all feedings">
-                  <IconButton size="small" onClick={() => navigate("/feedings")}>
-                    <ArrowForwardIcon fontSize="small" />
-                  </IconButton>
-                </Tooltip>
-              </Stack>
-              {recentFeedings.length === 0 ? (
-                <Typography color="text.secondary" variant="body2">
-                  No feedings recorded yet.
-                </Typography>
-              ) : (
-                recentFeedings.map((f, idx) => (
-                  <Box key={f.id}>
-                    {idx > 0 && <Divider />}
-                    <Box
-                      sx={{
-                        py: 0.75,
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        gap: 1,
-                      }}
-                    >
-                      <Box
-                        sx={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 0.75,
-                          minWidth: 0,
-                        }}
-                      >
-                        <Chip
-                          label={prettifyType(f.type)}
-                          size="small"
-                          color={getFeedingChipColor(f.type)}
-                          sx={{ flexShrink: 0, fontSize: "0.7rem" }}
-                        />
-                        <Typography
-                          variant="body2"
-                          color="text.secondary"
-                          noWrap
-                        >
-                          {formatRelativeTime(f.start_time)}
-                        </Typography>
-                      </Box>
-                      <Typography
-                        variant="body2"
-                        color="text.secondary"
-                        sx={{ flexShrink: 0 }}
-                      >
-                        {f.amount != null
-                          ? `${f.amount}${f.amount_unit ? ` ${f.amount_unit}` : ""} · ${formatDuration(f.start_time, f.end_time)}`
-                          : formatDuration(f.start_time, f.end_time)}
+
+      {isMobile ? (
+        <Card sx={{ mb: { xs: 2, sm: 3 }, borderRadius: 3 }}>
+          <Box sx={{ borderBottom: 1, borderColor: "divider" }}>
+            <Tabs
+              value={activityTab}
+              onChange={(_, v: number) => setActivityTab(v)}
+              variant="scrollable"
+              scrollButtons={false}
+              sx={{ minHeight: 44 }}
+            >
+              {activitySections.map((sec) => (
+                <Tab
+                  key={sec.key}
+                  label={sec.label}
+                  sx={{ minHeight: 44, textTransform: "none", fontWeight: 500 }}
+                />
+              ))}
+            </Tabs>
+          </Box>
+          <CardContent>
+            <Stack direction="row" spacing={1} sx={{ mb: 1.5, alignItems: "center" }}>
+              {activeActivity.icon}
+              <Typography variant="h6" sx={{ flex: 1 }}>
+                {activeActivity.label}
+              </Typography>
+              <Tooltip title={`View all ${activeActivity.label.toLowerCase()}`}>
+                <IconButton size="small" onClick={() => navigate(activeActivity.path)}>
+                  <ArrowForwardIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            </Stack>
+            {activeActivity.render()}
+          </CardContent>
+        </Card>
+      ) : (
+        <Grid container spacing={{ xs: 2, sm: 3 }} sx={{ mb: { xs: 2, sm: 3 } }}>
+          {activitySections
+            // On desktop, skip empty Tummy Time/Pumping/Growth sections like before.
+            .filter((sec) => {
+              if (sec.key === "tummy") return recentTummyTimes.length > 0;
+              if (sec.key === "pumping") return recentPumpings.length > 0;
+              if (sec.key === "growth") return recentGrowths.length > 0;
+              return true;
+            })
+            .map((sec) => (
+              <Grid key={sec.key} size={{ xs: 12, md: 6 }}>
+                <Card sx={{ borderRadius: 3, height: "100%" }}>
+                  <CardContent>
+                    <Stack direction="row" spacing={1} sx={{ mb: 1.5, alignItems: "center" }}>
+                      {sec.icon}
+                      <Typography variant="h6" sx={{ flex: 1 }}>
+                        {sec.label}
                       </Typography>
-                    </Box>
-                  </Box>
-                ))
-              )}
-            </CardContent>
-          </Card>
+                      <Tooltip title={`View all ${sec.label.toLowerCase()}`}>
+                        <IconButton size="small" onClick={() => navigate(sec.path)}>
+                          <ArrowForwardIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    </Stack>
+                    {sec.render()}
+                  </CardContent>
+                </Card>
+              </Grid>
+            ))}
         </Grid>
-
-        {/* Diapers */}
-        <Grid size={{ xs: 12, md: 6 }}>
-          <Card>
-            <CardContent>
-              <Stack direction="row" spacing={1} sx={{ mb: 1.5, alignItems: "center" }}>
-                <BabyChangingStationIcon color="primary" />
-                <Typography variant="h6" sx={{ flex: 1 }}>
-                  Diapers
-                </Typography>
-                <Tooltip title="View all diaper changes">
-                  <IconButton size="small" onClick={() => navigate("/diapers")}>
-                    <ArrowForwardIcon fontSize="small" />
-                  </IconButton>
-                </Tooltip>
-              </Stack>
-              {recentDiapers.length === 0 ? (
-                <Typography color="text.secondary" variant="body2">
-                  No diaper changes recorded yet.
-                </Typography>
-              ) : (
-                recentDiapers.map((d, idx) => (
-                  <Box key={d.id}>
-                    {idx > 0 && <Divider />}
-                    <Box
-                      sx={{
-                        py: 0.75,
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        gap: 1,
-                      }}
-                    >
-                      <Box
-                        sx={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 0.75,
-                          minWidth: 0,
-                        }}
-                      >
-                        <Chip
-                          label={prettifyType(d.type)}
-                          size="small"
-                          color={getDiaperChipColor(d.type)}
-                          sx={{ flexShrink: 0, fontSize: "0.7rem" }}
-                        />
-                        <Typography
-                          variant="body2"
-                          color="text.secondary"
-                          noWrap
-                        >
-                          {formatRelativeTime(d.time)}
-                        </Typography>
-                      </Box>
-                      {d.color && (
-                        <Chip
-                          label={d.color}
-                          size="small"
-                          variant="outlined"
-                          sx={{ flexShrink: 0 }}
-                        />
-                      )}
-                    </Box>
-                  </Box>
-                ))
-              )}
-            </CardContent>
-          </Card>
-        </Grid>
-
-        {/* Sleep */}
-        <Grid size={{ xs: 12, md: 6 }}>
-          <Card>
-            <CardContent>
-              <Stack direction="row" spacing={1} sx={{ mb: 1.5, alignItems: "center" }}>
-                <BedtimeIcon color="primary" />
-                <Typography variant="h6" sx={{ flex: 1 }}>
-                  Sleep
-                </Typography>
-                <Tooltip title="View all sleep entries">
-                  <IconButton size="small" onClick={() => navigate("/sleep")}>
-                    <ArrowForwardIcon fontSize="small" />
-                  </IconButton>
-                </Tooltip>
-              </Stack>
-              {recentSleeps.length === 0 ? (
-                <Typography color="text.secondary" variant="body2">
-                  No sleep recorded yet.
-                </Typography>
-              ) : (
-                recentSleeps.map((s, idx) => (
-                  <Box key={s.id}>
-                    {idx > 0 && <Divider />}
-                    <Box
-                      sx={{
-                        py: 0.75,
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        gap: 1,
-                      }}
-                    >
-                      <Box
-                        sx={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 0.75,
-                          minWidth: 0,
-                        }}
-                      >
-                        <Chip
-                          label={s.is_nap ? "Nap" : "Night"}
-                          size="small"
-                          color={s.is_nap ? "success" : "secondary"}
-                          sx={{ flexShrink: 0, fontSize: "0.7rem" }}
-                        />
-                        <Typography
-                          variant="body2"
-                          color="text.secondary"
-                          noWrap
-                        >
-                          {formatRelativeTime(s.start_time)}
-                        </Typography>
-                      </Box>
-                      <Stack direction="row" spacing={0.5} sx={{ flexShrink: 0, alignItems: "center" }}>
-                        {!s.end_time && (
-                          <Chip
-                            label="Active"
-                            size="small"
-                            color="success"
-                            variant="outlined"
-                            sx={{ fontSize: "0.65rem", height: 20 }}
-                          />
-                        )}
-                        <Typography variant="body2" color="text.secondary">
-                          {formatDuration(s.start_time, s.end_time)}
-                        </Typography>
-                      </Stack>
-                    </Box>
-                  </Box>
-                ))
-              )}
-            </CardContent>
-          </Card>
-        </Grid>
-
-        {/* Tummy Time (only if there are entries) */}
-        {recentTummyTimes.length > 0 && (
-          <Grid size={{ xs: 12, md: 6 }}>
-            <Card>
-              <CardContent>
-                <Stack direction="row" spacing={1} sx={{ mb: 1.5, alignItems: "center" }}>
-                  <AccessibilityNewIcon color="primary" />
-                  <Typography variant="h6" sx={{ flex: 1 }}>
-                    Tummy Time
-                  </Typography>
-                  <Tooltip title="View all tummy time">
-                    <IconButton
-                      size="small"
-                      onClick={() => navigate("/tummy-time")}
-                    >
-                      <ArrowForwardIcon fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
-                </Stack>
-                {recentTummyTimes.map((tt, idx) => (
-                  <Box key={tt.id}>
-                    {idx > 0 && <Divider />}
-                    <Box
-                      sx={{
-                        py: 0.75,
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        gap: 1,
-                      }}
-                    >
-                      <Typography variant="body2" color="text.secondary">
-                        {formatRelativeTime(tt.start_time)}
-                      </Typography>
-                      <Typography
-                        variant="body2"
-                        color="text.secondary"
-                        sx={{ flexShrink: 0 }}
-                      >
-                        {formatDuration(tt.start_time, tt.end_time)}
-                      </Typography>
-                    </Box>
-                  </Box>
-                ))}
-              </CardContent>
-            </Card>
-          </Grid>
-        )}
-
-        {/* Pumping (only if there are entries) */}
-        {recentPumpings.length > 0 && (
-          <Grid size={{ xs: 12, md: 6 }}>
-            <Card>
-              <CardContent>
-                <Stack direction="row" spacing={1} sx={{ mb: 1.5, alignItems: "center" }}>
-                  <OpacityIcon color="primary" />
-                  <Typography variant="h6" sx={{ flex: 1 }}>
-                    Pumping
-                  </Typography>
-                  <Tooltip title="View all pumping">
-                    <IconButton
-                      size="small"
-                      onClick={() => navigate("/pumping")}
-                    >
-                      <ArrowForwardIcon fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
-                </Stack>
-                {recentPumpings.map((p, idx) => (
-                  <Box key={p.id}>
-                    {idx > 0 && <Divider />}
-                    <Box
-                      sx={{
-                        py: 0.75,
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        gap: 1,
-                      }}
-                    >
-                      <Typography variant="body2" color="text.secondary">
-                        {formatRelativeTime(p.start_time)}
-                      </Typography>
-                      <Typography
-                        variant="body2"
-                        color="text.secondary"
-                        sx={{ flexShrink: 0 }}
-                      >
-                        {p.amount != null
-                          ? `${p.amount}${p.amount_unit ? ` ${p.amount_unit}` : ""} · ${formatDuration(p.start_time, p.end_time)}`
-                          : formatDuration(p.start_time, p.end_time)}
-                      </Typography>
-                    </Box>
-                  </Box>
-                ))}
-              </CardContent>
-            </Card>
-          </Grid>
-        )}
-      </Grid>
+      )}
 
       {/* Charts Section */}
-      <Typography variant="h5" sx={{ mt: 5, mb: 3 }}>
+      <Typography variant="h5" sx={{ mt: { xs: 3, sm: 5 }, mb: { xs: 2, sm: 3 } }}>
         Trends (Last 14 Days)
       </Typography>
 
-      <Grid container spacing={3}>
-        {/* Feeding Trends */}
-        <Grid size={{ xs: 12, lg: 6 }}>
-          <Card>
-            <CardContent>
-              <Stack direction="row" spacing={1} sx={{ mb: 2, alignItems: "center" }}>
-                <RestaurantIcon color="primary" />
-                <Typography variant="h6">Feedings</Typography>
-              </Stack>
-              <FeedingChart feedings={feedings} />
-            </CardContent>
-          </Card>
-        </Grid>
-
-        {/* Diaper Trends */}
-        <Grid size={{ xs: 12, lg: 6 }}>
-          <Card>
-            <CardContent>
-              <Stack direction="row" spacing={1} sx={{ mb: 2, alignItems: "center" }}>
-                <BabyChangingStationIcon color="primary" />
-                <Typography variant="h6">Diapers</Typography>
-              </Stack>
-              <DiaperChart diapers={diapers} />
-            </CardContent>
-          </Card>
-        </Grid>
-
-        {/* Sleep Trends */}
-        <Grid size={{ xs: 12, lg: 6 }}>
-          <Card>
-            <CardContent>
-              <Stack direction="row" spacing={1} sx={{ mb: 2, alignItems: "center" }}>
-                <BedtimeIcon color="primary" />
-                <Typography variant="h6">Sleep</Typography>
-              </Stack>
-              <SleepChart sleeps={sleeps} />
-            </CardContent>
-          </Card>
-        </Grid>
-
-        {/* Tummy Time Trends */}
-        <Grid size={{ xs: 12, lg: 6 }}>
-          <Card>
-            <CardContent>
-              <Stack direction="row" spacing={1} sx={{ mb: 2, alignItems: "center" }}>
-                <AccessibilityNewIcon color="primary" />
-                <Typography variant="h6">Tummy Time</Typography>
-              </Stack>
-              <TummyTimeChart tummyTimes={tummyTimes} />
-            </CardContent>
-          </Card>
-        </Grid>
-
-        {/* Pumping Trends */}
-        <Grid size={{ xs: 12, lg: 6 }}>
-          <Card>
-            <CardContent>
-              <Stack direction="row" spacing={1} sx={{ mb: 2, alignItems: "center" }}>
-                <OpacityIcon color="primary" />
-                <Typography variant="h6">Pumping</Typography>
-              </Stack>
-              <PumpingChart pumpings={pumpings} />
-            </CardContent>
-          </Card>
-        </Grid>
-
-        {/* Growth Trends */}
-        {growths.length > 0 && (
-          <Grid size={{ xs: 12, lg: 6 }}>
-            <Card>
+      <Grid container spacing={{ xs: 1.5, sm: 3 }}>
+        {chartSections.map((c) => (
+          <Grid key={c.key} size={{ xs: 12, lg: 6 }}>
+            <Card sx={{ borderRadius: 3 }}>
               <CardContent>
                 <Stack direction="row" spacing={1} sx={{ mb: 2, alignItems: "center" }}>
-                  <MonitorWeightIcon color="primary" />
-                  <Typography variant="h6">Growth</Typography>
+                  {c.icon}
+                  <Typography variant="h6">{c.label}</Typography>
                 </Stack>
-                <GrowthChart growths={growths} />
+                <Box sx={chartHeightSx}>{c.node}</Box>
               </CardContent>
             </Card>
           </Grid>
-        )}
+        ))}
       </Grid>
 
       {/* Quick Action Dialogs */}
