@@ -134,6 +134,19 @@ export interface Timer {
   updated_at: string;
 }
 
+export interface Todo {
+  id: number;
+  child_id: number;
+  title: string;
+  notes: string | null;
+  due_date: string | null;
+  priority: "low" | "medium" | "high";
+  completed: number;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface UserSettings {
   user_id: number;
   default_child_id: number | null;

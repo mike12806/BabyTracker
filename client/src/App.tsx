@@ -18,6 +18,7 @@ import NotesPage from "./pages/NotesPage";
 import TimersPage from "./pages/TimersPage";
 import MedicationsPage from "./pages/MedicationsPage";
 import ActivityPage from "./pages/ActivityPage";
+import TodosPage from "./pages/TodosPage";
 import { Box, CircularProgress } from "@mui/material";
 
 function AuthGate({ children }: { children: React.ReactNode }) {
@@ -67,6 +68,7 @@ export default function App() {
                     <Route path="/timers" element={<TimersPage />} />
                     <Route path="/medications" element={<MedicationsPage />} />
                     <Route path="/activity" element={<ActivityPage />} />
+                    <Route path="/todos" element={<TodosPage />} />
                   </Route>
                 </Routes>
               </NotificationProvider>
