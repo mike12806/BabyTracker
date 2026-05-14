@@ -36,6 +36,7 @@ import TimerIcon from "@mui/icons-material/Timer";
 import ChildCareIcon from "@mui/icons-material/ChildCare";
 import MedicationIcon from "@mui/icons-material/Medication";
 import HistoryIcon from "@mui/icons-material/History";
+import ChecklistIcon from "@mui/icons-material/Checklist";
 import MoreHorizIcon from "@mui/icons-material/MoreHoriz";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
 import LightModeIcon from "@mui/icons-material/LightMode";
@@ -59,6 +60,7 @@ const navItems = [
   { label: "Growth", icon: <MonitorWeightIcon />, path: "/growth" },
   { label: "Temperature", icon: <ThermostatIcon />, path: "/temperature" },
   { label: "Medications", icon: <MedicationIcon />, path: "/medications" },
+  { label: "To-Do", icon: <ChecklistIcon />, path: "/todos" },
   { label: "Notes", icon: <NoteIcon />, path: "/notes" },
   { label: "Timers", icon: <TimerIcon />, path: "/timers" },
   { label: "Activity", icon: <HistoryIcon />, path: "/activity" },
