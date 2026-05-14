@@ -497,7 +497,11 @@ export default function TodosPage() {
             </Select>
           </FormControl>
         </DialogContent>
-        <DialogActions>
+        <DialogActions
+          sx={{
+            pr: "calc(8px + env(safe-area-inset-right))",
+          }}
+        >
           <Button onClick={closeDialog}>Cancel</Button>
           <Button onClick={handleSave} variant="contained" disabled={!form.title.trim()}>
             Save
