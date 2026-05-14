@@ -40,6 +40,7 @@ import OpacityIcon from "@mui/icons-material/Opacity";
 import MonitorWeightIcon from "@mui/icons-material/MonitorWeight";
 import ThermostatIcon from "@mui/icons-material/Thermostat";
 import NoteIcon from "@mui/icons-material/Note";
+import ChecklistIcon from "@mui/icons-material/Checklist";
 import { api, API_BASE } from "../api/client";
 import { useChildren } from "../hooks/useChildren";
 import { useNotification } from "../hooks/useNotification";
@@ -61,6 +62,7 @@ import type {
   TummyTime,
   Pumping,
   Growth,
+  Todo,
 } from "../types/models";
 
 const FEEDING_TYPES = [
@@ -117,6 +119,37 @@ function formatDuration(start: string, end: string | null): string {
 
 function prettifyType(type: string): string {
   return type.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function formatTodoDueDate(dateStr: string): string {
+  const due = new Date(dateStr + "T00:00:00");
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const diffDays = Math.round((due.getTime() - today.getTime()) / 86400000);
+  if (diffDays === 0) return "Today";
+  if (diffDays === 1) return "Tomorrow";
+  if (diffDays === -1) return "Yesterday";
+  if (diffDays < 0) return `${Math.abs(diffDays)}d overdue`;
+  if (diffDays < 7) return `In ${diffDays}d`;
+  return due.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+function isTodoOverdue(todo: Todo): boolean {
+  if (!todo.due_date || todo.completed) return false;
+  const due = new Date(todo.due_date + "T00:00:00");
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return due < today;
+}
+
+const TODO_PRIORITY_COLORS: Record<Todo["priority"], "default" | "warning" | "error"> = {
+  low: "default",
+  medium: "warning",
+  high: "error",
+};
+
+function todoPriorityLabel(p: Todo["priority"]): string {
+  return p.charAt(0).toUpperCase() + p.slice(1);
 }
 
 function getFeedingChipColor(type: string): ChipColor {
@@ -177,6 +210,7 @@ export default function Dashboard() {
   const [tummyTimes, setTummyTimes] = useState<TummyTime[]>([]);
   const [pumpings, setPumpings] = useState<Pumping[]>([]);
   const [growths, setGrowths] = useState<Growth[]>([]);
+  const [todos, setTodos] = useState<Todo[]>([]);
   const [activityTab, setActivityTab] = useState(0);
 
   // Quick action dialog state
@@ -197,7 +231,7 @@ export default function Dashboard() {
   const [sleepForm, setSleepForm] = useState({ start_time: "", end_time: "", is_nap: false, notes: "" });
 
   const reloadAll = async (childId: number) => {
-    const [f, d, s, t, tt, p, g] = await Promise.all([
+    const [f, d, s, t, tt, p, g, td] = await Promise.all([
       api.get<Feeding[]>(`/feedings?child_id=${childId}&limit=500`),
       api.get<DiaperChange[]>(`/diaper-changes?child_id=${childId}&limit=500`),
       api.get<SleepEntry[]>(`/sleep?child_id=${childId}&limit=500`),
@@ -205,6 +239,7 @@ export default function Dashboard() {
       api.get<TummyTime[]>(`/tummy-time?child_id=${childId}&limit=500`),
       api.get<Pumping[]>(`/pumping?child_id=${childId}&limit=500`),
       api.get<Growth[]>(`/growth?child_id=${childId}&limit=100`),
+      api.get<Todo[]>(`/todos?child_id=${childId}&limit=200`),
     ]);
     setFeedings(f);
     setDiapers(d);
@@ -213,6 +248,16 @@ export default function Dashboard() {
     setTummyTimes(tt);
     setPumpings(p);
     setGrowths(g);
+    setTodos(td);
+  };
+
+  const handleTodoToggle = async (todo: Todo) => {
+    try {
+      await api.put(`/todos/${todo.id}`, { completed: !todo.completed });
+      if (selectedChild) await reloadAll(selectedChild.id);
+    } catch (err) {
+      notify(err instanceof Error ? err.message : "Failed to update todo.", "error");
+    }
   };
 
   const handleFeedingSave = async () => {
@@ -302,6 +347,21 @@ export default function Dashboard() {
   const recentTummyTimes = tummyTimes.slice(0, 5);
   const recentPumpings = pumpings.slice(0, 5);
   const recentGrowths = growths.slice(0, 5);
+
+  const PRIORITY_RANK: Record<Todo["priority"], number> = { high: 0, medium: 1, low: 2 };
+  const activeTodos = todos.filter((t) => !t.completed);
+  const overdueCount = activeTodos.filter(isTodoOverdue).length;
+  const snapshotTodos = [...activeTodos]
+    .sort((a, b) => {
+      const ao = isTodoOverdue(a) ? 0 : 1;
+      const bo = isTodoOverdue(b) ? 0 : 1;
+      if (ao !== bo) return ao - bo;
+      if (a.due_date && b.due_date) return a.due_date.localeCompare(b.due_date);
+      if (a.due_date) return -1;
+      if (b.due_date) return 1;
+      return PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority];
+    })
+    .slice(0, 4);
 
   const childPhotoUrl = selectedChild.picture_content_type
     ? `${API_BASE}/children/${selectedChild.id}/photo?v=${encodeURIComponent(selectedChild.updated_at)}`
@@ -805,6 +865,115 @@ export default function Dashboard() {
           </Grid>
         ))}
       </Grid>
+
+      {/* To-Do Snapshot */}
+      <Card sx={{ mb: { xs: 2, sm: 3 }, borderRadius: 3 }}>
+        <CardContent>
+          <Stack
+            direction="row"
+            spacing={1}
+            sx={{ mb: snapshotTodos.length > 0 ? 1.5 : 0, alignItems: "center", flexWrap: "wrap", gap: 1 }}
+          >
+            <ChecklistIcon color="primary" />
+            <Typography variant="h6" sx={{ flexShrink: 0 }}>
+              To-Do
+            </Typography>
+            <Stack direction="row" spacing={0.75} sx={{ flex: 1, minWidth: 0 }}>
+              <Chip
+                label={`${activeTodos.length} active`}
+                size="small"
+                color="primary"
+                variant={activeTodos.length > 0 ? "filled" : "outlined"}
+              />
+              {overdueCount > 0 && (
+                <Chip
+                  label={`${overdueCount} overdue`}
+                  size="small"
+                  color="error"
+                />
+              )}
+            </Stack>
+            <Button
+              size="small"
+              startIcon={<AddIcon />}
+              onClick={() => navigate("/todos")}
+              sx={{ display: { xs: "none", sm: "inline-flex" } }}
+            >
+              Add task
+            </Button>
+            <Tooltip title="View all tasks">
+              <IconButton size="small" onClick={() => navigate("/todos")}>
+                <ArrowForwardIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          </Stack>
+          {snapshotTodos.length === 0 ? (
+            <Box sx={{ py: 1.5, textAlign: "center" }}>
+              <Typography variant="body2" color="text.secondary">
+                {activeTodos.length === 0 && todos.length > 0
+                  ? "All caught up — no active tasks."
+                  : "No tasks yet. Tap Add task to create one."}
+              </Typography>
+            </Box>
+          ) : (
+            <Grid container spacing={{ xs: 0, sm: 2 }} columnSpacing={{ sm: 4 }}>
+              {snapshotTodos.map((t, idx) => {
+                const overdue = isTodoOverdue(t);
+                return (
+                  <Grid key={t.id} size={{ xs: 12, sm: 6 }}>
+                    <Box
+                      sx={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 1,
+                        py: 0.75,
+                        borderTop: {
+                          xs: idx === 0 ? "none" : 1,
+                          sm: idx < 2 ? "none" : 1,
+                        },
+                        borderColor: "divider",
+                      }}
+                    >
+                      <Checkbox
+                        checked={!!t.completed}
+                        onChange={() => handleTodoToggle(t)}
+                        color="primary"
+                        size="small"
+                        sx={{ ml: -1 }}
+                      />
+                      <Box sx={{ flex: 1, minWidth: 0 }}>
+                        <Typography
+                          variant="body2"
+                          sx={{ fontWeight: 500, lineHeight: 1.3 }}
+                          noWrap
+                        >
+                          {t.title}
+                        </Typography>
+                        {t.due_date && (
+                          <Typography
+                            variant="caption"
+                            color={overdue ? "error" : "text.secondary"}
+                            sx={{ fontWeight: overdue ? 600 : 400 }}
+                          >
+                            {formatTodoDueDate(t.due_date)}
+                          </Typography>
+                        )}
+                      </Box>
+                      <Chip
+                        label={todoPriorityLabel(t.priority)}
+                        size="small"
+                        variant="outlined"
+                        color={TODO_PRIORITY_COLORS[t.priority]}
+                        sx={{ flexShrink: 0, fontSize: "0.7rem" }}
+                      />
+                    </Box>
+                  </Grid>
+                );
+              })}
+            </Grid>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Quick Log */}
       <Typography
