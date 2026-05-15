@@ -60,12 +60,29 @@ export default function ChildrenPage() {
   const [editing, setEditing] = useState<Child | null>(null);
   const [form, setForm] = useState({ first_name: "", last_name: "", birth_date: "" });
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const addPhotoRef = useRef<HTMLInputElement>(null);
   const [uploadTargetId, setUploadTargetId] = useState<number | null>(null);
+  const [pendingPhoto, setPendingPhoto] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
 
   const openCreate = () => {
     setEditing(null);
     setForm({ first_name: "", last_name: "", birth_date: "" });
+    setPendingPhoto(null);
+    if (photoPreview) {
+      URL.revokeObjectURL(photoPreview);
+      setPhotoPreview(null);
+    }
     setDialogOpen(true);
+  };
+
+  const handleAddPhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (photoPreview) URL.revokeObjectURL(photoPreview);
+    setPendingPhoto(file);
+    setPhotoPreview(URL.createObjectURL(file));
+    if (addPhotoRef.current) addPhotoRef.current.value = "";
   };
 
   const openEdit = (child: Child) => {
@@ -83,9 +100,19 @@ export default function ChildrenPage() {
       if (editing) {
         await api.put(`/children/${editing.id}`, form);
       } else {
-        await api.post("/children", form);
+        const newChild = await api.post<Child>("/children", form);
+        if (pendingPhoto) {
+          const formData = new FormData();
+          formData.append("photo", pendingPhoto);
+          await api.upload(`/children/${newChild.id}/photo`, formData);
+        }
       }
       setDialogOpen(false);
+      if (photoPreview) {
+        URL.revokeObjectURL(photoPreview);
+        setPhotoPreview(null);
+      }
+      setPendingPhoto(null);
       await refreshChildren();
     } catch (err) {
       notify(err instanceof Error ? err.message : "Failed to save child.", "error");
@@ -275,6 +302,13 @@ export default function ChildrenPage() {
         style={{ display: "none" }}
         onChange={handlePhotoChange}
       />
+      <input
+        ref={addPhotoRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp,image/gif"
+        style={{ display: "none" }}
+        onChange={handleAddPhotoChange}
+      />
 
       <Fab
         color="primary"
@@ -285,52 +319,61 @@ export default function ChildrenPage() {
         <AddIcon />
       </Fab>
 
-      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth fullScreen={isMobile}>
+      <Dialog
+        open={dialogOpen}
+        onClose={() => {
+          setDialogOpen(false);
+          if (photoPreview) { URL.revokeObjectURL(photoPreview); setPhotoPreview(null); }
+          setPendingPhoto(null);
+        }}
+        maxWidth="sm"
+        fullWidth
+        fullScreen={isMobile}
+        PaperProps={{ sx: { display: "flex", flexDirection: "column" } }}
+      >
         <DialogTitle>{editing ? "Edit Child" : "Add Child"}</DialogTitle>
-        <DialogContent sx={{ p: 2 }}>
-          {/* Photo tap-to-upload inside dialog (for editing) */}
-          {editing && (
+        <DialogContent sx={{ p: 2, overflowY: "auto", flex: 1 }}>
+          {/* Photo picker — available in both add and edit modes */}
+          <Box
+            sx={{ textAlign: "center", mb: 2 }}
+            onClick={() => editing ? handlePhotoClick(editing.id) : addPhotoRef.current?.click()}
+          >
             <Box
-              sx={{ textAlign: "center", mb: 2 }}
-              onClick={() => handlePhotoClick(editing.id)}
+              sx={{
+                display: "inline-block",
+                position: "relative",
+                cursor: "pointer",
+                "&:hover .photo-overlay": { opacity: 1 },
+              }}
             >
+              <Avatar
+                src={editing ? photoUrl(editing) : (photoPreview ?? undefined)}
+                sx={{ width: 120, height: 120, fontSize: 48, mx: "auto" }}
+              >
+                {editing ? editing.first_name[0] : <PhotoCameraIcon sx={{ fontSize: 48 }} />}
+              </Avatar>
               <Box
+                className="photo-overlay"
                 sx={{
-                  display: "inline-block",
-                  position: "relative",
-                  cursor: "pointer",
-                  "&:hover .photo-overlay": { opacity: 1 },
+                  position: "absolute",
+                  inset: 0,
+                  borderRadius: "50%",
+                  backgroundColor: "rgba(0,0,0,0.45)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  opacity: 0,
+                  transition: "opacity 0.15s",
+                  color: "#fff",
                 }}
               >
-                <Avatar
-                  src={photoUrl(editing)}
-                  sx={{ width: 120, height: 120, fontSize: 48, mx: "auto" }}
-                >
-                  {editing.first_name[0]}
-                </Avatar>
-                <Box
-                  className="photo-overlay"
-                  sx={{
-                    position: "absolute",
-                    inset: 0,
-                    borderRadius: "50%",
-                    backgroundColor: "rgba(0,0,0,0.45)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    opacity: 0,
-                    transition: "opacity 0.15s",
-                    color: "#fff",
-                  }}
-                >
-                  <PhotoCameraIcon sx={{ fontSize: 32 }} />
-                </Box>
+                <PhotoCameraIcon sx={{ fontSize: 32 }} />
               </Box>
-              <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>
-                Tap to change photo
-              </Typography>
             </Box>
-          )}
+            <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>
+              {editing ? "Tap to change photo" : "Tap to add photo"}
+            </Typography>
+          </Box>
 
           <TextField
             autoFocus
@@ -359,8 +402,12 @@ export default function ChildrenPage() {
             onChange={(e) => setForm({ ...form, birth_date: e.target.value })}
           />
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDialogOpen(false)}>Cancel</Button>
+        <DialogActions sx={{ px: 2, pb: 2 }}>
+          <Button onClick={() => {
+            setDialogOpen(false);
+            if (photoPreview) { URL.revokeObjectURL(photoPreview); setPhotoPreview(null); }
+            setPendingPhoto(null);
+          }}>Cancel</Button>
           <Button onClick={handleSave} variant="contained" disabled={!form.first_name || !form.birth_date}>
             {editing ? "Save" : "Add"}
           </Button>
