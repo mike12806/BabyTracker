@@ -15,7 +15,7 @@
     "hono": "4.12.18"
   },
   "devDependencies": {
-    "@cloudflare/vitest-pool-workers": "0.16.3",
+    "@cloudflare/vitest-pool-workers": "0.16.4",
     "@cloudflare/workers-types": "4.20260511.1",
     "typescript": "6.0.3",
     "vitest": "4.1.6",
