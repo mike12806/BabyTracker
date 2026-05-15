@@ -329,7 +329,7 @@ export default function ChildrenPage() {
         maxWidth="sm"
         fullWidth
         fullScreen={isMobile}
-        PaperProps={{ sx: { display: "flex", flexDirection: "column" } }}
+        slotProps={{ paper: { sx: { display: "flex", flexDirection: "column" } } }}
       >
         <DialogTitle>{editing ? "Edit Child" : "Add Child"}</DialogTitle>
         <DialogContent sx={{ p: 2, overflowY: "auto", flex: 1 }}>
