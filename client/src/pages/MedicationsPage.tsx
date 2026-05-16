@@ -49,7 +49,7 @@ function relativeTime(iso: string): string {
   if (hrs < 24) return `${hrs}h ago`;
   const days = Math.floor(hrs / 24);
   if (days < 7) return `${days}d ago`;
-  return new Date(iso).toLocaleDateString();
+  return new Date(iso).toLocaleDateString(undefined, { month: "numeric", day: "numeric" });
 }
 
 function formatTimeShort(iso: string): string {
@@ -329,7 +329,7 @@ export default function MedicationsPage() {
               }}>
                 <Box sx={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, bgcolor: c.solid }} />
                 <Typography sx={{ fontSize: 10, color: "text.secondary", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>Last</Typography>
-                <Typography sx={{ fontSize: 20, fontWeight: 700, letterSpacing: "-0.025em", mt: 0.125, fontVariantNumeric: "tabular-nums" }}>{lastMed}</Typography>
+                <Typography sx={{ fontSize: lastMed.length > 5 ? 15 : 20, fontWeight: 700, letterSpacing: "-0.025em", mt: 0.125, fontVariantNumeric: "tabular-nums" }} noWrap>{lastMed}</Typography>
                 <Typography sx={{ fontSize: 10.5, color: "text.secondary", mt: 0.125 }}>dose</Typography>
               </Box>
             </Box>

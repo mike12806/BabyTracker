@@ -382,7 +382,7 @@ export default function SleepPage() {
               }}>
                 <Box sx={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, bgcolor: c.solid }} />
                 <Typography sx={{ fontSize: 10, color: "text.secondary", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>Last</Typography>
-                <Typography sx={{ fontSize: 20, fontWeight: 700, letterSpacing: "-0.025em", mt: 0.125, fontVariantNumeric: "tabular-nums" }}>{lastSleep}</Typography>
+                <Typography sx={{ fontSize: lastSleep.length > 5 ? 15 : 20, fontWeight: 700, letterSpacing: "-0.025em", mt: 0.125, fontVariantNumeric: "tabular-nums" }} noWrap>{lastSleep}</Typography>
                 <Typography sx={{ fontSize: 10.5, color: "text.secondary", mt: 0.125 }}>sleep</Typography>
               </Box>
             </Box>

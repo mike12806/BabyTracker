@@ -72,7 +72,7 @@ function formatRelativeTime(iso: string): string {
   const days = Math.floor(hrs / 24);
   if (days === 1) return "Yesterday";
   if (days < 7) return `${days}d ago`;
-  return new Date(iso).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+  return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
 function formatDuration(start: string, end: string | null): string {
@@ -510,11 +510,11 @@ export default function Dashboard() {
               >
                 {CAT_ICONS[tile.cat]}
               </Box>
-              <Box>
-                <Typography sx={{ fontSize: 15, fontWeight: 700, color: c.ink, letterSpacing: "-0.01em" }}>
+              <Box sx={{ minWidth: 0, width: "100%" }}>
+                <Typography sx={{ fontSize: 15, fontWeight: 700, color: c.ink, letterSpacing: "-0.01em" }} noWrap>
                   {tile.label}
                 </Typography>
-                <Typography sx={{ fontSize: 12, color: c.ink, opacity: 0.72, mt: 0.25 }}>
+                <Typography sx={{ fontSize: 12, color: c.ink, opacity: 0.72, mt: 0.25 }} noWrap>
                   {tile.last}
                 </Typography>
               </Box>

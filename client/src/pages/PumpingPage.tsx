@@ -54,7 +54,7 @@ function relativeTime(iso: string): string {
   else if (mins < 60) phrase = `${mins}m`;
   else if (hours < 24) phrase = `${hours}h`;
   else if (days < 7) phrase = `${days}d`;
-  else phrase = new Date(iso).toLocaleDateString();
+  else phrase = new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
   if (phrase === "just now") return phrase;
   return future ? `in ${phrase}` : `${phrase} ago`;
 }
@@ -295,7 +295,7 @@ export default function PumpingPage() {
               }}>
                 <Box sx={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, bgcolor: c.solid }} />
                 <Typography sx={{ fontSize: 10, color: "text.secondary", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>Last</Typography>
-                <Typography sx={{ fontSize: 20, fontWeight: 700, letterSpacing: "-0.025em", mt: 0.125, fontVariantNumeric: "tabular-nums" }}>{lastPump}</Typography>
+                <Typography sx={{ fontSize: lastPump.length > 5 ? 15 : 20, fontWeight: 700, letterSpacing: "-0.025em", mt: 0.125, fontVariantNumeric: "tabular-nums" }} noWrap>{lastPump}</Typography>
                 <Typography sx={{ fontSize: 10.5, color: "text.secondary", mt: 0.125 }}>session</Typography>
               </Box>
             </Box>

@@ -71,7 +71,7 @@ function relativeTime(iso: string): string {
   if (days < 7) return `${days}d ago`;
   const weeks = Math.round(days / 7);
   if (weeks < 5) return `${weeks}w ago`;
-  return new Date(iso).toLocaleDateString();
+  return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
 function formatTimeShort(iso: string): string {
@@ -323,7 +323,7 @@ export default function DiapersPage() {
               }}>
                 <Box sx={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, bgcolor: c.solid }} />
                 <Typography sx={{ fontSize: 10, color: "text.secondary", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>Last</Typography>
-                <Typography sx={{ fontSize: 20, fontWeight: 700, letterSpacing: "-0.025em", mt: 0.125, fontVariantNumeric: "tabular-nums" }}>{lastChange}</Typography>
+                <Typography sx={{ fontSize: lastChange.length > 5 ? 15 : 20, fontWeight: 700, letterSpacing: "-0.025em", mt: 0.125, fontVariantNumeric: "tabular-nums" }} noWrap>{lastChange}</Typography>
                 <Typography sx={{ fontSize: 10.5, color: "text.secondary", mt: 0.125 }}>change</Typography>
               </Box>
             </Box>
