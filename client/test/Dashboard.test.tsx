@@ -1,4 +1,4 @@
-import { render, screen, within, waitForElementToBeRemoved } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { MemoryRouter } from "react-router-dom";
@@ -198,34 +198,34 @@ describe("Dashboard – quick action buttons", () => {
     expect(screen.getByRole("button", { name: /^note$/i })).toHaveTextContent(/quick journal/i);
   });
 
-  it("opens the Add Feeding dialog when the Feeding button is clicked", async () => {
+  it("opens the quick-log feeding dialog when the Feeding button is clicked", async () => {
     const user = userEvent.setup();
     render(<Dashboard />, { wrapper: Wrapper });
 
     await user.click(await screen.findByRole("button", { name: /^feeding$/i }));
 
     expect(await screen.findByRole("dialog")).toBeTruthy();
-    expect(screen.getByRole("heading", { name: /add feeding/i })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: /log feeding/i })).toBeTruthy();
   });
 
-  it("opens the Add Diaper Change dialog when the Diaper button is clicked", async () => {
+  it("opens the quick-log diaper dialog when the Diaper button is clicked", async () => {
     const user = userEvent.setup();
     render(<Dashboard />, { wrapper: Wrapper });
 
     await user.click(await screen.findByRole("button", { name: /^diaper$/i }));
 
     expect(await screen.findByRole("dialog")).toBeTruthy();
-    expect(screen.getByRole("heading", { name: /add diaper change/i })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: /log diaper/i })).toBeTruthy();
   });
 
-  it("opens the Add Sleep dialog when the Sleep button is clicked", async () => {
+  it("opens the quick-log sleep dialog when the Sleep button is clicked", async () => {
     const user = userEvent.setup();
     render(<Dashboard />, { wrapper: Wrapper });
 
     await user.click(await screen.findByRole("button", { name: /^sleep$/i }));
 
     expect(await screen.findByRole("dialog")).toBeTruthy();
-    expect(screen.getByRole("heading", { name: /add sleep/i })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: /log sleep/i })).toBeTruthy();
   });
 
   it("submits the feeding form, calls api.post, and refreshes dashboard data", async () => {
@@ -235,11 +235,8 @@ describe("Dashboard – quick action buttons", () => {
 
     await user.click(await screen.findByRole("button", { name: /^feeding$/i }));
 
-    // Fill in start time
-    const startTimeInput = await screen.findByLabelText(/start time/i);
-    await user.type(startTimeInput, "2024-12-01T10:00");
-
-    // Save
+    // Quick-log dialog prefills start_time with "now", so no typing needed
+    await screen.findByRole("dialog");
     await user.click(screen.getByRole("button", { name: /^save$/i }));
 
     expect(mockApi.post).toHaveBeenCalledWith(
@@ -257,12 +254,7 @@ describe("Dashboard – quick action buttons", () => {
 
     await user.click(await screen.findByRole("button", { name: /^diaper$/i }));
 
-    // Fill in time — scope to dialog to avoid matching the Timer quick-log tile
-    const dialog = await screen.findByRole("dialog");
-    const timeInput = within(dialog).getByLabelText(/^time/i);
-    await user.type(timeInput, "2024-12-01T10:00");
-
-    // Save
+    await screen.findByRole("dialog");
     await user.click(screen.getByRole("button", { name: /^save$/i }));
 
     expect(mockApi.post).toHaveBeenCalledWith(
@@ -279,16 +271,13 @@ describe("Dashboard – quick action buttons", () => {
 
     await user.click(await screen.findByRole("button", { name: /^sleep$/i }));
 
-    // Fill in start time
-    const startTimeInput = await screen.findByLabelText(/start time/i);
-    await user.type(startTimeInput, "2024-12-01T22:00");
-
-    // Save
+    await screen.findByRole("dialog");
     await user.click(screen.getByRole("button", { name: /^save$/i }));
 
+    // Quick-log sleep defaults to a nap
     expect(mockApi.post).toHaveBeenCalledWith(
       "/sleep",
-      expect.objectContaining({ child_id: 1, is_nap: 0 })
+      expect.objectContaining({ child_id: 1, is_nap: 1 })
     );
     expect(mockApi.get).toHaveBeenCalledWith(expect.stringContaining("/sleep"));
   });
@@ -301,6 +290,8 @@ describe("Dashboard – quick action buttons", () => {
     expect(await screen.findByRole("dialog")).toBeTruthy();
 
     await user.click(screen.getByRole("button", { name: /cancel/i }));
-    await waitForElementToBeRemoved(() => screen.queryByRole("dialog"));
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
   });
 });

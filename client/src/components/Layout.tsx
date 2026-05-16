@@ -48,6 +48,7 @@ import { useAuth } from "../hooks/useAuth";
 import { useChildren } from "../hooks/useChildren";
 import { useThemeMode } from "../hooks/useTheme";
 import { API_BASE } from "../api/client";
+import QuickLogDialog, { type QuickLogCategory } from "./QuickLogDialog";
 
 const DRAWER_WIDTH = 240;
 const BOTTOM_NAV_HEIGHT = 68;
@@ -81,6 +82,7 @@ const bottomNavTabs = [
 export default function Layout() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [addSheetOpen, setAddSheetOpen] = useState(false);
+  const [quickLogCategory, setQuickLogCategory] = useState<QuickLogCategory | null>(null);
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
@@ -127,13 +129,13 @@ export default function Layout() {
     if (tab.path) navigate(tab.path);
   };
 
-  const addSheetItems = [
-    { label: "Feeding", icon: <RestaurantIcon />, path: "/feedings", cat: "feed" },
-    { label: "Diaper", icon: <BabyChangingStationIcon />, path: "/diapers", cat: "diaper" },
-    { label: "Sleep", icon: <BedtimeIcon />, path: "/sleep", cat: "sleep" },
-    { label: "Pumping", icon: <OpacityIcon />, path: "/pumping", cat: "pump" },
-    { label: "Tummy Time", icon: <AccessibilityNewIcon />, path: "/tummy-time", cat: "tummy" },
-    { label: "Note", icon: <NoteIcon />, path: "/notes", cat: "note" },
+  const addSheetItems: { label: string; icon: React.ReactNode; cat: QuickLogCategory }[] = [
+    { label: "Feeding", icon: <RestaurantIcon />, cat: "feed" },
+    { label: "Diaper", icon: <BabyChangingStationIcon />, cat: "diaper" },
+    { label: "Sleep", icon: <BedtimeIcon />, cat: "sleep" },
+    { label: "Pumping", icon: <OpacityIcon />, cat: "pump" },
+    { label: "Tummy Time", icon: <AccessibilityNewIcon />, cat: "tummy" },
+    { label: "Note", icon: <NoteIcon />, cat: "note" },
   ];
 
   const drawer = (
@@ -347,7 +349,7 @@ export default function Layout() {
                   key={item.label}
                   onClick={() => {
                     setAddSheetOpen(false);
-                    navigate(item.path);
+                    setQuickLogCategory(item.cat);
                   }}
                   sx={{
                     display: "flex",
@@ -455,6 +457,11 @@ export default function Layout() {
           })}
         </Box>
       </Box>
+
+      <QuickLogDialog
+        category={quickLogCategory}
+        onClose={() => setQuickLogCategory(null)}
+      />
     </Box>
   );
 }

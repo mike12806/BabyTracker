@@ -34,6 +34,7 @@ import { useChildren } from "../hooks/useChildren";
 import { useNotification } from "../hooks/useNotification";
 import NowButton from "../components/NowButton";
 import { FAB_BOTTOM_OFFSET } from "../components/Layout";
+import StatCard from "../components/StatCard";
 
 import NoChildPlaceholder from "../components/NoChildPlaceholder";
 
@@ -299,33 +300,9 @@ export default function DiapersPage() {
           <Box sx={{ pb: 12 }}>
             {/* Summary stat strip */}
             <Box sx={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 1, mb: 1.75 }}>
-              <Box sx={{
-                bgcolor: "background.paper", border: 1, borderColor: "divider",
-                borderRadius: 3, p: "10px 12px", position: "relative", overflow: "hidden", boxShadow: 1,
-              }}>
-                <Box sx={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, bgcolor: c.solid }} />
-                <Typography sx={{ fontSize: 10, color: "text.secondary", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>Wet</Typography>
-                <Typography sx={{ fontSize: 20, fontWeight: 700, letterSpacing: "-0.025em", mt: 0.125, fontVariantNumeric: "tabular-nums" }}>{todayWet}</Typography>
-                <Typography sx={{ fontSize: 10.5, color: "text.secondary", mt: 0.125 }}>today</Typography>
-              </Box>
-              <Box sx={{
-                bgcolor: "background.paper", border: 1, borderColor: "divider",
-                borderRadius: 3, p: "10px 12px", position: "relative", overflow: "hidden", boxShadow: 1,
-              }}>
-                <Box sx={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, bgcolor: c.solid }} />
-                <Typography sx={{ fontSize: 10, color: "text.secondary", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>Solid</Typography>
-                <Typography sx={{ fontSize: 20, fontWeight: 700, letterSpacing: "-0.025em", mt: 0.125, fontVariantNumeric: "tabular-nums" }}>{todaySolid}</Typography>
-                <Typography sx={{ fontSize: 10.5, color: "text.secondary", mt: 0.125 }}>today</Typography>
-              </Box>
-              <Box sx={{
-                bgcolor: "background.paper", border: 1, borderColor: "divider",
-                borderRadius: 3, p: "10px 12px", position: "relative", overflow: "hidden", boxShadow: 1,
-              }}>
-                <Box sx={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, bgcolor: c.solid }} />
-                <Typography sx={{ fontSize: 10, color: "text.secondary", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>Last</Typography>
-                <Typography sx={{ fontSize: lastChange.length > 5 ? 15 : 20, fontWeight: 700, letterSpacing: "-0.025em", mt: 0.125, fontVariantNumeric: "tabular-nums" }} noWrap>{lastChange}</Typography>
-                <Typography sx={{ fontSize: 10.5, color: "text.secondary", mt: 0.125 }}>change</Typography>
-              </Box>
+              <StatCard accentColor={c.solid} label="Wet" value={todayWet} sublabel="today" />
+              <StatCard accentColor={c.solid} label="Solid" value={todaySolid} sublabel="today" />
+              <StatCard accentColor={c.solid} label="Last" value={lastChange} sublabel="change" />
             </Box>
 
             {/* Grouped log rows */}
