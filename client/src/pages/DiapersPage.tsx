@@ -1,10 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Box,
   Button,
   Card,
   CardContent,
-  Chip,
   Dialog,
   DialogActions,
   DialogContent,
@@ -40,6 +39,7 @@ import NoChildPlaceholder from "../components/NoChildPlaceholder";
 
 import type { DiaperChange } from "../types/models";
 import { isoToLocal } from "../utils/dateTime";
+import { buildCategoryColors } from "../theme/categoryColors";
 
 const KNOWN_COLOR_SWATCHES: Record<string, string> = {
   yellow: "#f9d71c",
@@ -51,16 +51,56 @@ const KNOWN_COLOR_SWATCHES: Record<string, string> = {
   orange: "#fb8c00",
 };
 
-const TYPE_CHIP_COLOR: Record<DiaperChange["type"], "info" | "warning" | "secondary"> = {
-  wet: "info",
-  solid: "warning",
-  both: "secondary",
-};
+function typeLabel(type: DiaperChange["type"]): string {
+  switch (type) {
+    case "wet": return "Wet";
+    case "solid": return "Solid";
+    case "both": return "Both";
+    default: return type;
+  }
+}
+
+function relativeTime(iso: string): string {
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const mins = Math.round(diffMs / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.round(hrs / 24);
+  if (days < 7) return `${days}d ago`;
+  const weeks = Math.round(days / 7);
+  if (weeks < 5) return `${weeks}w ago`;
+  return new Date(iso).toLocaleDateString();
+}
+
+function formatTimeShort(iso: string): string {
+  return new Date(iso).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+}
+
+function dateKey(iso: string): string {
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+}
+
+function dateSectionLabel(iso: string): string {
+  const d = new Date(iso);
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const startOfThen = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const dayDiff = Math.round((startOfToday.getTime() - startOfThen.getTime()) / 86400000);
+  if (dayDiff === 0) return "Today";
+  if (dayDiff === 1) return "Yesterday";
+  return d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+}
 
 export default function DiapersPage() {
   const { selectedChild } = useChildren();
   const { notify } = useNotification();
   const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
+  const cat = useMemo(() => buildCategoryColors(isDark), [isDark]);
+  const c = cat.diaper;
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const [diapers, setDiapers] = useState<DiaperChange[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -146,59 +186,46 @@ export default function DiapersPage() {
     return <NoChildPlaceholder />;
   }
 
-  const relativeTime = (iso: string): string => {
-    const diffMs = Date.now() - new Date(iso).getTime();
-    const mins = Math.round(diffMs / 60000);
-    if (mins < 1) return "just now";
-    if (mins < 60) return `${mins}m ago`;
-    const hrs = Math.round(mins / 60);
-    if (hrs < 24) return `${hrs}h ago`;
-    const days = Math.round(hrs / 24);
-    if (days < 7) return `${days}d ago`;
-    const weeks = Math.round(days / 7);
-    if (weeks < 5) return `${weeks}w ago`;
-    return new Date(iso).toLocaleDateString();
-  };
-
-  const formatTime = (iso: string): string => {
-    const d = new Date(iso);
-    const now = new Date();
-    const timeStr = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-    const sameDay =
-      d.getFullYear() === now.getFullYear() &&
-      d.getMonth() === now.getMonth() &&
-      d.getDate() === now.getDate();
-    if (sameDay) return `Today ${timeStr}`;
-    const yesterday = new Date(now);
-    yesterday.setDate(now.getDate() - 1);
-    const isYesterday =
-      d.getFullYear() === yesterday.getFullYear() &&
-      d.getMonth() === yesterday.getMonth() &&
-      d.getDate() === yesterday.getDate();
-    if (isYesterday) return `Yesterday ${timeStr}`;
-    return `${d.toLocaleDateString([], { month: "short", day: "numeric" })} ${timeStr}`;
-  };
-
-  const renderColorSwatch = (color: string) => {
+  const renderColorDot = (color: string) => {
     const swatch = KNOWN_COLOR_SWATCHES[color.toLowerCase()];
-    if (!swatch) return <Typography variant="body2" sx={{ textTransform: "capitalize" }}>{color}</Typography>;
+    if (!swatch) return color;
     return (
-      <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+      <Stack direction="row" spacing={0.5} sx={{ alignItems: "center", display: "inline-flex" }}>
         <Box
           sx={{
-            width: 12,
-            height: 12,
+            width: 8,
+            height: 8,
             borderRadius: "50%",
             bgcolor: swatch,
             border: "1px solid",
             borderColor: "divider",
-            display: "inline-block",
           }}
         />
-        <Typography variant="body2" sx={{ textTransform: "capitalize" }}>{color}</Typography>
+        <span style={{ textTransform: "capitalize" }}>{color}</span>
       </Stack>
     );
   };
+
+  // Group by date
+  const grouped = useMemo(() => {
+    const map = new Map<string, DiaperChange[]>();
+    for (const d of diapers) {
+      const key = dateKey(d.time);
+      const arr = map.get(key) ?? [];
+      arr.push(d);
+      map.set(key, arr);
+    }
+    return map;
+  }, [diapers]);
+
+  // Summary stats
+  const todayDiapers = useMemo(() => {
+    const todayK = dateKey(new Date().toISOString());
+    return diapers.filter((d) => dateKey(d.time) === todayK);
+  }, [diapers]);
+  const todayWet = todayDiapers.filter((d) => d.type === "wet" || d.type === "both").length;
+  const todaySolid = todayDiapers.filter((d) => d.type === "solid" || d.type === "both").length;
+  const lastChange = diapers.length > 0 ? relativeTime(diapers[0].time) : "—";
 
   return (
     <Box sx={{ pb: { xs: 10, md: 0 } }}>
@@ -260,7 +287,7 @@ export default function DiapersPage() {
         </Card>
       </Box>
 
-      {/* Mobile card stack */}
+      {/* Mobile card-row design */}
       <Box sx={{ display: { xs: "block", md: "none" } }}>
         {diapers.length === 0 ? (
           <Box sx={{ textAlign: "center", py: 8, px: 2 }}>
@@ -269,61 +296,89 @@ export default function DiapersPage() {
             <Typography color="text.secondary">Tap + to log the first one</Typography>
           </Box>
         ) : (
-          <Stack spacing={1.5}>
-            {diapers.map((d) => (
-              <Card
-                key={d.id}
-                onClick={() => handleEdit(d)}
-                sx={{
-                  cursor: "pointer",
-                  transition: "transform 0.1s, box-shadow 0.1s",
-                  "&:active": { transform: "scale(0.99)" },
-                }}
-              >
-                <CardContent sx={{ p: 2, "&:last-child": { pb: 2 } }}>
-                  <Stack direction="row" sx={{ alignItems: "center", justifyContent: "space-between", mb: 1 }}>
-                    <Chip
-                      label={d.type}
-                      size="small"
-                      color={TYPE_CHIP_COLOR[d.type]}
-                      sx={{ textTransform: "capitalize", fontWeight: 600 }}
-                    />
-                    <Stack direction="row" spacing={0.5} sx={{ alignItems: "center" }}>
-                      <Typography variant="caption" color="text.secondary">
-                        {relativeTime(d.time)}
-                      </Typography>
-                      <IconButton
-                        size="medium"
-                        onClick={(e) => openMenu(e, d)}
-                        sx={{ minWidth: 44, minHeight: 44 }}
-                        aria-label="More actions"
-                      >
-                        <MoreVertIcon />
-                      </IconButton>
-                    </Stack>
-                  </Stack>
-                  <Typography variant="h6" sx={{ mb: d.color || d.notes ? 0.5 : 0 }}>
-                    {formatTime(d.time)}
+          <Box sx={{ pb: 12 }}>
+            {/* Summary stat strip */}
+            <Box sx={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 1, mb: 1.75 }}>
+              <Box sx={{
+                bgcolor: "background.paper", border: 1, borderColor: "divider",
+                borderRadius: 3, p: "10px 12px", position: "relative", overflow: "hidden", boxShadow: 1,
+              }}>
+                <Box sx={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, bgcolor: c.solid }} />
+                <Typography sx={{ fontSize: 10, color: "text.secondary", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>Wet</Typography>
+                <Typography sx={{ fontSize: 20, fontWeight: 700, letterSpacing: "-0.025em", mt: 0.125, fontVariantNumeric: "tabular-nums" }}>{todayWet}</Typography>
+                <Typography sx={{ fontSize: 10.5, color: "text.secondary", mt: 0.125 }}>today</Typography>
+              </Box>
+              <Box sx={{
+                bgcolor: "background.paper", border: 1, borderColor: "divider",
+                borderRadius: 3, p: "10px 12px", position: "relative", overflow: "hidden", boxShadow: 1,
+              }}>
+                <Box sx={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, bgcolor: c.solid }} />
+                <Typography sx={{ fontSize: 10, color: "text.secondary", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>Solid</Typography>
+                <Typography sx={{ fontSize: 20, fontWeight: 700, letterSpacing: "-0.025em", mt: 0.125, fontVariantNumeric: "tabular-nums" }}>{todaySolid}</Typography>
+                <Typography sx={{ fontSize: 10.5, color: "text.secondary", mt: 0.125 }}>today</Typography>
+              </Box>
+              <Box sx={{
+                bgcolor: "background.paper", border: 1, borderColor: "divider",
+                borderRadius: 3, p: "10px 12px", position: "relative", overflow: "hidden", boxShadow: 1,
+              }}>
+                <Box sx={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, bgcolor: c.solid }} />
+                <Typography sx={{ fontSize: 10, color: "text.secondary", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>Last</Typography>
+                <Typography sx={{ fontSize: 20, fontWeight: 700, letterSpacing: "-0.025em", mt: 0.125, fontVariantNumeric: "tabular-nums" }}>{lastChange}</Typography>
+                <Typography sx={{ fontSize: 10.5, color: "text.secondary", mt: 0.125 }}>change</Typography>
+              </Box>
+            </Box>
+
+            {/* Grouped log rows */}
+            {[...grouped.entries()].map(([key, items]) => (
+              <Box key={key}>
+                <Box sx={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", py: "14px 2px 8px" }}>
+                  <Typography sx={{ fontSize: 12, color: "text.secondary", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                    {dateSectionLabel(items[0].time)}
                   </Typography>
-                  {d.color && <Box sx={{ mb: d.notes ? 0.5 : 0 }}>{renderColorSwatch(d.color)}</Box>}
-                  {d.notes && (
-                    <Typography
-                      variant="body2"
-                      color="text.secondary"
-                      sx={{
-                        display: "-webkit-box",
-                        WebkitLineClamp: 2,
-                        WebkitBoxOrient: "vertical",
-                        overflow: "hidden",
-                      }}
-                    >
-                      {d.notes}
+                  <Typography sx={{ fontSize: 11.5, color: "text.secondary", fontVariantNumeric: "tabular-nums" }}>{items.length}</Typography>
+                </Box>
+                {items.map((d) => (
+                  <Box
+                    key={d.id}
+                    onClick={() => handleEdit(d)}
+                    sx={{
+                      display: "flex", alignItems: "center", gap: 1.5, p: "12px 14px",
+                      bgcolor: "background.paper", border: 1, borderColor: "divider",
+                      borderRadius: 3, position: "relative", overflow: "hidden",
+                      boxShadow: 1, mb: 0.75, cursor: "pointer",
+                    }}
+                  >
+                    <Box sx={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, bgcolor: c.solid }} />
+                    <Box sx={{
+                      width: 36, height: 36, borderRadius: "11px",
+                      bgcolor: c.soft, color: c.ink,
+                      display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+                    }}>
+                      <BabyChangingStationIcon sx={{ fontSize: 16 }} />
+                    </Box>
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Typography sx={{ fontSize: 14.5, fontWeight: 600, letterSpacing: "-0.005em" }} noWrap>
+                        {typeLabel(d.type)}{d.color ? ` · ` : ""}{d.color ? renderColorDot(d.color) : ""}
+                      </Typography>
+                      <Typography sx={{ fontSize: 12, color: "text.secondary", mt: 0.125 }}>
+                        {d.notes || "—"}
+                      </Typography>
+                    </Box>
+                    <Typography sx={{ fontSize: 12.5, color: "text.secondary", fontWeight: 500, fontVariantNumeric: "tabular-nums", flexShrink: 0, mr: 4 }}>
+                      {formatTimeShort(d.time)}
                     </Typography>
-                  )}
-                </CardContent>
-              </Card>
+                    <IconButton
+                      aria-label="More actions"
+                      onClick={(e) => openMenu(e, d)}
+                      sx={{ position: "absolute", right: 4, top: "50%", transform: "translateY(-50%)", width: 36, height: 36 }}
+                    >
+                      <MoreVertIcon sx={{ fontSize: 18 }} />
+                    </IconButton>
+                  </Box>
+                ))}
+              </Box>
             ))}
-          </Stack>
+          </Box>
         )}
       </Box>
 

@@ -127,8 +127,8 @@ describe("Dashboard – Recent Feedings amount display", () => {
 
     render(<Dashboard />, { wrapper: Wrapper });
 
-    const amountDuration = await screen.findByText(/4 oz · 18m/);
-    expect(amountDuration).toBeTruthy();
+    expect(await screen.findByText(/4 oz/)).toBeTruthy();
+    expect(screen.getByText(/18m/)).toBeTruthy();
   });
 
   it("shows amount in ml alongside duration", async () => {
@@ -144,8 +144,8 @@ describe("Dashboard – Recent Feedings amount display", () => {
 
     render(<Dashboard />, { wrapper: Wrapper });
 
-    const amountDuration = await screen.findByText(/120 ml · 18m/);
-    expect(amountDuration).toBeTruthy();
+    expect(await screen.findByText(/120 ml/)).toBeTruthy();
+    expect(screen.getByText(/18m/)).toBeTruthy();
   });
 
   it("shows only duration for breast feeding with no amount", async () => {
@@ -162,9 +162,10 @@ describe("Dashboard – Recent Feedings amount display", () => {
 
     render(<Dashboard />, { wrapper: Wrapper });
 
-    const duration = await screen.findByText(/18m/);
-    expect(duration).toBeTruthy();
-    expect(screen.queryByText(/·/)).toBeNull();
+    expect(await screen.findByText(/18m/)).toBeTruthy();
+    expect(screen.getByText("Breast Left")).toBeTruthy();
+    expect(screen.queryByText(/oz/)).toBeNull();
+    expect(screen.queryByText(/ml/)).toBeNull();
   });
 
   it("shows amount without unit when amount_unit is null", async () => {
@@ -180,11 +181,10 @@ describe("Dashboard – Recent Feedings amount display", () => {
 
     render(<Dashboard />, { wrapper: Wrapper });
 
-    // Should render "5 · 18m" with no extra space before the dot
-    const amountDuration = await screen.findByText(/5 · 18m/);
-    expect(amountDuration).toBeTruthy();
-    // Should not have a double space
-    expect(screen.queryByText(/5  ·/)).toBeNull();
+    expect(await screen.findByText("Bottle · 5")).toBeTruthy();
+    expect(screen.getByText(/18m/)).toBeTruthy();
+    expect(screen.queryByText(/5 oz/)).toBeNull();
+    expect(screen.queryByText(/5 ml/)).toBeNull();
   });
 });
 
