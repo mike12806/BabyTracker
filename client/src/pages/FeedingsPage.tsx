@@ -1,11 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Box,
   Button,
   Card,
-  CardActionArea,
   CardContent,
-  Chip,
   Dialog,
   DialogActions,
   DialogContent,
@@ -14,7 +12,6 @@ import {
   IconButton,
   Menu,
   MenuItem,
-  Stack,
   Table,
   TableBody,
   TableCell,
@@ -41,6 +38,7 @@ import NoChildPlaceholder from "../components/NoChildPlaceholder";
 
 import type { Feeding } from "../types/models";
 import { isoToLocal } from "../utils/dateTime";
+import { buildCategoryColors } from "../theme/categoryColors";
 
 const FEEDING_TYPES = [
   { value: "breast_left", label: "Breast (Left)" },
@@ -50,25 +48,6 @@ const FEEDING_TYPES = [
   { value: "solid", label: "Solid Food" },
   { value: "fortified_breast_milk", label: "Fortified Breast Milk" },
 ];
-
-type ChipColor = "primary" | "secondary" | "success" | "warning" | "default";
-
-function chipColorFor(type: Feeding["type"]): ChipColor {
-  switch (type) {
-    case "breast_left":
-    case "breast_right":
-    case "both_breasts":
-      return "primary";
-    case "bottle":
-      return "secondary";
-    case "solid":
-      return "success";
-    case "fortified_breast_milk":
-      return "warning";
-    default:
-      return "default";
-  }
-}
 
 function feedingTypeLabel(type: Feeding["type"]): string {
   return FEEDING_TYPES.find((t) => t.value === type)?.label ?? type.replace(/_/g, " ");
@@ -91,23 +70,6 @@ function relativeTime(iso: string): string {
   return then.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
-function formatAbsoluteDateTime(iso: string): string {
-  const d = new Date(iso);
-  const now = new Date();
-  const time = d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
-  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const startOfThen = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-  const dayDiff = Math.round((startOfToday.getTime() - startOfThen.getTime()) / 86400000);
-  if (dayDiff === 0) return `Today ${time}`;
-  if (dayDiff === 1) return `Yesterday ${time}`;
-  const dateStr = d.toLocaleDateString(undefined, {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-  });
-  return `${dateStr}, ${time}`;
-}
-
 function formatDuration(startIso: string, endIso: string): string {
   const ms = new Date(endIso).getTime() - new Date(startIso).getTime();
   if (ms <= 0) return "—";
@@ -124,8 +86,31 @@ function summaryFor(f: Feeding): string {
   return "—";
 }
 
+function formatTimeShort(iso: string): string {
+  return new Date(iso).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+}
+
+function dateKey(iso: string): string {
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+}
+
+function dateSectionLabel(iso: string): string {
+  const d = new Date(iso);
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const startOfThen = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const dayDiff = Math.round((startOfToday.getTime() - startOfThen.getTime()) / 86400000);
+  if (dayDiff === 0) return "Today";
+  if (dayDiff === 1) return "Yesterday";
+  return d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+}
+
 export default function FeedingsPage() {
   const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
+  const cat = useMemo(() => buildCategoryColors(isDark), [isDark]);
+  const c = cat.feed;
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const { selectedChild } = useChildren();
   const { notify } = useNotification();
@@ -227,6 +212,32 @@ export default function FeedingsPage() {
 
   }
 
+  // Group feedings by date for section headers
+  const grouped = useMemo(() => {
+    const map = new Map<string, Feeding[]>();
+    for (const f of feedings) {
+      const key = dateKey(f.start_time);
+      const arr = map.get(key) ?? [];
+      arr.push(f);
+      map.set(key, arr);
+    }
+    return map;
+  }, [feedings]);
+
+  // Summary stats
+  const todayFeedings = useMemo(() => {
+    const todayKey = dateKey(new Date().toISOString());
+    return feedings.filter((f) => dateKey(f.start_time) === todayKey);
+  }, [feedings]);
+
+  const todayCount = todayFeedings.length;
+  const todayTotalOz = useMemo(() => {
+    return todayFeedings
+      .filter((f) => f.amount != null && f.amount_unit === "oz")
+      .reduce((sum, f) => sum + (f.amount ?? 0), 0);
+  }, [todayFeedings]);
+  const lastFeedingTime = feedings.length > 0 ? relativeTime(feedings[0].start_time) : "—";
+
   return (
     <Box>
       <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 3 }}>
@@ -289,7 +300,7 @@ export default function FeedingsPage() {
         </Card>
       </Box>
 
-      {/* Mobile: card stack */}
+      {/* Mobile: new card-row design */}
       <Box sx={{ display: { xs: "block", md: "none" } }}>
         {feedings.length === 0 ? (
           <Box
@@ -309,67 +320,85 @@ export default function FeedingsPage() {
             </Typography>
           </Box>
         ) : (
-          <Stack sx={{ gap: 1.5, pb: 12 }}>
-            {feedings.map((f) => (
-              <Card key={f.id} elevation={1} sx={{ borderRadius: 2 }}>
-                <CardActionArea onClick={() => handleEdit(f)} sx={{ borderRadius: 2 }}>
-                  <CardContent sx={{ py: 1.75, "&:last-child": { pb: 1.75 } }}>
-                    <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1 }}>
-                      <Box sx={{ flex: 1, minWidth: 0 }}>
-                        <Box
-                          sx={{
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "space-between",
-                            gap: 1,
-                            mb: 0.5,
-                          }}
-                        >
-                          <Chip
-                            label={feedingTypeLabel(f.type)}
-                            color={chipColorFor(f.type)}
-                            size="small"
-                            sx={{ fontWeight: 500 }}
-                          />
-                          <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: "nowrap" }}>
-                            {relativeTime(f.start_time)}
-                          </Typography>
-                        </Box>
-                        <Typography variant="h6" sx={{ lineHeight: 1.3 }}>
-                          {formatAbsoluteDateTime(f.start_time)}
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          {summaryFor(f)}
-                        </Typography>
-                        {f.notes && (
-                          <Typography
-                            variant="body2"
-                            color="text.secondary"
-                            sx={{
-                              mt: 0.5,
-                              display: "-webkit-box",
-                              WebkitLineClamp: 2,
-                              WebkitBoxOrient: "vertical",
-                              overflow: "hidden",
-                            }}
-                          >
-                            {f.notes}
-                          </Typography>
-                        )}
-                      </Box>
-                      <IconButton
-                        aria-label="More actions"
-                        onClick={(e) => openMenu(e, f)}
-                        sx={{ minWidth: 44, minHeight: 44, mt: -0.5, mr: -1 }}
-                      >
-                        <MoreVertIcon />
-                      </IconButton>
+          <Box sx={{ pb: 12 }}>
+            {/* Summary stat strip */}
+            <Box sx={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 1, mb: 1.75 }}>
+              <Box sx={{
+                bgcolor: "background.paper", border: 1, borderColor: "divider",
+                borderRadius: 3, p: "10px 12px", position: "relative", overflow: "hidden", boxShadow: 1,
+              }}>
+                <Box sx={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, bgcolor: c.solid }} />
+                <Typography sx={{ fontSize: 10, color: "text.secondary", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>Today</Typography>
+                <Typography sx={{ fontSize: 20, fontWeight: 700, letterSpacing: "-0.025em", mt: 0.125, fontVariantNumeric: "tabular-nums" }}>{todayCount}</Typography>
+                <Typography sx={{ fontSize: 10.5, color: "text.secondary", mt: 0.125 }}>feedings</Typography>
+              </Box>
+              <Box sx={{
+                bgcolor: "background.paper", border: 1, borderColor: "divider",
+                borderRadius: 3, p: "10px 12px", position: "relative", overflow: "hidden", boxShadow: 1,
+              }}>
+                <Box sx={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, bgcolor: c.solid }} />
+                <Typography sx={{ fontSize: 10, color: "text.secondary", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>Volume</Typography>
+                <Typography sx={{ fontSize: 20, fontWeight: 700, letterSpacing: "-0.025em", mt: 0.125, fontVariantNumeric: "tabular-nums" }}>{todayTotalOz > 0 ? `${todayTotalOz}` : "—"}</Typography>
+                <Typography sx={{ fontSize: 10.5, color: "text.secondary", mt: 0.125 }}>oz today</Typography>
+              </Box>
+              <Box sx={{
+                bgcolor: "background.paper", border: 1, borderColor: "divider",
+                borderRadius: 3, p: "10px 12px", position: "relative", overflow: "hidden", boxShadow: 1,
+              }}>
+                <Box sx={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, bgcolor: c.solid }} />
+                <Typography sx={{ fontSize: 10, color: "text.secondary", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>Last</Typography>
+                <Typography sx={{ fontSize: 20, fontWeight: 700, letterSpacing: "-0.025em", mt: 0.125, fontVariantNumeric: "tabular-nums" }}>{lastFeedingTime}</Typography>
+                <Typography sx={{ fontSize: 10.5, color: "text.secondary", mt: 0.125 }}>feeding</Typography>
+              </Box>
+            </Box>
+
+            {/* Grouped log rows */}
+            {[...grouped.entries()].map(([key, items]) => (
+              <Box key={key}>
+                <Box sx={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", py: "14px 2px 8px" }}>
+                  <Typography sx={{ fontSize: 12, color: "text.secondary", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                    {dateSectionLabel(items[0].start_time)}
+                  </Typography>
+                  <Typography sx={{ fontSize: 11.5, color: "text.secondary", fontVariantNumeric: "tabular-nums" }}>{items.length}</Typography>
+                </Box>
+                {items.map((f) => (
+                  <Box
+                    key={f.id}
+                    onClick={() => handleEdit(f)}
+                    sx={{
+                      display: "flex", alignItems: "center", gap: 1.5, p: "12px 14px",
+                      bgcolor: "background.paper", border: 1, borderColor: "divider",
+                      borderRadius: 3, position: "relative", overflow: "hidden",
+                      boxShadow: 1, mb: 0.75, cursor: "pointer",
+                    }}
+                  >
+                    <Box sx={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, bgcolor: c.solid }} />
+                    <Box sx={{
+                      width: 36, height: 36, borderRadius: "11px",
+                      bgcolor: c.soft, color: c.ink,
+                      display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+                    }}>
+                      <RestaurantIcon sx={{ fontSize: 16 }} />
                     </Box>
-                  </CardContent>
-                </CardActionArea>
-              </Card>
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Typography sx={{ fontSize: 14.5, fontWeight: 600, letterSpacing: "-0.005em" }} noWrap>{feedingTypeLabel(f.type)}</Typography>
+                      <Typography sx={{ fontSize: 12, color: "text.secondary", mt: 0.125 }}>{summaryFor(f)}</Typography>
+                    </Box>
+                    <Typography sx={{ fontSize: 12.5, color: "text.secondary", fontWeight: 500, fontVariantNumeric: "tabular-nums", flexShrink: 0, mr: 4 }}>
+                      {formatTimeShort(f.start_time)}
+                    </Typography>
+                    <IconButton
+                      aria-label="More actions"
+                      onClick={(e) => openMenu(e, f)}
+                      sx={{ position: "absolute", right: 4, top: "50%", transform: "translateY(-50%)", width: 36, height: 36 }}
+                    >
+                      <MoreVertIcon sx={{ fontSize: 18 }} />
+                    </IconButton>
+                  </Box>
+                ))}
+              </Box>
             ))}
-          </Stack>
+          </Box>
         )}
       </Box>
 

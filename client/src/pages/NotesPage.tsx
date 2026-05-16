@@ -1,25 +1,21 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Box,
   Button,
   Card,
   CardActionArea,
   CardContent,
+  Chip,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
   Fab,
   IconButton,
+  InputAdornment,
   Menu,
   MenuItem,
   Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
   TextField,
   Typography,
   useMediaQuery,
@@ -30,12 +26,15 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import EditIcon from "@mui/icons-material/Edit";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import NoteIcon from "@mui/icons-material/Note";
+import SearchIcon from "@mui/icons-material/Search";
+import FilterListIcon from "@mui/icons-material/FilterList";
 import { api } from "../api/client";
 import { useChildren } from "../hooks/useChildren";
 import { useNotification } from "../hooks/useNotification";
 import NowButton from "../components/NowButton";
 import { FAB_BOTTOM_OFFSET } from "../components/Layout";
 import NoChildPlaceholder from "../components/NoChildPlaceholder";
+import { buildCategoryColors } from "../theme/categoryColors";
 import type { Note } from "../types/models";
 import { isoToLocal } from "../utils/dateTime";
 
@@ -71,17 +70,44 @@ function formatTime(iso: string): string {
   return d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" }) + `, ${time}`;
 }
 
+type NoteTag = "milestone" | "health" | "pattern" | "general";
+
+function inferTag(note: Note): NoteTag {
+  const text = `${note.title ?? ""} ${note.content}`.toLowerCase();
+  if (text.includes("milestone") || text.includes("first") || text.includes("rolled") || text.includes("crawl") || text.includes("walk") || text.includes("tooth")) return "milestone";
+  if (text.includes("health") || text.includes("sick") || text.includes("fever") || text.includes("doctor") || text.includes("rash") || text.includes("allergy")) return "health";
+  if (text.includes("pattern") || text.includes("schedule") || text.includes("routine") || text.includes("habit")) return "pattern";
+  return "general";
+}
+
 export default function NotesPage() {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const { selectedChild } = useChildren();
   const { notify } = useNotification();
+  const isDark = theme.palette.mode === "dark";
+  const cat = useMemo(() => buildCategoryColors(isDark), [isDark]);
+
   const [entries, setEntries] = useState<Note[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState<Note | null>(null);
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
   const [menuEntry, setMenuEntry] = useState<Note | null>(null);
   const [form, setForm] = useState({ time: "", title: "", content: "" });
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const tagColor = (tag: NoteTag) => {
+    if (tag === "milestone") return cat.feed;
+    if (tag === "health") return cat.med;
+    return cat.note;
+  };
+
+  const tagLabel = (tag: NoteTag) => {
+    if (tag === "milestone") return "Milestone";
+    if (tag === "health") return "Health";
+    if (tag === "pattern") return "Pattern";
+    return "General";
+  };
 
   const load = async () => {
     if (!selectedChild) return;
@@ -96,6 +122,16 @@ export default function NotesPage() {
   useEffect(() => {
     load();
   }, [selectedChild]);
+
+  const filtered = useMemo(() => {
+    if (!searchQuery.trim()) return entries;
+    const q = searchQuery.toLowerCase();
+    return entries.filter(
+      (n) =>
+        (n.title ?? "").toLowerCase().includes(q) ||
+        n.content.toLowerCase().includes(q),
+    );
+  }, [entries, searchQuery]);
 
   const openAdd = () => {
     setEditingEntry(null);
@@ -155,7 +191,7 @@ export default function NotesPage() {
 
   return (
     <Box>
-      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 3 }}>
+      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
         <Typography variant="h4">Notes</Typography>
         <Button
           variant="contained"
@@ -167,107 +203,147 @@ export default function NotesPage() {
         </Button>
       </Box>
 
-      {/* Desktop: table */}
-      <Box sx={{ display: { xs: "none", md: "block" } }}>
-        <Card>
-          <CardContent>
-            <TableContainer>
-              <Table>
-                <TableHead>
-                  <TableRow>
-                    <TableCell>Time</TableCell>
-                    <TableCell>Title</TableCell>
-                    <TableCell>Content</TableCell>
-                    <TableCell />
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {entries.map((n) => (
-                    <TableRow key={n.id}>
-                      <TableCell sx={{ whiteSpace: "nowrap" }}>{new Date(n.time).toLocaleString()}</TableCell>
-                      <TableCell>{n.title || "—"}</TableCell>
-                      <TableCell>{n.content}</TableCell>
-                      <TableCell>
-                        <IconButton size="small" onClick={() => handleEdit(n)}>
-                          <EditIcon fontSize="small" />
-                        </IconButton>
-                        <IconButton size="small" onClick={() => handleDelete(n.id)}>
-                          <DeleteIcon fontSize="small" />
-                        </IconButton>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  {entries.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={4} align="center">
-                        <Typography color="text.secondary">No notes recorded.</Typography>
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          </CardContent>
-        </Card>
-      </Box>
+      {/* Search bar */}
+      <TextField
+        size="small"
+        placeholder="Search notes..."
+        value={searchQuery}
+        onChange={(e) => setSearchQuery(e.target.value)}
+        fullWidth
+        sx={{
+          mb: 2.5,
+          "& .MuiOutlinedInput-root": {
+            bgcolor: "background.paper",
+            borderRadius: 3,
+          },
+        }}
+        slotProps={{
+          input: {
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon sx={{ color: "text.secondary", fontSize: 20 }} />
+              </InputAdornment>
+            ),
+            endAdornment: (
+              <InputAdornment position="end">
+                <FilterListIcon sx={{ color: "text.secondary", fontSize: 20 }} />
+              </InputAdornment>
+            ),
+          },
+        }}
+      />
 
-      {/* Mobile: card stack */}
-      <Box sx={{ display: { xs: "block", md: "none" } }}>
-        {entries.length === 0 ? (
-          <Box sx={{ textAlign: "center", py: 8, px: 3, color: "text.secondary" }}>
-            <NoteIcon sx={{ fontSize: 72, opacity: 0.25, mb: 2 }} />
-            <Typography variant="h6" gutterBottom>No notes yet</Typography>
-            <Typography variant="body2">Tap + to write the first one.</Typography>
-          </Box>
-        ) : (
-          <Stack sx={{ gap: 1.5, pb: 12 }}>
-            {entries.map((n) => (
-              <Card key={n.id}>
+      {/* Note cards */}
+      {filtered.length === 0 ? (
+        <Box sx={{ textAlign: "center", py: 8, px: 3, color: "text.secondary" }}>
+          <NoteIcon sx={{ fontSize: 72, opacity: 0.25, mb: 2 }} />
+          <Typography variant="h6" gutterBottom>
+            {searchQuery ? "No matching notes" : "No notes yet"}
+          </Typography>
+          <Typography variant="body2">
+            {searchQuery ? "Try a different search term." : "Tap + to write the first one."}
+          </Typography>
+        </Box>
+      ) : (
+        <Stack sx={{ gap: 1.5, pb: 12 }}>
+          {filtered.map((n) => {
+            const tag = inferTag(n);
+            const tc = tagColor(tag);
+            return (
+              <Card
+                key={n.id}
+                sx={{
+                  bgcolor: "background.paper",
+                  border: 1,
+                  borderColor: "divider",
+                  borderRadius: 3,
+                  boxShadow: 1,
+                  overflow: "hidden",
+                }}
+              >
                 <CardActionArea onClick={() => handleEdit(n)}>
-                  <CardContent sx={{ py: 1.75, "&:last-child": { pb: 1.75 } }}>
-                    <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1 }}>
-                      <Box sx={{ flex: 1, minWidth: 0 }}>
-                        <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", mb: 0.5 }}>
-                          <Typography variant="h6" sx={{ lineHeight: 1.3, flex: 1, mr: 1 }} noWrap>
+                  <Box sx={{ display: "flex" }}>
+                    {/* Color gutter */}
+                    <Box
+                      sx={{
+                        width: 3,
+                        flexShrink: 0,
+                        bgcolor: tc.solid,
+                      }}
+                    />
+                    <CardContent sx={{ py: 1.75, px: 2, flex: 1, "&:last-child": { pb: 1.75 } }}>
+                      <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1 }}>
+                        <Box sx={{ flex: 1, minWidth: 0 }}>
+                          <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.5 }}>
+                            <Chip
+                              label={tagLabel(tag)}
+                              size="small"
+                              sx={{
+                                bgcolor: tc.soft,
+                                color: tc.ink,
+                                fontWeight: 600,
+                                fontSize: 11,
+                                height: 22,
+                                border: 1,
+                                borderColor: tc.edge,
+                              }}
+                            />
+                            <Typography
+                              variant="caption"
+                              sx={{
+                                color: "text.secondary",
+                                whiteSpace: "nowrap",
+                                fontVariantNumeric: "tabular-nums",
+                                ml: "auto",
+                              }}
+                            >
+                              {relativeTime(n.time)}
+                            </Typography>
+                          </Box>
+                          <Typography
+                            variant="subtitle2"
+                            sx={{ fontWeight: 600, lineHeight: 1.3, mb: 0.25 }}
+                            noWrap
+                          >
                             {n.title || "Note"}
                           </Typography>
-                          <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: "nowrap" }}>
-                            {relativeTime(n.time)}
+                          <Typography
+                            variant="body2"
+                            color="text.secondary"
+                            sx={{
+                              display: "-webkit-box",
+                              WebkitLineClamp: 2,
+                              WebkitBoxOrient: "vertical",
+                              overflow: "hidden",
+                              whiteSpace: "pre-wrap",
+                              mb: 0.5,
+                            }}
+                          >
+                            {n.content}
+                          </Typography>
+                          <Typography
+                            variant="caption"
+                            sx={{ color: "text.disabled", fontVariantNumeric: "tabular-nums" }}
+                          >
+                            {formatTime(n.time)}
                           </Typography>
                         </Box>
-                        <Typography
-                          variant="body2"
-                          color="text.secondary"
-                          sx={{
-                            display: "-webkit-box",
-                            WebkitLineClamp: 3,
-                            WebkitBoxOrient: "vertical",
-                            overflow: "hidden",
-                            whiteSpace: "pre-wrap",
-                            mb: 0.5,
-                          }}
+                        <IconButton
+                          aria-label="More actions"
+                          onClick={(e) => openMenu(e, n)}
+                          sx={{ minWidth: 44, minHeight: 44, mt: -0.5, mr: -1 }}
                         >
-                          {n.content}
-                        </Typography>
-                        <Typography variant="caption" color="text.disabled">
-                          {formatTime(n.time)}
-                        </Typography>
+                          <MoreVertIcon />
+                        </IconButton>
                       </Box>
-                      <IconButton
-                        aria-label="More actions"
-                        onClick={(e) => openMenu(e, n)}
-                        sx={{ minWidth: 44, minHeight: 44, mt: -0.5, mr: -1 }}
-                      >
-                        <MoreVertIcon />
-                      </IconButton>
-                    </Box>
-                  </CardContent>
+                    </CardContent>
+                  </Box>
                 </CardActionArea>
               </Card>
-            ))}
-          </Stack>
-        )}
-      </Box>
+            );
+          })}
+        </Stack>
+      )}
 
       <Menu anchorEl={menuAnchor} open={Boolean(menuAnchor)} onClose={closeMenu}>
         <MenuItem onClick={() => { if (menuEntry) handleEdit(menuEntry); closeMenu(); }}>

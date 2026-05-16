@@ -1,12 +1,10 @@
-import { useEffect, useState, type MouseEvent } from "react";
+import { useEffect, useMemo, useState, type MouseEvent } from "react";
 import {
   Box,
   Button,
   Card,
-  CardActionArea,
   CardContent,
   Checkbox,
-  Chip,
   Dialog,
   DialogActions,
   DialogContent,
@@ -16,7 +14,6 @@ import {
   IconButton,
   Menu,
   MenuItem,
-  Stack,
   Table,
   TableBody,
   TableCell,
@@ -44,6 +41,7 @@ import NoChildPlaceholder from "../components/NoChildPlaceholder";
 
 import type { SleepEntry } from "../types/models";
 import { isoToLocal } from "../utils/dateTime";
+import { buildCategoryColors } from "../theme/categoryColors";
 
 function humanDuration(ms: number): string {
   if (ms < 0) ms = 0;
@@ -106,8 +104,30 @@ function formatTimeRange(startIso: string, endIso: string | null): string {
   return `${dayLabel(start)} ${startStr} – ${dayLabel(end)} ${endStr}`;
 }
 
+function formatTimeShort(iso: string): string {
+  return new Date(iso).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+}
+
+function dateKey(iso: string): string {
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+}
+
+function dateSectionLabel(iso: string): string {
+  const d = new Date(iso);
+  const now = new Date();
+  if (isSameDay(d, now)) return "Today";
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  if (isSameDay(d, yesterday)) return "Yesterday";
+  return d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+}
+
 export default function SleepPage() {
   const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
+  const cat = useMemo(() => buildCategoryColors(isDark), [isDark]);
+  const c = cat.sleep;
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const isCompact = useMediaQuery(theme.breakpoints.down("md"));
   const { selectedChild } = useChildren();
@@ -214,92 +234,33 @@ export default function SleepPage() {
 
   }
 
-  const renderCardList = () => (
-    <Stack spacing={1.5}>
-      {entries.map((s) => {
-        const isNap = Boolean(s.is_nap);
-        const start = new Date(s.start_time);
-        const end = s.end_time ? new Date(s.end_time) : null;
-        const inProgress = !end;
-        const durationMs = end ? end.getTime() - start.getTime() : Date.now() - start.getTime();
-        const durationText = inProgress
-          ? `Active — started ${relativeTime(s.start_time)}`
-          : humanDuration(durationMs);
-        return (
-          <Card key={s.id} elevation={1} sx={{ borderRadius: 3, overflow: "hidden" }}>
-            <CardActionArea onClick={() => handleEdit(s)} sx={{ alignItems: "stretch" }}>
-              <CardContent sx={{ py: 2, "&:last-child": { pb: 2 } }}>
-                <Stack
-                  direction="row"
-                  sx={{ justifyContent: "space-between", alignItems: "center", mb: 1 }}
-                >
-                  <Chip
-                    icon={isNap ? <BedtimeIcon /> : <NightlightIcon />}
-                    label={isNap ? "Nap" : "Night"}
-                    color={isNap ? "success" : "info"}
-                    size="small"
-                    sx={{ fontWeight: 600 }}
-                  />
-                  <Stack direction="row" sx={{ alignItems: "center", gap: 0.5 }}>
-                    <Typography variant="caption" color="text.secondary">
-                      {relativeTime(s.start_time)}
-                    </Typography>
-                    <IconButton
-                      aria-label="more"
-                      onClick={(e) => openMenu(e, s)}
-                      sx={{ width: 44, height: 44 }}
-                    >
-                      <MoreVertIcon />
-                    </IconButton>
-                  </Stack>
-                </Stack>
-                <Typography
-                  variant="h6"
-                  sx={{
-                    fontWeight: 700,
-                    color: inProgress ? "warning.main" : "text.primary",
-                    lineHeight: 1.2,
-                  }}
-                >
-                  {durationText}
-                </Typography>
-                <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-                  {formatTimeRange(s.start_time, s.end_time)}
-                </Typography>
-                {s.notes && (
-                  <Typography
-                    variant="body2"
-                    sx={{
-                      mt: 1,
-                      color: "text.secondary",
-                      display: "-webkit-box",
-                      WebkitLineClamp: 2,
-                      WebkitBoxOrient: "vertical",
-                      overflow: "hidden",
-                    }}
-                  >
-                    {s.notes}
-                  </Typography>
-                )}
-              </CardContent>
-            </CardActionArea>
-          </Card>
-        );
-      })}
-    </Stack>
-  );
+  // Group by date
+  const grouped = useMemo(() => {
+    const map = new Map<string, SleepEntry[]>();
+    for (const s of entries) {
+      const key = dateKey(s.start_time);
+      const arr = map.get(key) ?? [];
+      arr.push(s);
+      map.set(key, arr);
+    }
+    return map;
+  }, [entries]);
 
-  const renderEmpty = () => (
-    <Box sx={{ textAlign: "center", py: { xs: 6, md: 8 } }}>
-      <BedtimeIcon sx={{ fontSize: 64, color: "text.disabled", mb: 2 }} />
-      <Typography variant="h6" gutterBottom>
-        No sleep recorded yet
-      </Typography>
-      <Typography color="text.secondary">
-        Tap + to log the first one
-      </Typography>
-    </Box>
-  );
+  // Summary stats
+  const todayEntries = useMemo(() => {
+    const todayK = dateKey(new Date().toISOString());
+    return entries.filter((s) => dateKey(s.start_time) === todayK);
+  }, [entries]);
+
+  const todayTotalMs = useMemo(() => {
+    return todayEntries.reduce((sum, s) => {
+      const end = s.end_time ? new Date(s.end_time).getTime() : Date.now();
+      return sum + Math.max(0, end - new Date(s.start_time).getTime());
+    }, 0);
+  }, [todayEntries]);
+
+  const todayNaps = todayEntries.filter((s) => Boolean(s.is_nap)).length;
+  const lastSleep = entries.length > 0 ? relativeTime(entries[0].start_time) : "—";
 
   const renderTable = () => (
     <Card>
@@ -351,6 +312,18 @@ export default function SleepPage() {
     </Card>
   );
 
+  const renderEmpty = () => (
+    <Box sx={{ textAlign: "center", py: { xs: 6, md: 8 } }}>
+      <BedtimeIcon sx={{ fontSize: 64, color: "text.disabled", mb: 2 }} />
+      <Typography variant="h6" gutterBottom>
+        No sleep recorded yet
+      </Typography>
+      <Typography color="text.secondary">
+        Tap + to log the first one
+      </Typography>
+    </Box>
+  );
+
   return (
     <Box sx={{ pb: { xs: 12, md: 0 } }}>
       <Box
@@ -378,8 +351,99 @@ export default function SleepPage() {
         </Card>
       ) : (
         <>
-          <Box sx={{ display: { xs: "block", md: "none" } }}>{renderCardList()}</Box>
+          {/* Desktop table */}
           <Box sx={{ display: { xs: "none", md: "block" } }}>{renderTable()}</Box>
+
+          {/* Mobile card-row design */}
+          <Box sx={{ display: { xs: "block", md: "none" } }}>
+            {/* Summary stat strip */}
+            <Box sx={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 1, mb: 1.75 }}>
+              <Box sx={{
+                bgcolor: "background.paper", border: 1, borderColor: "divider",
+                borderRadius: 3, p: "10px 12px", position: "relative", overflow: "hidden", boxShadow: 1,
+              }}>
+                <Box sx={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, bgcolor: c.solid }} />
+                <Typography sx={{ fontSize: 10, color: "text.secondary", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>Total</Typography>
+                <Typography sx={{ fontSize: 20, fontWeight: 700, letterSpacing: "-0.025em", mt: 0.125, fontVariantNumeric: "tabular-nums" }}>{humanDuration(todayTotalMs)}</Typography>
+                <Typography sx={{ fontSize: 10.5, color: "text.secondary", mt: 0.125 }}>today</Typography>
+              </Box>
+              <Box sx={{
+                bgcolor: "background.paper", border: 1, borderColor: "divider",
+                borderRadius: 3, p: "10px 12px", position: "relative", overflow: "hidden", boxShadow: 1,
+              }}>
+                <Box sx={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, bgcolor: c.solid }} />
+                <Typography sx={{ fontSize: 10, color: "text.secondary", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>Naps</Typography>
+                <Typography sx={{ fontSize: 20, fontWeight: 700, letterSpacing: "-0.025em", mt: 0.125, fontVariantNumeric: "tabular-nums" }}>{todayNaps}</Typography>
+                <Typography sx={{ fontSize: 10.5, color: "text.secondary", mt: 0.125 }}>today</Typography>
+              </Box>
+              <Box sx={{
+                bgcolor: "background.paper", border: 1, borderColor: "divider",
+                borderRadius: 3, p: "10px 12px", position: "relative", overflow: "hidden", boxShadow: 1,
+              }}>
+                <Box sx={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, bgcolor: c.solid }} />
+                <Typography sx={{ fontSize: 10, color: "text.secondary", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>Last</Typography>
+                <Typography sx={{ fontSize: 20, fontWeight: 700, letterSpacing: "-0.025em", mt: 0.125, fontVariantNumeric: "tabular-nums" }}>{lastSleep}</Typography>
+                <Typography sx={{ fontSize: 10.5, color: "text.secondary", mt: 0.125 }}>sleep</Typography>
+              </Box>
+            </Box>
+
+            {/* Grouped log rows */}
+            {[...grouped.entries()].map(([key, items]) => (
+              <Box key={key}>
+                <Box sx={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", py: "14px 2px 8px" }}>
+                  <Typography sx={{ fontSize: 12, color: "text.secondary", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                    {dateSectionLabel(items[0].start_time)}
+                  </Typography>
+                  <Typography sx={{ fontSize: 11.5, color: "text.secondary", fontVariantNumeric: "tabular-nums" }}>{items.length}</Typography>
+                </Box>
+                {items.map((s) => {
+                  const isNap = Boolean(s.is_nap);
+                  const end = s.end_time ? new Date(s.end_time) : null;
+                  const durationMs = end ? end.getTime() - new Date(s.start_time).getTime() : Date.now() - new Date(s.start_time).getTime();
+                  const inProgress = !end;
+                  return (
+                    <Box
+                      key={s.id}
+                      onClick={() => handleEdit(s)}
+                      sx={{
+                        display: "flex", alignItems: "center", gap: 1.5, p: "12px 14px",
+                        bgcolor: "background.paper", border: 1, borderColor: "divider",
+                        borderRadius: 3, position: "relative", overflow: "hidden",
+                        boxShadow: 1, mb: 0.75, cursor: "pointer",
+                      }}
+                    >
+                      <Box sx={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, bgcolor: c.solid }} />
+                      <Box sx={{
+                        width: 36, height: 36, borderRadius: "11px",
+                        bgcolor: c.soft, color: c.ink,
+                        display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+                      }}>
+                        {isNap ? <BedtimeIcon sx={{ fontSize: 16 }} /> : <NightlightIcon sx={{ fontSize: 16 }} />}
+                      </Box>
+                      <Box sx={{ flex: 1, minWidth: 0 }}>
+                        <Typography sx={{ fontSize: 14.5, fontWeight: 600, letterSpacing: "-0.005em", color: inProgress ? "warning.main" : "text.primary" }} noWrap>
+                          {inProgress ? "In progress" : humanDuration(durationMs)} {isNap ? "(Nap)" : "(Night)"}
+                        </Typography>
+                        <Typography sx={{ fontSize: 12, color: "text.secondary", mt: 0.125 }}>
+                          {formatTimeRange(s.start_time, s.end_time)}
+                        </Typography>
+                      </Box>
+                      <Typography sx={{ fontSize: 12.5, color: "text.secondary", fontWeight: 500, fontVariantNumeric: "tabular-nums", flexShrink: 0, mr: 4 }}>
+                        {formatTimeShort(s.start_time)}
+                      </Typography>
+                      <IconButton
+                        aria-label="more"
+                        onClick={(e) => openMenu(e, s)}
+                        sx={{ position: "absolute", right: 4, top: "50%", transform: "translateY(-50%)", width: 36, height: 36 }}
+                      >
+                        <MoreVertIcon sx={{ fontSize: 18 }} />
+                      </IconButton>
+                    </Box>
+                  );
+                })}
+              </Box>
+            ))}
+          </Box>
         </>
       )}
 

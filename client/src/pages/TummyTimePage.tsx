@@ -1,12 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { MouseEvent } from "react";
 import {
   Box,
   Button,
   Card,
-  CardActionArea,
   CardContent,
-  Chip,
   Dialog,
   DialogActions,
   DialogContent,
@@ -15,7 +13,6 @@ import {
   IconButton,
   Menu,
   MenuItem,
-  Stack,
   Table,
   TableBody,
   TableCell,
@@ -43,6 +40,7 @@ import NoChildPlaceholder from "../components/NoChildPlaceholder";
 
 import type { TummyTime } from "../types/models";
 import { isoToLocal } from "../utils/dateTime";
+import { buildCategoryColors } from "../theme/categoryColors";
 
 function relativeTime(iso: string): string {
   const ms = Date.now() - new Date(iso).getTime();
@@ -77,22 +75,52 @@ function formatTimeRange(start: string, end: string | null): string {
   const yesterday = new Date(now);
   yesterday.setDate(yesterday.getDate() - 1);
   const isYesterday = startDate.toDateString() === yesterday.toDateString();
-  const dayLabel = isToday
+  const dayLbl = isToday
     ? "Today"
     : isYesterday
       ? "Yesterday"
       : startDate.toLocaleDateString(undefined, { month: "short", day: "numeric" });
   const timeOpts: Intl.DateTimeFormatOptions = { hour: "numeric", minute: "2-digit" };
   const startStr = startDate.toLocaleTimeString(undefined, timeOpts);
-  if (!end) return `${dayLabel} ${startStr} – now`;
+  if (!end) return `${dayLbl} ${startStr} – now`;
   const endStr = new Date(end).toLocaleTimeString(undefined, timeOpts);
-  return `${dayLabel} ${startStr} – ${endStr}`;
+  return `${dayLbl} ${startStr} – ${endStr}`;
+}
+
+function formatTimeShort(iso: string): string {
+  return new Date(iso).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+}
+
+function isSameDay(a: Date, b: Date): boolean {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
+}
+
+function dateKey(iso: string): string {
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+}
+
+function dateSectionLabel(iso: string): string {
+  const d = new Date(iso);
+  const now = new Date();
+  if (isSameDay(d, now)) return "Today";
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  if (isSameDay(d, yesterday)) return "Yesterday";
+  return d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
 }
 
 export default function TummyTimePage() {
   const { selectedChild } = useChildren();
   const { notify } = useNotification();
   const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
+  const cat = useMemo(() => buildCategoryColors(isDark), [isDark]);
+  const c = cat.tummy;
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const isCompact = useMediaQuery(theme.breakpoints.down("md"));
   const [entries, setEntries] = useState<TummyTime[]>([]);
@@ -187,6 +215,34 @@ export default function TummyTimePage() {
 
   }
 
+  // Group by date
+  const grouped = useMemo(() => {
+    const map = new Map<string, TummyTime[]>();
+    for (const t of entries) {
+      const key = dateKey(t.start_time);
+      const arr = map.get(key) ?? [];
+      arr.push(t);
+      map.set(key, arr);
+    }
+    return map;
+  }, [entries]);
+
+  // Summary stats
+  const todayEntries = useMemo(() => {
+    const todayK = dateKey(new Date().toISOString());
+    return entries.filter((t) => dateKey(t.start_time) === todayK);
+  }, [entries]);
+
+  const todayCount = todayEntries.length;
+  const todayTotalMs = useMemo(() => {
+    return todayEntries.reduce((sum, t) => {
+      const end = t.end_time ? new Date(t.end_time).getTime() : Date.now();
+      return sum + Math.max(0, end - new Date(t.start_time).getTime());
+    }, 0);
+  }, [todayEntries]);
+  const todayTotalDuration = humanDuration(new Date(Date.now() - todayTotalMs).toISOString(), new Date().toISOString());
+  const lastTummy = entries.length > 0 ? relativeTime(entries[0].start_time) : "—";
+
   return (
     <Box sx={{ pb: { xs: 10, md: 0 } }}>
       <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 3 }}>
@@ -247,7 +303,7 @@ export default function TummyTimePage() {
         </CardContent>
       </Card>
 
-      {/* Mobile/tablet card stack */}
+      {/* Mobile card-row design */}
       <Box sx={{ display: { xs: "block", md: "none" } }}>
         {entries.length === 0 ? (
           <Box
@@ -265,89 +321,93 @@ export default function TummyTimePage() {
             <Typography variant="body2">Tap + to start tracking</Typography>
           </Box>
         ) : (
-          <Stack spacing={1.5}>
-            {entries.map((t) => {
-              const inProgress = !t.end_time;
-              return (
-                <Card key={t.id} elevation={1} sx={{ borderRadius: 2, overflow: "visible" }}>
-                  <Box sx={{ display: "flex", alignItems: "stretch" }}>
-                    <CardActionArea
+          <Box sx={{ pb: 12 }}>
+            {/* Summary stat strip */}
+            <Box sx={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 1, mb: 1.75 }}>
+              <Box sx={{
+                bgcolor: "background.paper", border: 1, borderColor: "divider",
+                borderRadius: 3, p: "10px 12px", position: "relative", overflow: "hidden", boxShadow: 1,
+              }}>
+                <Box sx={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, bgcolor: c.solid }} />
+                <Typography sx={{ fontSize: 10, color: "text.secondary", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>Today</Typography>
+                <Typography sx={{ fontSize: 20, fontWeight: 700, letterSpacing: "-0.025em", mt: 0.125, fontVariantNumeric: "tabular-nums" }}>{todayCount}</Typography>
+                <Typography sx={{ fontSize: 10.5, color: "text.secondary", mt: 0.125 }}>sessions</Typography>
+              </Box>
+              <Box sx={{
+                bgcolor: "background.paper", border: 1, borderColor: "divider",
+                borderRadius: 3, p: "10px 12px", position: "relative", overflow: "hidden", boxShadow: 1,
+              }}>
+                <Box sx={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, bgcolor: c.solid }} />
+                <Typography sx={{ fontSize: 10, color: "text.secondary", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>Total</Typography>
+                <Typography sx={{ fontSize: 20, fontWeight: 700, letterSpacing: "-0.025em", mt: 0.125, fontVariantNumeric: "tabular-nums" }}>{todayTotalMs > 0 ? todayTotalDuration : "—"}</Typography>
+                <Typography sx={{ fontSize: 10.5, color: "text.secondary", mt: 0.125 }}>today</Typography>
+              </Box>
+              <Box sx={{
+                bgcolor: "background.paper", border: 1, borderColor: "divider",
+                borderRadius: 3, p: "10px 12px", position: "relative", overflow: "hidden", boxShadow: 1,
+              }}>
+                <Box sx={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, bgcolor: c.solid }} />
+                <Typography sx={{ fontSize: 10, color: "text.secondary", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>Last</Typography>
+                <Typography sx={{ fontSize: 20, fontWeight: 700, letterSpacing: "-0.025em", mt: 0.125, fontVariantNumeric: "tabular-nums" }}>{lastTummy}</Typography>
+                <Typography sx={{ fontSize: 10.5, color: "text.secondary", mt: 0.125 }}>session</Typography>
+              </Box>
+            </Box>
+
+            {/* Grouped log rows */}
+            {[...grouped.entries()].map(([key, items]) => (
+              <Box key={key}>
+                <Box sx={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", py: "14px 2px 8px" }}>
+                  <Typography sx={{ fontSize: 12, color: "text.secondary", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                    {dateSectionLabel(items[0].start_time)}
+                  </Typography>
+                  <Typography sx={{ fontSize: 11.5, color: "text.secondary", fontVariantNumeric: "tabular-nums" }}>{items.length}</Typography>
+                </Box>
+                {items.map((t) => {
+                  const inProgress = !t.end_time;
+                  const meta = t.milestone
+                    ? t.milestone
+                    : formatTimeRange(t.start_time, t.end_time);
+                  return (
+                    <Box
+                      key={t.id}
                       onClick={() => handleEdit(t)}
-                      sx={{ flex: 1, p: 2, minHeight: 44, borderRadius: 2 }}
+                      sx={{
+                        display: "flex", alignItems: "center", gap: 1.5, p: "12px 14px",
+                        bgcolor: "background.paper", border: 1, borderColor: "divider",
+                        borderRadius: 3, position: "relative", overflow: "hidden",
+                        boxShadow: 1, mb: 0.75, cursor: "pointer",
+                      }}
                     >
-                      <Stack spacing={1}>
-                        <Box
-                          sx={{
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "space-between",
-                            gap: 1,
-                          }}
-                        >
-                          <Chip
-                            color="success"
-                            size="small"
-                            icon={<AccessibilityNewIcon />}
-                            label="Tummy Time"
-                            sx={{ fontWeight: 600 }}
-                          />
-                          <Typography variant="caption" color="text.secondary">
-                            {relativeTime(t.start_time)}
-                          </Typography>
-                        </Box>
-                        <Typography
-                          variant="h5"
-                          sx={{ fontWeight: 700, color: inProgress ? "success.main" : "text.primary" }}
-                        >
-                          {inProgress
-                            ? `Active — started ${relativeTime(t.start_time)}`
-                            : humanDuration(t.start_time, t.end_time)}
+                      <Box sx={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, bgcolor: c.solid }} />
+                      <Box sx={{
+                        width: 36, height: 36, borderRadius: "11px",
+                        bgcolor: c.soft, color: c.ink,
+                        display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+                      }}>
+                        {t.milestone ? <EmojiEventsIcon sx={{ fontSize: 16 }} /> : <AccessibilityNewIcon sx={{ fontSize: 16 }} />}
+                      </Box>
+                      <Box sx={{ flex: 1, minWidth: 0 }}>
+                        <Typography sx={{ fontSize: 14.5, fontWeight: 600, letterSpacing: "-0.005em", color: inProgress ? "warning.main" : "text.primary" }} noWrap>
+                          {inProgress ? "In progress" : humanDuration(t.start_time, t.end_time)}
                         </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          {formatTimeRange(t.start_time, t.end_time)}
-                        </Typography>
-                        {t.milestone && (
-                          <Box>
-                            <Chip
-                              variant="outlined"
-                              size="small"
-                              color="warning"
-                              icon={<EmojiEventsIcon />}
-                              label={t.milestone}
-                              sx={{ maxWidth: "100%", "& .MuiChip-label": { whiteSpace: "normal" } }}
-                            />
-                          </Box>
-                        )}
-                        {t.notes && (
-                          <Typography
-                            variant="body2"
-                            color="text.secondary"
-                            sx={{
-                              display: "-webkit-box",
-                              WebkitLineClamp: 2,
-                              WebkitBoxOrient: "vertical",
-                              overflow: "hidden",
-                            }}
-                          >
-                            {t.notes}
-                          </Typography>
-                        )}
-                      </Stack>
-                    </CardActionArea>
-                    <Box sx={{ display: "flex", alignItems: "flex-start", p: 0.5 }}>
+                        <Typography sx={{ fontSize: 12, color: "text.secondary", mt: 0.125 }} noWrap>{meta}</Typography>
+                      </Box>
+                      <Typography sx={{ fontSize: 12.5, color: "text.secondary", fontWeight: 500, fontVariantNumeric: "tabular-nums", flexShrink: 0, mr: 4 }}>
+                        {formatTimeShort(t.start_time)}
+                      </Typography>
                       <IconButton
                         aria-label="more"
                         onClick={(e) => openMenu(e, t)}
-                        sx={{ width: 44, height: 44 }}
+                        sx={{ position: "absolute", right: 4, top: "50%", transform: "translateY(-50%)", width: 36, height: 36 }}
                       >
-                        <MoreVertIcon />
+                        <MoreVertIcon sx={{ fontSize: 18 }} />
                       </IconButton>
                     </Box>
-                  </Box>
-                </Card>
-              );
-            })}
-          </Stack>
+                  );
+                })}
+              </Box>
+            ))}
+          </Box>
         )}
       </Box>
 

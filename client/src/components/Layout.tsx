@@ -4,8 +4,6 @@ import {
   AppBar,
   Avatar,
   Box,
-  BottomNavigation,
-  BottomNavigationAction,
   CssBaseline,
   Divider,
   Drawer,
@@ -41,13 +39,18 @@ import MoreHorizIcon from "@mui/icons-material/MoreHoriz";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
 import LightModeIcon from "@mui/icons-material/LightMode";
 import SettingsBrightnessIcon from "@mui/icons-material/SettingsBrightness";
+import HomeRoundedIcon from "@mui/icons-material/HomeRounded";
+import TimelineRoundedIcon from "@mui/icons-material/TimelineRounded";
+import AddRoundedIcon from "@mui/icons-material/AddRounded";
+import BarChartRoundedIcon from "@mui/icons-material/BarChartRounded";
+import MoreHorizRoundedIcon from "@mui/icons-material/MoreHorizRounded";
 import { useAuth } from "../hooks/useAuth";
 import { useChildren } from "../hooks/useChildren";
 import { useThemeMode } from "../hooks/useTheme";
 import { API_BASE } from "../api/client";
 
 const DRAWER_WIDTH = 240;
-const BOTTOM_NAV_HEIGHT = 56;
+const BOTTOM_NAV_HEIGHT = 68;
 export const FAB_BOTTOM_OFFSET = `calc(${BOTTOM_NAV_HEIGHT}px + env(safe-area-inset-bottom) + 16px)`;
 
 const navItems = [
@@ -67,14 +70,17 @@ const navItems = [
   { label: "Children", icon: <ChildCareIcon />, path: "/children" },
 ];
 
-// Bottom-nav surfaces the top destinations; paths must exist in navItems above.
-const bottomNavPaths = ["/", "/feedings", "/diapers", "/sleep"];
-const bottomNavItems = bottomNavPaths
-  .map((path) => navItems.find((item) => item.path === path))
-  .filter((item): item is (typeof navItems)[number] => item !== undefined);
+const bottomNavTabs = [
+  { id: "home", label: "Home", icon: <HomeRoundedIcon />, path: "/" },
+  { id: "activity", label: "Activity", icon: <TimelineRoundedIcon />, path: "/activity" },
+  { id: "log", label: "Log", icon: <AddRoundedIcon sx={{ fontSize: 28 }} />, path: null, isFab: true },
+  { id: "charts", label: "Charts", icon: <BarChartRoundedIcon />, path: "/charts" },
+  { id: "more", label: "More", icon: <MoreHorizRoundedIcon />, path: null, isMore: true },
+];
 
 export default function Layout() {
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [addSheetOpen, setAddSheetOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
@@ -82,6 +88,8 @@ export default function Layout() {
   const { preference, setPreference } = useThemeMode();
   const muiTheme = useTheme();
   const isMobile = useMediaQuery(muiTheme.breakpoints.down("md"));
+  const isDark = muiTheme.palette.mode === "dark";
+
   const cycleTheme = () => {
     const order: Array<"system" | "light" | "dark"> = ["system", "light", "dark"];
     const next = order[(order.indexOf(preference) + 1) % order.length];
@@ -100,9 +108,33 @@ export default function Layout() {
       ? "Theme: Dark"
       : "Theme: Light";
 
-  const bottomNavValue = bottomNavPaths.includes(location.pathname)
-    ? location.pathname
-    : "more";
+  const activeTab = (() => {
+    if (location.pathname === "/") return "home";
+    if (location.pathname === "/activity") return "activity";
+    if (location.pathname === "/charts") return "charts";
+    return "more";
+  })();
+
+  const handleBottomNav = (tab: typeof bottomNavTabs[number]) => {
+    if (tab.isFab) {
+      setAddSheetOpen(!addSheetOpen);
+      return;
+    }
+    if (tab.isMore) {
+      setDrawerOpen(true);
+      return;
+    }
+    if (tab.path) navigate(tab.path);
+  };
+
+  const addSheetItems = [
+    { label: "Feeding", icon: <RestaurantIcon />, path: "/feedings", cat: "feed" },
+    { label: "Diaper", icon: <BabyChangingStationIcon />, path: "/diapers", cat: "diaper" },
+    { label: "Sleep", icon: <BedtimeIcon />, path: "/sleep", cat: "sleep" },
+    { label: "Pumping", icon: <OpacityIcon />, path: "/pumping", cat: "pump" },
+    { label: "Tummy Time", icon: <AccessibilityNewIcon />, path: "/tummy-time", cat: "tummy" },
+    { label: "Note", icon: <NoteIcon />, path: "/notes", cat: "note" },
+  ];
 
   const drawer = (
     <Box sx={{ display: "flex", flexDirection: "column", height: "100%" }}>
@@ -277,7 +309,70 @@ export default function Layout() {
         <Outlet />
       </Box>
 
-      {/* Mobile bottom navigation */}
+      {/* Add log sheet (mobile) */}
+      {addSheetOpen && (
+        <Box
+          onClick={() => setAddSheetOpen(false)}
+          sx={{
+            display: { xs: "block", md: "none" },
+            position: "fixed",
+            inset: 0,
+            zIndex: (theme) => theme.zIndex.appBar + 1,
+            bgcolor: "rgba(0,0,0,0.35)",
+            backdropFilter: "blur(6px)",
+            WebkitBackdropFilter: "blur(6px)",
+          }}
+        >
+          <Box
+            onClick={(e) => e.stopPropagation()}
+            sx={{
+              position: "absolute",
+              left: 0,
+              right: 0,
+              bottom: `calc(${BOTTOM_NAV_HEIGHT}px + env(safe-area-inset-bottom))`,
+              bgcolor: "background.default",
+              borderTopLeftRadius: "24px",
+              borderTopRightRadius: "24px",
+              boxShadow: "0 -20px 60px rgba(0,0,0,0.25)",
+              p: "16px 20px 24px",
+            }}
+          >
+            <Box sx={{ width: 38, height: 4, bgcolor: "text.secondary", opacity: 0.3, mx: "auto", mb: 2, borderRadius: 99 }} />
+            <Typography sx={{ fontSize: 18, fontWeight: 700, mb: 2, letterSpacing: "-0.01em" }}>
+              Log
+            </Typography>
+            <Box sx={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 1 }}>
+              {addSheetItems.map((item) => (
+                <Box
+                  key={item.label}
+                  onClick={() => {
+                    setAddSheetOpen(false);
+                    navigate(item.path);
+                  }}
+                  sx={{
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    gap: 0.75,
+                    py: 1.5,
+                    borderRadius: 3,
+                    bgcolor: "background.paper",
+                    border: 1,
+                    borderColor: "divider",
+                    cursor: "pointer",
+                    "&:active": { transform: "scale(0.96)" },
+                  }}
+                >
+                  <Box sx={{ color: "text.secondary" }}>{item.icon}</Box>
+                  <Typography sx={{ fontSize: 12.5, fontWeight: 700 }}>{item.label}</Typography>
+                </Box>
+              ))}
+            </Box>
+          </Box>
+        </Box>
+      )}
+
+      {/* Mobile bottom navigation — PWA style with center FAB */}
       <Box
         sx={{
           display: { xs: "block", md: "none" },
@@ -289,35 +384,76 @@ export default function Layout() {
           paddingBottom: "env(safe-area-inset-bottom)",
           borderTop: 1,
           borderColor: "divider",
-          backgroundColor: "background.paper",
+          bgcolor: isDark ? "rgba(12, 16, 24, 0.86)" : "rgba(255, 255, 255, 0.92)",
+          backdropFilter: "blur(16px) saturate(180%)",
+          WebkitBackdropFilter: "blur(16px) saturate(180%)",
         }}
       >
-        <BottomNavigation
-          showLabels
-          value={bottomNavValue}
-          onChange={(_, newValue) => {
-            if (newValue === "more") {
-              setDrawerOpen(true);
-            } else {
-              navigate(newValue);
-            }
+        <Box
+          sx={{
+            display: "grid",
+            gridTemplateColumns: "repeat(5, 1fr)",
+            height: BOTTOM_NAV_HEIGHT,
+            alignItems: "center",
           }}
-          sx={{ height: BOTTOM_NAV_HEIGHT }}
         >
-          {bottomNavItems.map((item) => (
-            <BottomNavigationAction
-              key={item.path}
-              label={item.label}
-              icon={item.icon}
-              value={item.path}
-            />
-          ))}
-          <BottomNavigationAction
-            label="More"
-            icon={<MoreHorizIcon />}
-            value="more"
-          />
-        </BottomNavigation>
+          {bottomNavTabs.map((tab) => {
+            const isActive = tab.id === activeTab;
+            if (tab.isFab) {
+              return (
+                <Box
+                  key={tab.id}
+                  sx={{ display: "flex", justifyContent: "center", alignItems: "flex-start" }}
+                >
+                  <Box
+                    onClick={() => handleBottomNav(tab)}
+                    sx={{
+                      width: 52,
+                      height: 52,
+                      borderRadius: "18px",
+                      mt: "-22px",
+                      bgcolor: "primary.main",
+                      color: isDark ? "#0c1018" : "#ffffff",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      boxShadow: isDark
+                        ? "0 8px 22px rgba(165, 180, 252, 0.45)"
+                        : "0 8px 22px rgba(91, 93, 255, 0.35)",
+                      border: 4,
+                      borderColor: isDark ? "#0c1018" : "#ffffff",
+                      cursor: "pointer",
+                      "&:active": { transform: "scale(0.92)" },
+                    }}
+                  >
+                    {tab.icon}
+                  </Box>
+                </Box>
+              );
+            }
+            return (
+              <Box
+                key={tab.id}
+                onClick={() => handleBottomNav(tab)}
+                sx={{
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  gap: "3px",
+                  py: 0.5,
+                  color: isActive ? "text.primary" : "text.secondary",
+                  cursor: "pointer",
+                  "&:active": { opacity: 0.7 },
+                }}
+              >
+                {tab.icon}
+                <Typography sx={{ fontSize: 10.5, fontWeight: isActive ? 700 : 500, letterSpacing: "-0.005em" }}>
+                  {tab.label}
+                </Typography>
+              </Box>
+            );
+          })}
+        </Box>
       </Box>
     </Box>
   );

@@ -16,17 +16,11 @@ import {
   Menu,
   MenuItem,
   Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
   TextField,
   Typography,
   useMediaQuery,
 } from "@mui/material";
-import { useTheme, alpha } from "@mui/material/styles";
+import { useTheme } from "@mui/material/styles";
 import { LineChart, Line, ResponsiveContainer } from "recharts";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
@@ -41,9 +35,8 @@ import { useChildren } from "../hooks/useChildren";
 import { useNotification } from "../hooks/useNotification";
 import NowButton from "../components/NowButton";
 import { FAB_BOTTOM_OFFSET } from "../components/Layout";
-
 import NoChildPlaceholder from "../components/NoChildPlaceholder";
-
+import { buildCategoryColors } from "../theme/categoryColors";
 import type { Growth } from "../types/models";
 
 const EMPTY_FORM = {
@@ -84,33 +77,43 @@ interface MetricCardProps {
   value: number;
   unit: string;
   data: { v: number }[];
-  color: string;
+  tileColor: string;
+  solidColor: string;
   icon: React.ReactNode;
 }
 
-function MetricCard({ label, value, unit, data, color, icon }: MetricCardProps) {
+function MetricCard({ label, value, unit, data, tileColor, solidColor, icon }: MetricCardProps) {
   return (
     <Card
       sx={{
         height: "100%",
-        background: (t) =>
-          `linear-gradient(135deg, ${alpha(color, t.palette.mode === "dark" ? 0.18 : 0.12)} 0%, ${alpha(color, 0.02)} 100%)`,
-        border: (t) => `1px solid ${alpha(color, t.palette.mode === "dark" ? 0.35 : 0.25)}`,
+        bgcolor: tileColor,
+        border: 1,
+        borderColor: "divider",
         borderRadius: 3,
+        boxShadow: 1,
         overflow: "hidden",
       }}
     >
       <CardContent sx={{ p: 1.75, "&:last-child": { pb: 1.75 } }}>
         <Stack direction="row" sx={{ alignItems: "center", justifyContent: "space-between", mb: 0.5 }}>
           <Stack direction="row" spacing={0.75} sx={{ alignItems: "center" }}>
-            <Box sx={{ color, display: "flex" }}>{icon}</Box>
-            <Typography variant="caption" sx={{ color: "text.secondary", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>
+            <Box sx={{ color: solidColor, display: "flex" }}>{icon}</Box>
+            <Typography
+              sx={{
+                fontSize: 12,
+                color: "text.secondary",
+                fontWeight: 700,
+                textTransform: "uppercase",
+                letterSpacing: "0.08em",
+              }}
+            >
               {label}
             </Typography>
           </Stack>
         </Stack>
         <Stack direction="row" spacing={0.5} sx={{ alignItems: "baseline", mb: 0.25 }}>
-          <Typography variant="h5" sx={{ fontWeight: 700, lineHeight: 1 }}>
+          <Typography variant="h5" sx={{ fontWeight: 700, lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>
             {value}
           </Typography>
           <Typography variant="body2" sx={{ color: "text.secondary", fontWeight: 500 }}>
@@ -121,7 +124,7 @@ function MetricCard({ label, value, unit, data, color, icon }: MetricCardProps) 
           {data.length >= 2 ? (
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={data} margin={{ top: 4, right: 4, bottom: 4, left: 4 }}>
-                <Line type="monotone" dataKey="v" stroke={color} strokeWidth={2} dot={false} isAnimationActive={false} />
+                <Line type="monotone" dataKey="v" stroke={solidColor} strokeWidth={2} dot={false} isAnimationActive={false} />
               </LineChart>
             </ResponsiveContainer>
           ) : (
@@ -141,69 +144,102 @@ interface EntryCardProps {
   entry: Growth;
   onEdit: (g: Growth) => void;
   onDelete: (id: number) => void;
+  gutterColor: string;
 }
 
-function EntryCard({ entry, onEdit, onDelete }: EntryCardProps) {
+function EntryCard({ entry, onEdit, onDelete, gutterColor }: EntryCardProps) {
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
   const hasAny =
     entry.weight != null || entry.height != null || entry.head_circumference != null;
   return (
-    <Card sx={{ borderRadius: 3, position: "relative" }}>
+    <Card
+      sx={{
+        bgcolor: "background.paper",
+        border: 1,
+        borderColor: "divider",
+        borderRadius: 3,
+        boxShadow: 1,
+        overflow: "hidden",
+        position: "relative",
+      }}
+    >
       <CardActionArea onClick={() => onEdit(entry)} sx={{ p: 0 }}>
-        <CardContent sx={{ p: 2, "&:last-child": { pb: 2 } }}>
-          <Stack direction="row" sx={{ alignItems: "flex-start", justifyContent: "space-between", mb: 1, pr: 5 }}>
-            <Box>
-              <Typography variant="subtitle1" sx={{ fontWeight: 700, lineHeight: 1.2 }}>
-                {formatDate(entry.date)}
-              </Typography>
-              <Typography variant="caption" sx={{ color: "text.secondary" }}>
-                {relativeTime(entry.date)}
-              </Typography>
-            </Box>
-          </Stack>
-          {hasAny ? (
-            <Stack direction="row" spacing={0.75} useFlexGap sx={{ flexWrap: "wrap", mb: entry.notes ? 1 : 0 }}>
-              {entry.weight != null && (
-                <Chip
-                  size="small"
-                  icon={<MonitorWeightIcon />}
-                  label={`${entry.weight} ${entry.weight_unit ?? ""}`.trim()}
-                  sx={{ fontWeight: 500 }}
-                />
-              )}
-              {entry.height != null && (
-                <Chip
-                  size="small"
-                  icon={<HeightIcon />}
-                  label={`${entry.height} ${entry.height_unit ?? ""}`.trim()}
-                  sx={{ fontWeight: 500 }}
-                />
-              )}
-              {entry.head_circumference != null && (
-                <Chip
-                  size="small"
-                  icon={<CircleIcon sx={{ fontSize: 14 }} />}
-                  label={`${entry.head_circumference} ${entry.head_circumference_unit ?? ""}`.trim()}
-                  sx={{ fontWeight: 500 }}
-                />
-              )}
+        <Box sx={{ display: "flex" }}>
+          {/* Growth-colored left gutter */}
+          <Box sx={{ width: 3, flexShrink: 0, bgcolor: gutterColor }} />
+          <CardContent sx={{ p: 2, flex: 1, "&:last-child": { pb: 2 } }}>
+            <Stack direction="row" sx={{ alignItems: "flex-start", justifyContent: "space-between", mb: 1, pr: 5 }}>
+              <Box>
+                <Typography variant="subtitle1" sx={{ fontWeight: 700, lineHeight: 1.2, fontVariantNumeric: "tabular-nums" }}>
+                  {formatDate(entry.date)}
+                </Typography>
+                <Typography variant="caption" sx={{ color: "text.secondary" }}>
+                  {relativeTime(entry.date)}
+                </Typography>
+              </Box>
+              {/* Right side measurements */}
+              <Stack direction="row" spacing={0.75} useFlexGap sx={{ flexWrap: "wrap" }}>
+                {entry.weight != null && (
+                  <Typography variant="body2" sx={{ fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
+                    {entry.weight} {entry.weight_unit ?? ""}
+                  </Typography>
+                )}
+                {entry.height != null && (
+                  <Typography variant="body2" sx={{ fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
+                    {entry.height} {entry.height_unit ?? ""}
+                  </Typography>
+                )}
+                {entry.head_circumference != null && (
+                  <Typography variant="body2" sx={{ fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
+                    {entry.head_circumference} {entry.head_circumference_unit ?? ""}
+                  </Typography>
+                )}
+              </Stack>
             </Stack>
-          ) : null}
-          {entry.notes && (
-            <Typography
-              variant="body2"
-              sx={{
-                color: "text.secondary",
-                display: "-webkit-box",
-                WebkitLineClamp: 2,
-                WebkitBoxOrient: "vertical",
-                overflow: "hidden",
-              }}
-            >
-              {entry.notes}
-            </Typography>
-          )}
-        </CardContent>
+            {hasAny && (
+              <Stack direction="row" spacing={0.75} useFlexGap sx={{ flexWrap: "wrap", mb: entry.notes ? 1 : 0 }}>
+                {entry.weight != null && (
+                  <Chip
+                    size="small"
+                    icon={<MonitorWeightIcon />}
+                    label={`${entry.weight} ${entry.weight_unit ?? ""}`.trim()}
+                    sx={{ fontWeight: 500 }}
+                  />
+                )}
+                {entry.height != null && (
+                  <Chip
+                    size="small"
+                    icon={<HeightIcon />}
+                    label={`${entry.height} ${entry.height_unit ?? ""}`.trim()}
+                    sx={{ fontWeight: 500 }}
+                  />
+                )}
+                {entry.head_circumference != null && (
+                  <Chip
+                    size="small"
+                    icon={<CircleIcon sx={{ fontSize: 14 }} />}
+                    label={`${entry.head_circumference} ${entry.head_circumference_unit ?? ""}`.trim()}
+                    sx={{ fontWeight: 500 }}
+                  />
+                )}
+              </Stack>
+            )}
+            {entry.notes && (
+              <Typography
+                variant="body2"
+                sx={{
+                  color: "text.secondary",
+                  display: "-webkit-box",
+                  WebkitLineClamp: 2,
+                  WebkitBoxOrient: "vertical",
+                  overflow: "hidden",
+                }}
+              >
+                {entry.notes}
+              </Typography>
+            )}
+          </CardContent>
+        </Box>
       </CardActionArea>
       <IconButton
         aria-label="More actions"
@@ -249,6 +285,9 @@ export default function GrowthPage() {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const isCompact = useMediaQuery(theme.breakpoints.down("md"));
+  const isDark = theme.palette.mode === "dark";
+  const cat = useMemo(() => buildCategoryColors(isDark), [isDark]);
+
   const [entries, setEntries] = useState<Growth[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState<Growth | null>(null);
@@ -374,6 +413,7 @@ export default function GrowthPage() {
         </Button>
       </Box>
 
+      {/* 3-column hero stat cards */}
       {hasAnyTrend && (
         <Grid container spacing={2} sx={{ mb: 3 }}>
           {trends.weight && (
@@ -383,7 +423,8 @@ export default function GrowthPage() {
                 value={trends.weight.latest}
                 unit={trends.weight.unit}
                 data={trends.weight.series}
-                color="#ef5350"
+                tileColor={cat.temp.tile}
+                solidColor={cat.temp.solid}
                 icon={<MonitorWeightIcon fontSize="small" />}
               />
             </Grid>
@@ -395,7 +436,8 @@ export default function GrowthPage() {
                 value={trends.height.latest}
                 unit={trends.height.unit}
                 data={trends.height.series}
-                color="#42a5f5"
+                tileColor={cat.pump.tile}
+                solidColor={cat.pump.solid}
                 icon={<HeightIcon fontSize="small" />}
               />
             </Grid>
@@ -407,7 +449,8 @@ export default function GrowthPage() {
                 value={trends.head.latest}
                 unit={trends.head.unit}
                 data={trends.head.series}
-                color="#66bb6a"
+                tileColor={cat.tummy.tile}
+                solidColor={cat.tummy.solid}
                 icon={<CircleIcon sx={{ fontSize: 16 }} />}
               />
             </Grid>
@@ -416,7 +459,7 @@ export default function GrowthPage() {
       )}
 
       {entries.length === 0 ? (
-        <Card sx={{ borderRadius: 3 }}>
+        <Card sx={{ bgcolor: "background.paper", border: 1, borderColor: "divider", borderRadius: 3, boxShadow: 1 }}>
           <CardContent sx={{ textAlign: "center", py: 6 }}>
             <MonitorWeightIcon sx={{ fontSize: 64, color: "text.disabled", mb: 2 }} />
             <Typography variant="h6" gutterBottom>
@@ -430,50 +473,35 @@ export default function GrowthPage() {
             </Typography>
           </CardContent>
         </Card>
-      ) : isCompact ? (
-        <Stack spacing={1.5}>
-          {entries.map((g) => (
-            <EntryCard key={g.id} entry={g} onEdit={handleEdit} onDelete={handleDelete} />
-          ))}
-        </Stack>
       ) : (
-        <Card>
-          <CardContent>
-            <TableContainer>
-              <Table>
-                <TableHead>
-                  <TableRow>
-                    <TableCell>Date</TableCell>
-                    <TableCell>Weight</TableCell>
-                    <TableCell>Height</TableCell>
-                    <TableCell>Head</TableCell>
-                    <TableCell>Notes</TableCell>
-                    <TableCell />
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {entries.map((g) => (
-                    <TableRow key={g.id} hover>
-                      <TableCell>{formatDate(g.date)}</TableCell>
-                      <TableCell>{g.weight != null ? `${g.weight} ${g.weight_unit}` : "—"}</TableCell>
-                      <TableCell>{g.height != null ? `${g.height} ${g.height_unit}` : "—"}</TableCell>
-                      <TableCell>{g.head_circumference != null ? `${g.head_circumference} ${g.head_circumference_unit}` : "—"}</TableCell>
-                      <TableCell>{g.notes || "—"}</TableCell>
-                      <TableCell align="right">
-                        <IconButton size="small" onClick={() => handleEdit(g)} aria-label="Edit">
-                          <EditIcon fontSize="small" />
-                        </IconButton>
-                        <IconButton size="small" onClick={() => handleDelete(g.id)} aria-label="Delete">
-                          <DeleteIcon fontSize="small" />
-                        </IconButton>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          </CardContent>
-        </Card>
+        <>
+          {/* Section header */}
+          <Typography
+            sx={{
+              fontSize: 12,
+              color: "text.secondary",
+              fontWeight: 700,
+              textTransform: "uppercase",
+              letterSpacing: "0.08em",
+              mb: 1.5,
+            }}
+          >
+            History
+          </Typography>
+          {isCompact ? (
+            <Stack spacing={1.5}>
+              {entries.map((g) => (
+                <EntryCard key={g.id} entry={g} onEdit={handleEdit} onDelete={handleDelete} gutterColor={cat.growth.solid} />
+              ))}
+            </Stack>
+          ) : (
+            <Stack spacing={1.5}>
+              {entries.map((g) => (
+                <EntryCard key={g.id} entry={g} onEdit={handleEdit} onDelete={handleDelete} gutterColor={cat.growth.solid} />
+              ))}
+            </Stack>
+          )}
+        </>
       )}
 
       <Fab

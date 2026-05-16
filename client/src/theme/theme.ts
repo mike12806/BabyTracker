@@ -5,11 +5,9 @@ type Mode = "light" | "dark";
 const FONT_FAMILY =
   '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
 
-// Softer shadow scale than MUI defaults — less black, more layered.
-// MUI requires exactly 25 entries in `shadows` (index 0..24).
 function buildShadows(mode: Mode): Shadows {
-  const c = mode === "light" ? "15, 23, 42" : "0, 0, 0"; // slate-900 vs true black
-  const a = mode === "light" ? 1 : 1.8; // dark mode needs a touch more punch
+  const c = mode === "light" ? "15, 23, 42" : "0, 0, 0";
+  const a = mode === "light" ? 1 : 1.8;
   const soft = (
     y1: number,
     b1: number,
@@ -42,23 +40,25 @@ function buildShadows(mode: Mode): Shadows {
 
 export function buildTheme(mode: Mode) {
   const isLight = mode === "light";
-  const borderColor = isLight ? "rgba(15, 23, 42, 0.08)" : "rgba(255, 255, 255, 0.08)";
+  const borderColor = isLight
+    ? "rgba(15, 23, 42, 0.08)"
+    : "rgba(255, 255, 255, 0.07)";
 
   return createTheme({
     palette: {
       mode,
-      primary: { main: "#6366f1" }, // indigo-500
-      secondary: { main: "#ec4899" }, // pink-500
-      success: { main: "#16a34a" }, // green-600
-      warning: { main: "#d97706" }, // amber-600
-      error: { main: "#ef4444" }, // red-500
-      info: { main: "#0284c7" }, // sky-600
+      primary: { main: isLight ? "#5b5dff" : "#a5b4fc" },
+      secondary: { main: "#ec4899" },
+      success: { main: "#16a34a" },
+      warning: { main: "#d97706" },
+      error: { main: "#ef4444" },
+      info: { main: "#0284c7" },
       background: isLight
-        ? { default: "#f8fafc", paper: "#ffffff" }
-        : { default: "#0b0f19", paper: "#161b26" },
+        ? { default: "#f4f3ef", paper: "#ffffff" }
+        : { default: "#0c1018", paper: "#161b27" },
       text: isLight
-        ? { primary: "#0f172a", secondary: "#64748b" }
-        : { primary: "#f1f5f9", secondary: "#94a3b8" },
+        ? { primary: "#10131c", secondary: "#6a7080" }
+        : { primary: "#f1f5f9", secondary: "#8a93a4" },
       divider: borderColor,
     },
     typography: {
@@ -108,10 +108,11 @@ export function buildTheme(mode: Mode) {
             borderBottom: "1px solid",
             borderColor,
             backgroundColor: isLight
-              ? "rgba(255, 255, 255, 0.85)"
-              : "rgba(11, 15, 25, 0.85)",
-            backdropFilter: "blur(12px)",
-            color: isLight ? "#0f172a" : "#f1f5f9",
+              ? "rgba(244, 243, 239, 0.78)"
+              : "rgba(12, 16, 24, 0.72)",
+            backdropFilter: "blur(14px) saturate(180%)",
+            WebkitBackdropFilter: "blur(14px) saturate(180%)",
+            color: isLight ? "#10131c" : "#f1f5f9",
           },
         },
       },

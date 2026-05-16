@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   Avatar,
   Box,
@@ -30,6 +30,7 @@ import { api, API_BASE } from "../api/client";
 import { useChildren } from "../hooks/useChildren";
 import { useNotification } from "../hooks/useNotification";
 import { FAB_BOTTOM_OFFSET } from "../components/Layout";
+import { buildCategoryColors } from "../theme/categoryColors";
 import type { Child } from "../types/models";
 
 function formatAge(birthDateStr: string): string {
@@ -56,6 +57,9 @@ export default function ChildrenPage() {
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const { children, selectedChild, selectChild, refreshChildren, defaultChildId, setDefaultChild } = useChildren();
   const { notify } = useNotification();
+  const isDark = theme.palette.mode === "dark";
+  const cat = useMemo(() => buildCategoryColors(isDark), [isDark]);
+
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Child | null>(null);
   const [form, setForm] = useState({ first_name: "", last_name: "", birth_date: "" });
@@ -162,6 +166,14 @@ export default function ChildrenPage() {
       ? `${API_BASE}/children/${child.id}/photo?v=${encodeURIComponent(child.updated_at)}`
       : undefined;
 
+  // Gradient colors per card index
+  const gradients = [
+    { from: cat.feed.tile, to: cat.sleep.tile },
+    { from: cat.pump.tile, to: cat.tummy.tile },
+    { from: cat.note.tile, to: cat.feed.tile },
+    { from: cat.sleep.tile, to: cat.pump.tile },
+  ];
+
   return (
     <Box>
       <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 3 }}>
@@ -187,16 +199,21 @@ export default function ChildrenPage() {
         </Box>
       ) : (
         <Grid container spacing={2} sx={{ pb: 12 }}>
-          {children.map((child) => {
+          {children.map((child, idx) => {
             const isActive = selectedChild?.id === child.id;
             const isDefault = defaultChildId === child.id;
+            const grad = gradients[idx % gradients.length];
             return (
               <Grid key={child.id} size={{ xs: 12, sm: 6, md: 4 }}>
                 <Card
                   sx={{
-                    border: 2,
-                    borderColor: isActive ? "primary.main" : "transparent",
-                    transition: "border-color 0.15s",
+                    background: `linear-gradient(135deg, ${grad.from}, ${grad.to})`,
+                    border: 1,
+                    borderColor: isActive ? cat.feed.solid : "divider",
+                    borderRadius: 3,
+                    boxShadow: isActive ? 3 : 1,
+                    transition: "border-color 0.15s, box-shadow 0.15s",
+                    overflow: "hidden",
                   }}
                 >
                   <CardActionArea
@@ -218,7 +235,15 @@ export default function ChildrenPage() {
                         <Avatar
                           src={photoUrl(child)}
                           alt={child.first_name}
-                          sx={{ width: 96, height: 96, fontSize: 36, mx: "auto" }}
+                          sx={{
+                            width: 60,
+                            height: 60,
+                            fontSize: 24,
+                            mx: "auto",
+                            border: 2,
+                            borderColor: "background.paper",
+                            boxShadow: 1,
+                          }}
                         >
                           {child.first_name[0]}
                         </Avatar>
@@ -237,21 +262,49 @@ export default function ChildrenPage() {
                             color: "#fff",
                           }}
                         >
-                          <PhotoCameraIcon />
+                          <PhotoCameraIcon fontSize="small" />
                         </Box>
                       </Box>
 
-                      <Typography variant="h6">{`${child.first_name} ${child.last_name}`}</Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        Born {formatBirthDate(child.birth_date)}
+                      <Typography variant="h6" sx={{ fontWeight: 700 }}>
+                        {`${child.first_name} ${child.last_name}`}
                       </Typography>
-                      <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                      <Typography variant="body2" color="text.secondary" sx={{ fontVariantNumeric: "tabular-nums" }}>
                         {formatAge(child.birth_date)}
                       </Typography>
+                      <Typography variant="caption" color="text.disabled" sx={{ display: "block", mb: 1 }}>
+                        Born {formatBirthDate(child.birth_date)}
+                      </Typography>
 
-                      {isDefault && (
-                        <Chip label="Default" size="small" color="primary" variant="outlined" sx={{ mb: 1 }} />
-                      )}
+                      <Box sx={{ display: "flex", gap: 0.75, justifyContent: "center", mb: 1, flexWrap: "wrap" }}>
+                        {isActive && (
+                          <Chip
+                            label="Active"
+                            size="small"
+                            sx={{
+                              bgcolor: cat.feed.solid,
+                              color: "#fff",
+                              fontWeight: 600,
+                              fontSize: 11,
+                              height: 22,
+                            }}
+                          />
+                        )}
+                        {isDefault && (
+                          <Chip
+                            label="Default"
+                            size="small"
+                            variant="outlined"
+                            sx={{
+                              borderColor: cat.feed.edge,
+                              color: cat.feed.ink,
+                              fontWeight: 600,
+                              fontSize: 11,
+                              height: 22,
+                            }}
+                          />
+                        )}
+                      </Box>
                     </CardContent>
                   </CardActionArea>
 
@@ -292,6 +345,35 @@ export default function ChildrenPage() {
               </Grid>
             );
           })}
+
+          {/* "Add a child" card */}
+          <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+            <Card
+              sx={{
+                border: 2,
+                borderStyle: "dashed",
+                borderColor: "divider",
+                borderRadius: 3,
+                bgcolor: "transparent",
+                boxShadow: 0,
+                cursor: "pointer",
+                transition: "border-color 0.15s",
+                "&:hover": { borderColor: "text.secondary" },
+                minHeight: 200,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+              onClick={openCreate}
+            >
+              <CardContent sx={{ textAlign: "center" }}>
+                <AddIcon sx={{ fontSize: 40, color: "text.disabled", mb: 1 }} />
+                <Typography variant="body1" sx={{ color: "text.secondary", fontWeight: 600 }}>
+                  Add a child
+                </Typography>
+              </CardContent>
+            </Card>
+          </Grid>
         </Grid>
       )}
 
@@ -333,7 +415,7 @@ export default function ChildrenPage() {
       >
         <DialogTitle>{editing ? "Edit Child" : "Add Child"}</DialogTitle>
         <DialogContent sx={{ p: 2, overflowY: "auto", flex: 1 }}>
-          {/* Photo picker — available in both add and edit modes */}
+          {/* Photo picker */}
           <Box
             sx={{ textAlign: "center", mb: 2 }}
             onClick={() => editing ? handlePhotoClick(editing.id) : addPhotoRef.current?.click()}
