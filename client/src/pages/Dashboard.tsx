@@ -469,7 +469,7 @@ export default function Dashboard() {
       </Box>
 
       {/* Tile grid */}
-      <Box sx={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 1, mb: 2.5 }}>
+      <Box sx={{ display: "grid", gridTemplateColumns: { xs: "repeat(2, minmax(0, 1fr))", sm: "repeat(3, minmax(0, 1fr))" }, gap: 1, mb: 2.5 }}>
         {tiles.map((tile) => {
           const c = cat[tile.cat];
           return (
@@ -503,9 +503,9 @@ export default function Dashboard() {
               )}
               <Box
                 sx={{
-                  width: 36, height: 36, borderRadius: "12px",
+                  width: 40, height: 40, borderRadius: "12px",
                   bgcolor: c.solid, color: isDark ? "#0c1018" : "#fff",
-                  display: "flex", alignItems: "center", justifyContent: "center",
+                  display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
                 }}
               >
                 {CAT_ICONS[tile.cat]}
@@ -734,11 +734,11 @@ export default function Dashboard() {
             {FEEDING_TYPES.map((t) => (<MenuItem key={t.value} value={t.value}>{t.label}</MenuItem>))}
           </TextField>
           <Box sx={{ display: "flex", gap: 1, alignItems: "flex-start" }}>
-            <TextField margin="dense" label="Start Time" type="datetime-local" sx={{ flex: 1 }} required slotProps={{ inputLabel: { shrink: true } }} value={feedingForm.start_time} onChange={(e) => setFeedingForm({ ...feedingForm, start_time: e.target.value })} />
+            <TextField margin="dense" label="Start Time" type="datetime-local" sx={{ flex: 1, minWidth: 0 }} required slotProps={{ inputLabel: { shrink: true } }} value={feedingForm.start_time} onChange={(e) => setFeedingForm({ ...feedingForm, start_time: e.target.value })} />
             <NowButton onSetNow={(v) => setFeedingForm({ ...feedingForm, start_time: v })} />
           </Box>
           <Box sx={{ display: "flex", gap: 1, alignItems: "flex-start" }}>
-            <TextField margin="dense" label="End Time" type="datetime-local" sx={{ flex: 1 }} slotProps={{ inputLabel: { shrink: true } }} value={feedingForm.end_time} onChange={(e) => setFeedingForm({ ...feedingForm, end_time: e.target.value })} />
+            <TextField margin="dense" label="End Time" type="datetime-local" sx={{ flex: 1, minWidth: 0 }} slotProps={{ inputLabel: { shrink: true } }} value={feedingForm.end_time} onChange={(e) => setFeedingForm({ ...feedingForm, end_time: e.target.value })} />
             <NowButton onSetNow={(v) => setFeedingForm({ ...feedingForm, end_time: v })} />
           </Box>
           <Box sx={{ display: "flex", gap: 2 }}>
@@ -751,7 +751,7 @@ export default function Dashboard() {
           </Box>
           <TextField margin="dense" label="Notes" fullWidth multiline rows={2} value={feedingForm.notes} onChange={(e) => setFeedingForm({ ...feedingForm, notes: e.target.value })} />
         </DialogContent>
-        <DialogActions>
+        <DialogActions sx={{ flexWrap: "wrap", gap: 1, "& > :not(style) ~ :not(style)": { ml: 0 } }}>
           <Button onClick={() => setFeedingDialogOpen(false)}>Cancel</Button>
           <Button onClick={handleFeedingSave} variant="contained" disabled={!feedingForm.start_time}>Save</Button>
         </DialogActions>
@@ -761,7 +761,7 @@ export default function Dashboard() {
         <DialogTitle>Add Diaper Change</DialogTitle>
         <DialogContent>
           <Box sx={{ display: "flex", gap: 1, alignItems: "flex-start" }}>
-            <TextField margin="dense" label="Time" type="datetime-local" sx={{ flex: 1 }} required slotProps={{ inputLabel: { shrink: true } }} value={diaperForm.time} onChange={(e) => setDiaperForm({ ...diaperForm, time: e.target.value })} />
+            <TextField margin="dense" label="Time" type="datetime-local" sx={{ flex: 1, minWidth: 0 }} required slotProps={{ inputLabel: { shrink: true } }} value={diaperForm.time} onChange={(e) => setDiaperForm({ ...diaperForm, time: e.target.value })} />
             <NowButton onSetNow={(v) => setDiaperForm({ ...diaperForm, time: v })} />
           </Box>
           <TextField select margin="dense" label="Type" fullWidth value={diaperForm.type} onChange={(e) => setDiaperForm({ ...diaperForm, type: e.target.value })}>
@@ -779,7 +779,7 @@ export default function Dashboard() {
           </TextField>
           <TextField margin="dense" label="Notes" fullWidth multiline rows={2} value={diaperForm.notes} onChange={(e) => setDiaperForm({ ...diaperForm, notes: e.target.value })} />
         </DialogContent>
-        <DialogActions>
+        <DialogActions sx={{ flexWrap: "wrap", gap: 1, "& > :not(style) ~ :not(style)": { ml: 0 } }}>
           <Button onClick={() => setDiaperDialogOpen(false)}>Cancel</Button>
           <Button onClick={handleDiaperSave} variant="contained" color="warning" disabled={!diaperForm.time}>Save</Button>
         </DialogActions>
@@ -789,17 +789,17 @@ export default function Dashboard() {
         <DialogTitle>Add Sleep</DialogTitle>
         <DialogContent>
           <Box sx={{ display: "flex", gap: 1, alignItems: "flex-start" }}>
-            <TextField margin="dense" label="Start Time" type="datetime-local" sx={{ flex: 1 }} required slotProps={{ inputLabel: { shrink: true } }} value={sleepForm.start_time} onChange={(e) => setSleepForm({ ...sleepForm, start_time: e.target.value })} />
+            <TextField margin="dense" label="Start Time" type="datetime-local" sx={{ flex: 1, minWidth: 0 }} required slotProps={{ inputLabel: { shrink: true } }} value={sleepForm.start_time} onChange={(e) => setSleepForm({ ...sleepForm, start_time: e.target.value })} />
             <NowButton onSetNow={(v) => setSleepForm({ ...sleepForm, start_time: v })} />
           </Box>
           <Box sx={{ display: "flex", gap: 1, alignItems: "flex-start" }}>
-            <TextField margin="dense" label="End Time" type="datetime-local" sx={{ flex: 1 }} slotProps={{ inputLabel: { shrink: true } }} value={sleepForm.end_time} onChange={(e) => setSleepForm({ ...sleepForm, end_time: e.target.value })} />
+            <TextField margin="dense" label="End Time" type="datetime-local" sx={{ flex: 1, minWidth: 0 }} slotProps={{ inputLabel: { shrink: true } }} value={sleepForm.end_time} onChange={(e) => setSleepForm({ ...sleepForm, end_time: e.target.value })} />
             <NowButton onSetNow={(v) => setSleepForm({ ...sleepForm, end_time: v })} />
           </Box>
           <FormControlLabel control={<Checkbox checked={sleepForm.is_nap} onChange={(e) => setSleepForm({ ...sleepForm, is_nap: e.target.checked })} />} label="Nap" />
           <TextField margin="dense" label="Notes" fullWidth multiline rows={2} value={sleepForm.notes} onChange={(e) => setSleepForm({ ...sleepForm, notes: e.target.value })} />
         </DialogContent>
-        <DialogActions>
+        <DialogActions sx={{ flexWrap: "wrap", gap: 1, "& > :not(style) ~ :not(style)": { ml: 0 } }}>
           <Button onClick={() => setSleepDialogOpen(false)}>Cancel</Button>
           <Button onClick={handleSleepSave} variant="contained" color="secondary" disabled={!sleepForm.start_time}>Save</Button>
         </DialogActions>
