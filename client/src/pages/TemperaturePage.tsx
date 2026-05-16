@@ -313,7 +313,7 @@ export default function TemperaturePage() {
               }}>
                 <Box sx={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, bgcolor: c.solid }} />
                 <Typography sx={{ fontSize: 10, color: "text.secondary", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>Latest</Typography>
-                <Typography sx={{ fontSize: 20, fontWeight: 700, letterSpacing: "-0.025em", mt: 0.125, fontVariantNumeric: "tabular-nums" }}>{latestReading}</Typography>
+                <Typography sx={{ fontSize: latestReading.length > 5 ? 15 : 20, fontWeight: 700, letterSpacing: "-0.025em", mt: 0.125, fontVariantNumeric: "tabular-nums" }} noWrap>{latestReading}</Typography>
                 <Typography sx={{ fontSize: 10.5, color: "text.secondary", mt: 0.125 }}>reading</Typography>
               </Box>
               <Box sx={{
@@ -322,7 +322,7 @@ export default function TemperaturePage() {
               }}>
                 <Box sx={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, bgcolor: c.solid }} />
                 <Typography sx={{ fontSize: 10, color: "text.secondary", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>Last</Typography>
-                <Typography sx={{ fontSize: 20, fontWeight: 700, letterSpacing: "-0.025em", mt: 0.125, fontVariantNumeric: "tabular-nums" }}>{lastTime}</Typography>
+                <Typography sx={{ fontSize: lastTime.length > 5 ? 15 : 20, fontWeight: 700, letterSpacing: "-0.025em", mt: 0.125, fontVariantNumeric: "tabular-nums" }} noWrap>{lastTime}</Typography>
                 <Typography sx={{ fontSize: 10.5, color: "text.secondary", mt: 0.125 }}>check</Typography>
               </Box>
             </Box>
