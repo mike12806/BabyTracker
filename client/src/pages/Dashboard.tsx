@@ -389,9 +389,12 @@ export default function Dashboard() {
         <Typography sx={{ fontSize: 11, color: "text.secondary", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em" }}>
           Quick log
         </Typography>
-        <Typography sx={{ fontSize: 11, color: "text.secondary" }}>
-          Tap to record
-        </Typography>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 0.4 }}>
+          <AddIcon sx={{ fontSize: 12, color: "text.secondary" }} />
+          <Typography sx={{ fontSize: 11, color: "text.secondary" }}>
+            Tap to record
+          </Typography>
+        </Box>
       </Box>
 
       {/* Tile grid */}
@@ -445,6 +448,7 @@ export default function Dashboard() {
                   {tile.last || tile.detail}
                 </Typography>
               </Box>
+              <AddIcon sx={{ fontSize: { xs: 15, sm: 16 }, color: c.solid, opacity: 0.55, flexShrink: 0 }} />
             </ButtonBase>
           );
         })}
