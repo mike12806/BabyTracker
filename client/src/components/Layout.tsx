@@ -52,6 +52,8 @@ import QuickLogDialog, { type QuickLogCategory } from "./QuickLogDialog";
 
 const DRAWER_WIDTH = 240;
 const BOTTOM_NAV_HEIGHT = 68;
+const APPBAR_HEIGHT_MOBILE = 48;
+const APPBAR_HEIGHT_DESKTOP = 56;
 export const FAB_BOTTOM_OFFSET = `calc(${BOTTOM_NAV_HEIGHT}px + env(safe-area-inset-bottom) + 16px)`;
 
 const navItems = [
@@ -206,16 +208,22 @@ export default function Layout() {
           paddingTop: "env(safe-area-inset-top)",
         }}
       >
-        <Toolbar>
+        <Toolbar
+          variant="dense"
+          sx={{
+            minHeight: { xs: APPBAR_HEIGHT_MOBILE, md: APPBAR_HEIGHT_DESKTOP },
+            px: { xs: 1, sm: 1.5 },
+          }}
+        >
           <IconButton
             color="inherit"
             edge="start"
-            size="large"
+            size="small"
             onClick={() => setDrawerOpen(!drawerOpen)}
-            sx={{ mr: 2, display: { md: "none" } }}
+            sx={{ mr: 1, display: { md: "none" }, minWidth: 36, minHeight: 36 }}
             aria-label="open navigation drawer"
           >
-            <MenuIcon />
+            <MenuIcon sx={{ fontSize: 22 }} />
           </IconButton>
           <Box
             onClick={() => navigate("/children")}
@@ -223,9 +231,9 @@ export default function Layout() {
               flexGrow: 1,
               display: "flex",
               alignItems: "center",
-              gap: 1.25,
+              gap: 1,
               cursor: "pointer",
-              minHeight: 44,
+              minHeight: 36,
               "&:hover": { opacity: 0.85 },
             }}
             role="button"
@@ -241,12 +249,12 @@ export default function Layout() {
             {selectedChild && (
               <Avatar
                 src={selectedChild.picture_content_type ? `${API_BASE}/children/${selectedChild.id}/photo?v=${encodeURIComponent(selectedChild.updated_at)}` : undefined}
-                sx={{ width: 40, height: 40, fontSize: 16 }}
+                sx={{ width: 28, height: 28, fontSize: 12 }}
               >
                 {selectedChild.first_name[0]}
               </Avatar>
             )}
-            <Typography variant="h6" noWrap>
+            <Typography sx={{ fontSize: 15, fontWeight: 600, letterSpacing: "-0.01em" }} noWrap>
               {selectedChild
                 ? `${selectedChild.first_name}'s Tracker`
                 : "Baby Tracker"}
@@ -254,10 +262,11 @@ export default function Layout() {
           </Box>
           <IconButton
             color="inherit"
-            size="large"
+            size="small"
             onClick={cycleTheme}
             aria-label={themeLabel}
             title={themeLabel}
+            sx={{ minWidth: 36, minHeight: 36 }}
           >
             {themeIcon}
           </IconButton>
@@ -296,14 +305,20 @@ export default function Layout() {
         component="main"
         sx={{
           flexGrow: 1,
-          p: { xs: 2, sm: 3 },
+          p: { xs: 1.5, sm: 3 },
           ml: { md: `${DRAWER_WIDTH}px` },
-          mt: "64px",
+          mt: {
+            xs: `calc(${APPBAR_HEIGHT_MOBILE}px + env(safe-area-inset-top))`,
+            md: `${APPBAR_HEIGHT_DESKTOP}px`,
+          },
           pb: {
             xs: `calc(${BOTTOM_NAV_HEIGHT}px + env(safe-area-inset-bottom) + 16px)`,
             md: 3,
           },
-          minHeight: "calc(100vh - 64px)",
+          minHeight: {
+            xs: `calc(100vh - ${APPBAR_HEIGHT_MOBILE}px)`,
+            md: `calc(100vh - ${APPBAR_HEIGHT_DESKTOP}px)`,
+          },
           maxWidth: "100%",
           overflow: "hidden",
         }}

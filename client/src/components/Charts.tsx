@@ -22,9 +22,9 @@ import type {
   TummyTime,
 } from "../types/models";
 
-const CHART_HEIGHT = 300;
-const CHART_MARGIN = { top: 8, right: 16, bottom: 4, left: 4 };
-const TICK_STYLE = { fontSize: 11 };
+const CHART_HEIGHT = 200;
+const CHART_MARGIN = { top: 4, right: 12, bottom: 0, left: 0 };
+const TICK_STYLE = { fontSize: 10 };
 
 /** Build an array of YYYY-MM-DD strings for the last N days in local time */
 export function lastNDays(n: number): string[] {

@@ -175,19 +175,19 @@ export default function ChartsPage() {
   return (
     <Box>
       {/* Header */}
-      <Typography variant="h5" sx={{ fontWeight: 700 }}>
+      <Typography sx={{ fontSize: 20, fontWeight: 700, letterSpacing: "-0.01em", lineHeight: 1.2 }}>
         Trends
       </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+      <Typography sx={{ fontSize: 12, color: "text.secondary", mb: 1.25 }}>
         {rangeSubtitle(range)}
       </Typography>
 
       {/* Filter pills */}
       <Stack
         direction="row"
-        spacing={1}
+        spacing={0.75}
         sx={{
-          mb: 3,
+          mb: 1.5,
           overflowX: "auto",
           scrollbarWidth: "none",
           "&::-webkit-scrollbar": { display: "none" },
@@ -197,20 +197,21 @@ export default function ChartsPage() {
           <Chip
             key={opt.key}
             label={opt.label}
+            size="small"
             variant={range === opt.key ? "filled" : "outlined"}
             color={range === opt.key ? "primary" : "default"}
             onClick={() => setRange(opt.key)}
-            sx={{ fontWeight: 600, flexShrink: 0 }}
+            sx={{ fontWeight: 600, flexShrink: 0, fontSize: 12, height: 26 }}
           />
         ))}
       </Stack>
 
       {loading ? (
-        <Box sx={{ display: "flex", justifyContent: "center", py: 8 }}>
-          <CircularProgress />
+        <Box sx={{ display: "flex", justifyContent: "center", py: 6 }}>
+          <CircularProgress size={28} />
         </Box>
       ) : (
-        <Stack spacing={2.5}>
+        <Stack spacing={1.25}>
           {sections.map((sec) => {
             const cat = colors[sec.category];
             return (
@@ -219,31 +220,32 @@ export default function ChartsPage() {
                 elevation={0}
                 sx={{
                   border: `1px solid ${theme.palette.divider}`,
-                  borderRadius: 4,
+                  borderRadius: 2.5,
                   overflow: "hidden",
                 }}
               >
                 {/* Colored left gutter via a left border */}
-                <Box sx={{ borderLeft: `3px solid ${cat.solid}` }}>
-                  <CardContent sx={{ pb: "16px !important" }}>
+                <Box sx={{ borderLeft: `2px solid ${cat.solid}` }}>
+                  <CardContent sx={{ p: "10px 12px !important" }}>
                     {/* Card header row */}
                     <Stack
                       direction="row"
-                      sx={{ alignItems: "center", mb: 2 }}
-                      spacing={1.5}
+                      sx={{ alignItems: "center", mb: 0.75 }}
+                      spacing={1}
                     >
                       {/* Icon tile */}
                       <Box
                         sx={{
-                          width: 28,
-                          height: 28,
-                          borderRadius: 1.5,
+                          width: 22,
+                          height: 22,
+                          borderRadius: 1,
                           bgcolor: cat.tile,
                           color: cat.solid,
                           display: "flex",
                           alignItems: "center",
                           justifyContent: "center",
                           flexShrink: 0,
+                          "& svg": { fontSize: 14 },
                         }}
                       >
                         {sec.icon}
@@ -252,15 +254,14 @@ export default function ChartsPage() {
                       {/* Title + subtitle */}
                       <Box sx={{ flex: 1, minWidth: 0 }}>
                         <Typography
-                          variant="subtitle2"
-                          sx={{ fontWeight: 700, lineHeight: 1.2 }}
+                          sx={{ fontSize: 13, fontWeight: 700, lineHeight: 1.15 }}
+                          noWrap
                         >
                           {sec.title}
                         </Typography>
                         <Typography
-                          variant="caption"
-                          color="text.secondary"
-                          sx={{ lineHeight: 1.2 }}
+                          sx={{ fontSize: 10.5, color: "text.secondary", lineHeight: 1.15 }}
+                          noWrap
                         >
                           {sec.subtitle}
                         </Typography>
@@ -269,15 +270,12 @@ export default function ChartsPage() {
                       {/* Avg value */}
                       <Box sx={{ textAlign: "right", flexShrink: 0 }}>
                         <Typography
-                          variant="h6"
-                          sx={{ fontWeight: 700, lineHeight: 1.1, color: cat.solid }}
+                          sx={{ fontSize: 15, fontWeight: 700, lineHeight: 1.1, color: cat.solid, fontVariantNumeric: "tabular-nums" }}
                         >
                           {sec.avg}
                         </Typography>
                         <Typography
-                          variant="caption"
-                          color="text.secondary"
-                          sx={{ lineHeight: 1 }}
+                          sx={{ fontSize: 10, color: "text.secondary", lineHeight: 1 }}
                         >
                           {sec.avgLabel}
                         </Typography>
@@ -287,9 +285,9 @@ export default function ChartsPage() {
                     {/* Chart */}
                     <Box
                       sx={{
-                        mx: -1,
+                        mx: -0.5,
                         "& .recharts-responsive-container": {
-                          height: "220px !important",
+                          height: "130px !important",
                         },
                       }}
                     >
