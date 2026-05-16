@@ -467,12 +467,19 @@ export default function Dashboard() {
         </Typography>
       </Box>
 
-      {/* Today totals — horizontal scroll */}
+      {/* Today totals — horizontal scroll on mobile, equal-width grid on desktop */}
       <Box
         sx={{
-          display: "flex", gap: 0.75, overflowX: "auto", pb: 0.25, mb: 1.5,
-          mx: { xs: -1.5, md: 0 }, px: { xs: 1.5, md: 0 },
-          scrollbarWidth: "none", "&::-webkit-scrollbar": { display: "none" },
+          display: { xs: "flex", md: "grid" },
+          gridTemplateColumns: { md: `repeat(${todayTotals.length}, minmax(0, 1fr))` },
+          gap: { xs: 0.75, md: 1.25 },
+          overflowX: { xs: "auto", md: "visible" },
+          pb: { xs: 0.25, md: 0 },
+          mb: 1.5,
+          mx: { xs: -1.5, md: 0 },
+          px: { xs: 1.5, md: 0 },
+          scrollbarWidth: "none",
+          "&::-webkit-scrollbar": { display: "none" },
         }}
       >
         {todayTotals.map((t) => {
@@ -481,22 +488,25 @@ export default function Dashboard() {
             <Box
               key={t.cat}
               sx={{
-                flexShrink: 0, minWidth: 96, p: "6px 10px",
+                flexShrink: 0,
+                minWidth: { xs: 96, md: 0 },
+                width: { md: "100%" },
+                p: { xs: "6px 10px", md: "10px 14px" },
                 borderRadius: 1.5,
                 bgcolor: "background.paper",
                 border: 1, borderColor: "divider",
               }}
             >
               <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-                <Box sx={{ width: 5, height: 5, borderRadius: 99, bgcolor: c.solid }} />
-                <Typography sx={{ fontSize: 9.5, color: "text.secondary", fontWeight: 600, letterSpacing: "0.02em", textTransform: "uppercase" }}>
+                <Box sx={{ width: { xs: 5, md: 6 }, height: { xs: 5, md: 6 }, borderRadius: 99, bgcolor: c.solid }} />
+                <Typography sx={{ fontSize: { xs: 9.5, md: 11 }, color: "text.secondary", fontWeight: 600, letterSpacing: "0.02em", textTransform: "uppercase" }}>
                   {t.label}
                 </Typography>
               </Box>
-              <Typography sx={{ fontSize: 15, fontWeight: 700, lineHeight: 1.1, mt: 0.25, letterSpacing: "-0.02em", fontVariantNumeric: "tabular-nums" }} noWrap>
+              <Typography sx={{ fontSize: { xs: 15, md: 22 }, fontWeight: 700, lineHeight: 1.1, mt: { xs: 0.25, md: 0.5 }, letterSpacing: "-0.02em", fontVariantNumeric: "tabular-nums" }} noWrap>
                 {t.value}
               </Typography>
-              <Typography sx={{ fontSize: 9.5, color: "text.secondary", mt: 0 }} noWrap>
+              <Typography sx={{ fontSize: { xs: 9.5, md: 11 }, color: "text.secondary", mt: { xs: 0, md: 0.25 } }} noWrap>
                 {t.sub}
               </Typography>
             </Box>
