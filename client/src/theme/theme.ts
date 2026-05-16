@@ -125,6 +125,16 @@ export function buildTheme(mode: Mode) {
       MuiDialog: {
         styleOverrides: { paper: { borderRadius: 20 } },
       },
+      MuiDialogActions: {
+        styleOverrides: {
+          root: {
+            padding: "12px 20px 16px",
+            gap: 8,
+            flexWrap: "wrap",
+            "& > :not(style) ~ :not(style)": { marginLeft: 0 },
+          },
+        },
+      },
       MuiTab: {
         styleOverrides: {
           root: { textTransform: "none", fontWeight: 600 },

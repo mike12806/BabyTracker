@@ -752,7 +752,7 @@ export default function Dashboard() {
           </Box>
           <TextField margin="dense" label="Notes" fullWidth multiline rows={2} value={feedingForm.notes} onChange={(e) => setFeedingForm({ ...feedingForm, notes: e.target.value })} />
         </DialogContent>
-        <DialogActions sx={{ flexWrap: "wrap", gap: 1, "& > :not(style) ~ :not(style)": { ml: 0 } }}>
+        <DialogActions>
           <Button onClick={() => setFeedingDialogOpen(false)}>Cancel</Button>
           <Button onClick={handleFeedingSave} variant="contained" disabled={!feedingForm.start_time}>Save</Button>
         </DialogActions>
@@ -780,7 +780,7 @@ export default function Dashboard() {
           </TextField>
           <TextField margin="dense" label="Notes" fullWidth multiline rows={2} value={diaperForm.notes} onChange={(e) => setDiaperForm({ ...diaperForm, notes: e.target.value })} />
         </DialogContent>
-        <DialogActions sx={{ flexWrap: "wrap", gap: 1, "& > :not(style) ~ :not(style)": { ml: 0 } }}>
+        <DialogActions>
           <Button onClick={() => setDiaperDialogOpen(false)}>Cancel</Button>
           <Button onClick={handleDiaperSave} variant="contained" color="warning" disabled={!diaperForm.time}>Save</Button>
         </DialogActions>
@@ -800,7 +800,7 @@ export default function Dashboard() {
           <FormControlLabel control={<Checkbox checked={sleepForm.is_nap} onChange={(e) => setSleepForm({ ...sleepForm, is_nap: e.target.checked })} />} label="Nap" />
           <TextField margin="dense" label="Notes" fullWidth multiline rows={2} value={sleepForm.notes} onChange={(e) => setSleepForm({ ...sleepForm, notes: e.target.value })} />
         </DialogContent>
-        <DialogActions sx={{ flexWrap: "wrap", gap: 1, "& > :not(style) ~ :not(style)": { ml: 0 } }}>
+        <DialogActions>
           <Button onClick={() => setSleepDialogOpen(false)}>Cancel</Button>
           <Button onClick={handleSleepSave} variant="contained" color="secondary" disabled={!sleepForm.start_time}>Save</Button>
         </DialogActions>

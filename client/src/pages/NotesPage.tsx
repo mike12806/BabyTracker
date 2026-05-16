@@ -403,7 +403,7 @@ export default function NotesPage() {
             onChange={(e) => setForm({ ...form, content: e.target.value })}
           />
         </DialogContent>
-        <DialogActions sx={{ flexWrap: "wrap", gap: 1, "& > :not(style) ~ :not(style)": { ml: 0 } }}>
+        <DialogActions>
           <Button onClick={() => { setDialogOpen(false); setEditingEntry(null); }}>Cancel</Button>
           <Button onClick={handleSave} variant="contained" disabled={!form.time || !form.content}>
             Save
