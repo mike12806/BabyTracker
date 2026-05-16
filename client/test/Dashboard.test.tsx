@@ -189,12 +189,13 @@ describe("Dashboard – Recent Feedings amount display", () => {
 });
 
 describe("Dashboard – quick action buttons", () => {
-  it("renders the Feeding, Diaper, and Sleep quick action buttons", async () => {
+  it("renders the quick action buttons with their supporting text", async () => {
     render(<Dashboard />, { wrapper: Wrapper });
 
     expect(await screen.findByRole("button", { name: /^feeding$/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /^diaper$/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /^sleep$/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^note$/i })).toHaveTextContent(/quick journal/i);
   });
 
   it("opens the Add Feeding dialog when the Feeding button is clicked", async () => {

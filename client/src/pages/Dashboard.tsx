@@ -480,14 +480,15 @@ export default function Dashboard() {
               sx={{
                 position: "relative",
                 borderRadius: 3.5,
-                p: 1.5,
+                p: { xs: 1.5, sm: 1.75 },
                 bgcolor: c.tile,
                 border: `1px solid ${c.edge}`,
-                minHeight: 110,
+                minHeight: { xs: 104, sm: 110 },
                 display: "flex",
                 flexDirection: "column",
-                justifyContent: "space-between",
+                justifyContent: "flex-start",
                 alignItems: "flex-start",
+                gap: 1.25,
                 overflow: "hidden",
                 textAlign: "left",
               }}
@@ -503,7 +504,7 @@ export default function Dashboard() {
               )}
               <Box
                 sx={{
-                  width: 40, height: 40, borderRadius: "12px",
+                  width: { xs: 38, sm: 40 }, height: { xs: 38, sm: 40 }, borderRadius: "12px",
                   bgcolor: c.solid, color: isDark ? "#0c1018" : "#fff",
                   display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
                 }}
@@ -511,11 +512,11 @@ export default function Dashboard() {
                 {CAT_ICONS[tile.cat]}
               </Box>
               <Box sx={{ minWidth: 0, width: "100%" }}>
-                <Typography sx={{ fontSize: 15, fontWeight: 700, color: c.ink, letterSpacing: "-0.01em" }} noWrap>
+                <Typography sx={{ fontSize: { xs: 14, sm: 15 }, fontWeight: 700, color: c.ink, letterSpacing: "-0.01em", lineHeight: 1.2 }} noWrap>
                   {tile.label}
                 </Typography>
-                <Typography sx={{ fontSize: 12, color: c.ink, opacity: 0.72, mt: 0.25 }} noWrap>
-                  {tile.last}
+                <Typography sx={{ fontSize: { xs: 11, sm: 12 }, color: c.ink, opacity: 0.72, mt: 0.375, lineHeight: 1.25 }} noWrap>
+                  {tile.last || tile.detail}
                 </Typography>
               </Box>
             </ButtonBase>
