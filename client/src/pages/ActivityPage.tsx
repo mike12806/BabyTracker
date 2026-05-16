@@ -262,7 +262,7 @@ export default function ActivityPage() {
   const [offset, setOffset] = useState(0);
   const [activeFilter, setActiveFilter] = useState<CategoryKey | null>(null);
   const [selectedDate, setSelectedDate] = useState<Date>(() => new Date());
-  const [scope, setScope] = useState<Scope>("day");
+  const [scope, setScope] = useState<Scope>("all");
 
   const weekDates = useMemo(() => buildWeekDates(selectedDate), [selectedDate]);
   const today = useMemo(() => new Date(), []);
