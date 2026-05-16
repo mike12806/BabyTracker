@@ -332,7 +332,7 @@ export default function SleepPage() {
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
-          mb: 3,
+          mb: { xs: 1.25, md: 2 },
         }}
       >
         <Typography variant="h4">Sleep</Typography>
@@ -358,7 +358,7 @@ export default function SleepPage() {
           {/* Mobile card-row design */}
           <Box sx={{ display: { xs: "block", md: "none" } }}>
             {/* Summary stat strip */}
-            <Box sx={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 1, mb: 1.75 }}>
+            <Box sx={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 0.75, mb: 1 }}>
               <StatCard accentColor={c.solid} label="Total" value={humanDuration(todayTotalMs)} sublabel="today" />
               <StatCard accentColor={c.solid} label="Naps" value={todayNaps} sublabel="today" />
               <StatCard accentColor={c.solid} label="Last" value={lastSleep} sublabel="sleep" />
@@ -367,11 +367,11 @@ export default function SleepPage() {
             {/* Grouped log rows */}
             {[...grouped.entries()].map(([key, items]) => (
               <Box key={key}>
-                <Box sx={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", py: "14px 2px 8px" }}>
-                  <Typography sx={{ fontSize: 12, color: "text.secondary", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                <Box sx={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", pt: 1, pb: 0.5 }}>
+                  <Typography sx={{ fontSize: 10.5, color: "text.secondary", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em" }}>
                     {dateSectionLabel(items[0].start_time)}
                   </Typography>
-                  <Typography sx={{ fontSize: 11.5, color: "text.secondary", fontVariantNumeric: "tabular-nums" }}>{items.length}</Typography>
+                  <Typography sx={{ fontSize: 10.5, color: "text.secondary", fontVariantNumeric: "tabular-nums" }}>{items.length}</Typography>
                 </Box>
                 {items.map((s) => {
                   const isNap = Boolean(s.is_nap);
@@ -383,37 +383,37 @@ export default function SleepPage() {
                       key={s.id}
                       onClick={() => handleEdit(s)}
                       sx={{
-                        display: "flex", alignItems: "center", gap: 1.5, p: "12px 14px",
+                        display: "flex", alignItems: "center", gap: 1, p: "8px 10px",
                         bgcolor: "background.paper", border: 1, borderColor: "divider",
-                        borderRadius: 3, position: "relative", overflow: "hidden",
-                        boxShadow: 1, mb: 0.75, cursor: "pointer",
+                        borderRadius: 2, position: "relative", overflow: "hidden",
+                        boxShadow: 0, mb: 0.5, cursor: "pointer",
                       }}
                     >
-                      <Box sx={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, bgcolor: c.solid }} />
+                      <Box sx={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 2, bgcolor: c.solid }} />
                       <Box sx={{
-                        width: 36, height: 36, borderRadius: "11px",
+                        width: 26, height: 26, borderRadius: "8px",
                         bgcolor: c.soft, color: c.ink,
                         display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
                       }}>
-                        {isNap ? <BedtimeIcon sx={{ fontSize: 16 }} /> : <NightlightIcon sx={{ fontSize: 16 }} />}
+                        {isNap ? <BedtimeIcon sx={{ fontSize: 14 }} /> : <NightlightIcon sx={{ fontSize: 14 }} />}
                       </Box>
                       <Box sx={{ flex: 1, minWidth: 0 }}>
-                        <Typography sx={{ fontSize: 14.5, fontWeight: 600, letterSpacing: "-0.005em", color: inProgress ? "warning.main" : "text.primary" }} noWrap>
+                        <Typography sx={{ fontSize: 12.5, fontWeight: 600, letterSpacing: "-0.005em", color: inProgress ? "warning.main" : "text.primary", lineHeight: 1.2 }} noWrap>
                           {inProgress ? "In progress" : humanDuration(durationMs)} {isNap ? "(Nap)" : "(Night)"}
                         </Typography>
-                        <Typography sx={{ fontSize: 12, color: "text.secondary", mt: 0.125 }}>
+                        <Typography sx={{ fontSize: 10.5, color: "text.secondary", mt: 0, lineHeight: 1.2 }}>
                           {formatTimeRange(s.start_time, s.end_time)}
                         </Typography>
                       </Box>
-                      <Typography sx={{ fontSize: 12.5, color: "text.secondary", fontWeight: 500, fontVariantNumeric: "tabular-nums", flexShrink: 0, mr: 4 }}>
+                      <Typography sx={{ fontSize: 11, color: "text.secondary", fontWeight: 500, fontVariantNumeric: "tabular-nums", flexShrink: 0, mr: 3.25 }}>
                         {formatTimeShort(s.start_time)}
                       </Typography>
                       <IconButton
                         aria-label="more"
                         onClick={(e) => openMenu(e, s)}
-                        sx={{ position: "absolute", right: 4, top: "50%", transform: "translateY(-50%)", width: 36, height: 36 }}
+                        sx={{ position: "absolute", right: 2, top: "50%", transform: "translateY(-50%)", width: 28, height: 28, minWidth: 28, minHeight: 28 }}
                       >
-                        <MoreVertIcon sx={{ fontSize: 18 }} />
+                        <MoreVertIcon sx={{ fontSize: 16 }} />
                       </IconButton>
                     </Box>
                   );

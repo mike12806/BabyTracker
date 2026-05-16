@@ -90,47 +90,47 @@ function MetricCard({ label, value, unit, data, tileColor, solidColor, icon }: M
         bgcolor: tileColor,
         border: 1,
         borderColor: "divider",
-        borderRadius: 3,
-        boxShadow: 1,
+        borderRadius: 2,
+        boxShadow: 0,
         overflow: "hidden",
       }}
     >
-      <CardContent sx={{ p: 1.75, "&:last-child": { pb: 1.75 } }}>
-        <Stack direction="row" sx={{ alignItems: "center", justifyContent: "space-between", mb: 0.5 }}>
-          <Stack direction="row" spacing={0.75} sx={{ alignItems: "center" }}>
-            <Box sx={{ color: solidColor, display: "flex" }}>{icon}</Box>
+      <CardContent sx={{ p: 1, "&:last-child": { pb: 1 } }}>
+        <Stack direction="row" sx={{ alignItems: "center", justifyContent: "space-between", mb: 0.25 }}>
+          <Stack direction="row" spacing={0.5} sx={{ alignItems: "center" }}>
+            <Box sx={{ color: solidColor, display: "flex", "& svg": { fontSize: 14 } }}>{icon}</Box>
             <Typography
               sx={{
-                fontSize: 12,
+                fontSize: 10,
                 color: "text.secondary",
                 fontWeight: 700,
                 textTransform: "uppercase",
-                letterSpacing: "0.08em",
+                letterSpacing: "0.06em",
               }}
             >
               {label}
             </Typography>
           </Stack>
         </Stack>
-        <Stack direction="row" spacing={0.5} sx={{ alignItems: "baseline", mb: 0.25 }}>
-          <Typography variant="h5" sx={{ fontWeight: 700, lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>
+        <Stack direction="row" spacing={0.5} sx={{ alignItems: "baseline", mb: 0 }}>
+          <Typography sx={{ fontSize: 16, fontWeight: 700, lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>
             {value}
           </Typography>
-          <Typography variant="body2" sx={{ color: "text.secondary", fontWeight: 500 }}>
+          <Typography sx={{ fontSize: 11, color: "text.secondary", fontWeight: 500 }}>
             {unit}
           </Typography>
         </Stack>
-        <Box sx={{ height: 60, mx: -1 }}>
+        <Box sx={{ height: 36, mx: -1 }}>
           {data.length >= 2 ? (
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={data} margin={{ top: 4, right: 4, bottom: 4, left: 4 }}>
+              <LineChart data={data} margin={{ top: 2, right: 4, bottom: 2, left: 4 }}>
                 <Line type="monotone" dataKey="v" stroke={solidColor} strokeWidth={2} dot={false} isAnimationActive={false} />
               </LineChart>
             </ResponsiveContainer>
           ) : (
             <Box sx={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <Typography variant="caption" sx={{ color: "text.disabled" }}>
-                More data needed for trend
+              <Typography sx={{ fontSize: 10, color: "text.disabled" }}>
+                More data needed
               </Typography>
             </Box>
           )}
@@ -401,7 +401,7 @@ export default function GrowthPage() {
 
   return (
     <Box sx={{ pb: { xs: 10, md: 0 } }}>
-      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 3 }}>
+      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: { xs: 1.25, md: 2 } }}>
         <Typography variant="h4" sx={{ fontWeight: 700 }}>Growth</Typography>
         <Button
           variant="contained"
@@ -415,7 +415,7 @@ export default function GrowthPage() {
 
       {/* 3-column hero stat cards */}
       {hasAnyTrend && (
-        <Grid container spacing={2} sx={{ mb: 3 }}>
+        <Grid container spacing={1} sx={{ mb: 1.5 }}>
           {trends.weight && (
             <Grid size={{ xs: 12, sm: 4 }}>
               <MetricCard

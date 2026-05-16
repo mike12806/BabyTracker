@@ -223,7 +223,7 @@ export default function MedicationsPage() {
 
   return (
     <Box>
-      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 3 }}>
+      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: { xs: 1.25, md: 2 } }}>
         <Typography variant="h4">Medications</Typography>
         <Button
           variant="contained"
@@ -305,7 +305,7 @@ export default function MedicationsPage() {
         ) : (
           <Box sx={{ pb: 12 }}>
             {/* Summary stat strip */}
-            <Box sx={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 1, mb: 1.75 }}>
+            <Box sx={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 0.75, mb: 1 }}>
               <StatCard accentColor={c.solid} label="Today" value={todayCount} sublabel="doses" />
               <StatCard accentColor={c.solid} label="Meds" value={uniqueMedsToday} sublabel="unique today" />
               <StatCard accentColor={c.solid} label="Last" value={lastMed} sublabel="dose" />
@@ -314,44 +314,44 @@ export default function MedicationsPage() {
             {/* Grouped log rows */}
             {[...grouped.entries()].map(([key, items]) => (
               <Box key={key}>
-                <Box sx={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", py: "14px 2px 8px" }}>
-                  <Typography sx={{ fontSize: 12, color: "text.secondary", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                <Box sx={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", pt: 1, pb: 0.5 }}>
+                  <Typography sx={{ fontSize: 10.5, color: "text.secondary", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em" }}>
                     {dateSectionLabel(items[0].time)}
                   </Typography>
-                  <Typography sx={{ fontSize: 11.5, color: "text.secondary", fontVariantNumeric: "tabular-nums" }}>{items.length}</Typography>
+                  <Typography sx={{ fontSize: 10.5, color: "text.secondary", fontVariantNumeric: "tabular-nums" }}>{items.length}</Typography>
                 </Box>
                 {items.map((m) => (
                   <Box
                     key={m.id}
                     onClick={() => handleEdit(m)}
                     sx={{
-                      display: "flex", alignItems: "center", gap: 1.5, p: "12px 14px",
+                      display: "flex", alignItems: "center", gap: 1, p: "8px 10px",
                       bgcolor: "background.paper", border: 1, borderColor: "divider",
-                      borderRadius: 3, position: "relative", overflow: "hidden",
-                      boxShadow: 1, mb: 0.75, cursor: "pointer",
+                      borderRadius: 2, position: "relative", overflow: "hidden",
+                      boxShadow: 0, mb: 0.5, cursor: "pointer",
                     }}
                   >
-                    <Box sx={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, bgcolor: c.solid }} />
+                    <Box sx={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 2, bgcolor: c.solid }} />
                     <Box sx={{
-                      width: 36, height: 36, borderRadius: "11px",
+                      width: 26, height: 26, borderRadius: "8px",
                       bgcolor: c.soft, color: c.ink,
                       display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
                     }}>
-                      <MedicationIcon sx={{ fontSize: 16 }} />
+                      <MedicationIcon sx={{ fontSize: 14 }} />
                     </Box>
                     <Box sx={{ flex: 1, minWidth: 0 }}>
-                      <Typography sx={{ fontSize: 14.5, fontWeight: 600, letterSpacing: "-0.005em" }} noWrap>{formatDose(m)}</Typography>
-                      <Typography sx={{ fontSize: 12, color: "text.secondary", mt: 0.125 }} noWrap>{m.notes || "—"}</Typography>
+                      <Typography sx={{ fontSize: 12.5, fontWeight: 600, letterSpacing: "-0.005em", lineHeight: 1.2 }} noWrap>{formatDose(m)}</Typography>
+                      <Typography sx={{ fontSize: 10.5, color: "text.secondary", mt: 0, lineHeight: 1.2 }} noWrap>{m.notes || "—"}</Typography>
                     </Box>
-                    <Typography sx={{ fontSize: 12.5, color: "text.secondary", fontWeight: 500, fontVariantNumeric: "tabular-nums", flexShrink: 0, mr: 4 }}>
+                    <Typography sx={{ fontSize: 11, color: "text.secondary", fontWeight: 500, fontVariantNumeric: "tabular-nums", flexShrink: 0, mr: 3.25 }}>
                       {formatTimeShort(m.time)}
                     </Typography>
                     <IconButton
                       aria-label="more actions"
                       onClick={(e) => openMenu(e, m)}
-                      sx={{ position: "absolute", right: 4, top: "50%", transform: "translateY(-50%)", width: 36, height: 36 }}
+                      sx={{ position: "absolute", right: 2, top: "50%", transform: "translateY(-50%)", width: 28, height: 28, minWidth: 28, minHeight: 28 }}
                     >
-                      <MoreVertIcon sx={{ fontSize: 18 }} />
+                      <MoreVertIcon sx={{ fontSize: 16 }} />
                     </IconButton>
                   </Box>
                 ))}

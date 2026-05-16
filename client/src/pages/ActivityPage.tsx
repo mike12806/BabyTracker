@@ -266,7 +266,7 @@ export default function ActivityPage() {
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
-          mb: 2,
+          mb: { xs: 1.25, md: 1.5 },
         }}
       >
         <Typography variant="h4">Activity</Typography>
@@ -279,10 +279,10 @@ export default function ActivityPage() {
       <Box
         sx={{
           display: "flex",
-          gap: 1,
+          gap: 0.75,
           overflowX: "auto",
-          pb: 1,
-          mb: 2,
+          pb: 0.5,
+          mb: 1.25,
           "&::-webkit-scrollbar": { display: "none" },
           scrollbarWidth: "none",
         }}
@@ -342,8 +342,8 @@ export default function ActivityPage() {
       <Box
         sx={{
           display: "flex",
-          gap: 1,
-          mb: 3,
+          gap: 0.75,
+          mb: 1.5,
           overflowX: "auto",
           pb: 0.5,
           "&::-webkit-scrollbar": { display: "none" },

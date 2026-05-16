@@ -11,7 +11,7 @@ interface StatCardProps {
 export default function StatCard({ label, value, sublabel, accentColor }: StatCardProps) {
   const valueText = typeof value === "string" || typeof value === "number" ? String(value) : "";
   // Auto-shrink longer values so they fit without crowding the card
-  const valueFontSize = valueText.length > 8 ? 13 : valueText.length > 5 ? 15 : 18;
+  const valueFontSize = valueText.length > 8 ? 11 : valueText.length > 5 ? 13 : 15;
 
   return (
     <Box
@@ -19,23 +19,23 @@ export default function StatCard({ label, value, sublabel, accentColor }: StatCa
         bgcolor: "background.paper",
         border: 1,
         borderColor: "divider",
-        borderRadius: 2.5,
-        p: "9px 11px",
+        borderRadius: 1.25,
+        p: "5px 9px",
         position: "relative",
         overflow: "hidden",
-        boxShadow: 1,
+        boxShadow: 0,
         minWidth: 0,
       }}
     >
-      <Box sx={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, bgcolor: accentColor }} />
+      <Box sx={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 2, bgcolor: accentColor }} />
       <Typography
         sx={{
-          fontSize: 10.5,
+          fontSize: 9.5,
           color: "text.secondary",
           fontWeight: 600,
           textTransform: "uppercase",
-          letterSpacing: "0.05em",
-          lineHeight: 1.2,
+          letterSpacing: "0.04em",
+          lineHeight: 1.15,
         }}
         noWrap
       >
@@ -46,8 +46,8 @@ export default function StatCard({ label, value, sublabel, accentColor }: StatCa
           fontSize: valueFontSize,
           fontWeight: 700,
           letterSpacing: "-0.02em",
-          lineHeight: 1.15,
-          mt: 0.25,
+          lineHeight: 1.1,
+          mt: 0.125,
           fontVariantNumeric: "tabular-nums",
         }}
         noWrap
@@ -56,7 +56,7 @@ export default function StatCard({ label, value, sublabel, accentColor }: StatCa
       </Typography>
       {sublabel && (
         <Typography
-          sx={{ fontSize: 11, color: "text.secondary", lineHeight: 1.2, mt: 0.125 }}
+          sx={{ fontSize: 9.5, color: "text.secondary", lineHeight: 1.15, mt: 0 }}
           noWrap
         >
           {sublabel}

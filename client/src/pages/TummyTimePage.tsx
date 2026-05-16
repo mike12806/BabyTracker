@@ -246,7 +246,7 @@ export default function TummyTimePage() {
 
   return (
     <Box sx={{ pb: { xs: 10, md: 0 } }}>
-      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 3 }}>
+      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: { xs: 1.25, md: 2 } }}>
         <Typography variant="h4">Tummy Time</Typography>
         <Button
           variant="contained"
@@ -324,7 +324,7 @@ export default function TummyTimePage() {
         ) : (
           <Box sx={{ pb: 12 }}>
             {/* Summary stat strip */}
-            <Box sx={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 1, mb: 1.75 }}>
+            <Box sx={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 0.75, mb: 1 }}>
               <StatCard accentColor={c.solid} label="Today" value={todayCount} sublabel="sessions" />
               <StatCard accentColor={c.solid} label="Total" value={todayTotalMs > 0 ? todayTotalDuration : "—"} sublabel="today" />
               <StatCard accentColor={c.solid} label="Last" value={lastTummy} sublabel="session" />
@@ -333,11 +333,11 @@ export default function TummyTimePage() {
             {/* Grouped log rows */}
             {[...grouped.entries()].map(([key, items]) => (
               <Box key={key}>
-                <Box sx={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", py: "14px 2px 8px" }}>
-                  <Typography sx={{ fontSize: 12, color: "text.secondary", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                <Box sx={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", pt: 1, pb: 0.5 }}>
+                  <Typography sx={{ fontSize: 10.5, color: "text.secondary", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em" }}>
                     {dateSectionLabel(items[0].start_time)}
                   </Typography>
-                  <Typography sx={{ fontSize: 11.5, color: "text.secondary", fontVariantNumeric: "tabular-nums" }}>{items.length}</Typography>
+                  <Typography sx={{ fontSize: 10.5, color: "text.secondary", fontVariantNumeric: "tabular-nums" }}>{items.length}</Typography>
                 </Box>
                 {items.map((t) => {
                   const inProgress = !t.end_time;
@@ -349,35 +349,35 @@ export default function TummyTimePage() {
                       key={t.id}
                       onClick={() => handleEdit(t)}
                       sx={{
-                        display: "flex", alignItems: "center", gap: 1.5, p: "12px 14px",
+                        display: "flex", alignItems: "center", gap: 1, p: "8px 10px",
                         bgcolor: "background.paper", border: 1, borderColor: "divider",
-                        borderRadius: 3, position: "relative", overflow: "hidden",
-                        boxShadow: 1, mb: 0.75, cursor: "pointer",
+                        borderRadius: 2, position: "relative", overflow: "hidden",
+                        boxShadow: 0, mb: 0.5, cursor: "pointer",
                       }}
                     >
-                      <Box sx={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, bgcolor: c.solid }} />
+                      <Box sx={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 2, bgcolor: c.solid }} />
                       <Box sx={{
-                        width: 36, height: 36, borderRadius: "11px",
+                        width: 26, height: 26, borderRadius: "8px",
                         bgcolor: c.soft, color: c.ink,
                         display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
                       }}>
-                        {t.milestone ? <EmojiEventsIcon sx={{ fontSize: 16 }} /> : <AccessibilityNewIcon sx={{ fontSize: 16 }} />}
+                        {t.milestone ? <EmojiEventsIcon sx={{ fontSize: 14 }} /> : <AccessibilityNewIcon sx={{ fontSize: 14 }} />}
                       </Box>
                       <Box sx={{ flex: 1, minWidth: 0 }}>
-                        <Typography sx={{ fontSize: 14.5, fontWeight: 600, letterSpacing: "-0.005em", color: inProgress ? "warning.main" : "text.primary" }} noWrap>
+                        <Typography sx={{ fontSize: 12.5, fontWeight: 600, letterSpacing: "-0.005em", color: inProgress ? "warning.main" : "text.primary", lineHeight: 1.2 }} noWrap>
                           {inProgress ? "In progress" : humanDuration(t.start_time, t.end_time)}
                         </Typography>
-                        <Typography sx={{ fontSize: 12, color: "text.secondary", mt: 0.125 }} noWrap>{meta}</Typography>
+                        <Typography sx={{ fontSize: 10.5, color: "text.secondary", mt: 0, lineHeight: 1.2 }} noWrap>{meta}</Typography>
                       </Box>
-                      <Typography sx={{ fontSize: 12.5, color: "text.secondary", fontWeight: 500, fontVariantNumeric: "tabular-nums", flexShrink: 0, mr: 4 }}>
+                      <Typography sx={{ fontSize: 11, color: "text.secondary", fontWeight: 500, fontVariantNumeric: "tabular-nums", flexShrink: 0, mr: 3.25 }}>
                         {formatTimeShort(t.start_time)}
                       </Typography>
                       <IconButton
                         aria-label="more"
                         onClick={(e) => openMenu(e, t)}
-                        sx={{ position: "absolute", right: 4, top: "50%", transform: "translateY(-50%)", width: 36, height: 36 }}
+                        sx={{ position: "absolute", right: 2, top: "50%", transform: "translateY(-50%)", width: 28, height: 28, minWidth: 28, minHeight: 28 }}
                       >
-                        <MoreVertIcon sx={{ fontSize: 18 }} />
+                        <MoreVertIcon sx={{ fontSize: 16 }} />
                       </IconButton>
                     </Box>
                   );
