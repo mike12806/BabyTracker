@@ -377,7 +377,7 @@ export default function NotesPage() {
               margin="dense"
               label="Time"
               type="datetime-local"
-              sx={{ flex: 1 }}
+              sx={{ flex: 1, minWidth: 0 }}
               required
               slotProps={{ inputLabel: { shrink: true } }}
               value={form.time}
@@ -403,7 +403,7 @@ export default function NotesPage() {
             onChange={(e) => setForm({ ...form, content: e.target.value })}
           />
         </DialogContent>
-        <DialogActions>
+        <DialogActions sx={{ flexWrap: "wrap", gap: 1, "& > :not(style) ~ :not(style)": { ml: 0 } }}>
           <Button onClick={() => { setDialogOpen(false); setEditingEntry(null); }}>Cancel</Button>
           <Button onClick={handleSave} variant="contained" disabled={!form.time || !form.content}>
             Save

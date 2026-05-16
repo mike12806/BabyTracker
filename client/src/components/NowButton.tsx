@@ -25,7 +25,7 @@ export default function NowButton({ onSetNow, type = "datetime" }: NowButtonProp
       size="small"
       variant="outlined"
       onClick={() => onSetNow(type === "date" ? todayLocalDate() : nowLocalDatetime())}
-      sx={{ mt: 1, minWidth: "auto", whiteSpace: "nowrap" }}
+      sx={{ mt: 1, minWidth: "auto", px: 1.25, whiteSpace: "nowrap", flexShrink: 0 }}
     >
       {type === "date" ? "Today" : "Now"}
     </Button>
