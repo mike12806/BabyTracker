@@ -35,6 +35,7 @@ import { useChildren } from "../hooks/useChildren";
 import { useNotification } from "../hooks/useNotification";
 import NowButton from "../components/NowButton";
 import { FAB_BOTTOM_OFFSET } from "../components/Layout";
+import StatCard from "../components/StatCard";
 
 import NoChildPlaceholder from "../components/NoChildPlaceholder";
 
@@ -298,33 +299,9 @@ export default function TemperaturePage() {
           <Box sx={{ pb: 12 }}>
             {/* Summary stat strip */}
             <Box sx={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 1, mb: 1.75 }}>
-              <Box sx={{
-                bgcolor: "background.paper", border: 1, borderColor: "divider",
-                borderRadius: 3, p: "10px 12px", position: "relative", overflow: "hidden", boxShadow: 1,
-              }}>
-                <Box sx={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, bgcolor: c.solid }} />
-                <Typography sx={{ fontSize: 10, color: "text.secondary", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>Today</Typography>
-                <Typography sx={{ fontSize: 20, fontWeight: 700, letterSpacing: "-0.025em", mt: 0.125, fontVariantNumeric: "tabular-nums" }}>{todayCount}</Typography>
-                <Typography sx={{ fontSize: 10.5, color: "text.secondary", mt: 0.125 }}>readings</Typography>
-              </Box>
-              <Box sx={{
-                bgcolor: "background.paper", border: 1, borderColor: "divider",
-                borderRadius: 3, p: "10px 12px", position: "relative", overflow: "hidden", boxShadow: 1,
-              }}>
-                <Box sx={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, bgcolor: c.solid }} />
-                <Typography sx={{ fontSize: 10, color: "text.secondary", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>Latest</Typography>
-                <Typography sx={{ fontSize: latestReading.length > 5 ? 15 : 20, fontWeight: 700, letterSpacing: "-0.025em", mt: 0.125, fontVariantNumeric: "tabular-nums" }} noWrap>{latestReading}</Typography>
-                <Typography sx={{ fontSize: 10.5, color: "text.secondary", mt: 0.125 }}>reading</Typography>
-              </Box>
-              <Box sx={{
-                bgcolor: "background.paper", border: 1, borderColor: "divider",
-                borderRadius: 3, p: "10px 12px", position: "relative", overflow: "hidden", boxShadow: 1,
-              }}>
-                <Box sx={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, bgcolor: c.solid }} />
-                <Typography sx={{ fontSize: 10, color: "text.secondary", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>Last</Typography>
-                <Typography sx={{ fontSize: lastTime.length > 5 ? 15 : 20, fontWeight: 700, letterSpacing: "-0.025em", mt: 0.125, fontVariantNumeric: "tabular-nums" }} noWrap>{lastTime}</Typography>
-                <Typography sx={{ fontSize: 10.5, color: "text.secondary", mt: 0.125 }}>check</Typography>
-              </Box>
+              <StatCard accentColor={c.solid} label="Today" value={todayCount} sublabel="readings" />
+              <StatCard accentColor={c.solid} label="Latest" value={latestReading} sublabel="reading" />
+              <StatCard accentColor={c.solid} label="Last" value={lastTime} sublabel="check" />
             </Box>
 
             {/* Grouped log rows */}

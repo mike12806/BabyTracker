@@ -23,6 +23,8 @@ import type {
 } from "../types/models";
 
 const CHART_HEIGHT = 300;
+const CHART_MARGIN = { top: 8, right: 16, bottom: 4, left: 4 };
+const TICK_STYLE = { fontSize: 11 };
 
 /** Build an array of YYYY-MM-DD strings for the last N days in local time */
 export function lastNDays(n: number): string[] {
@@ -96,16 +98,17 @@ export function FeedingChart({ feedings, days = 14 }: FeedingChartProps) {
 
   return (
     <ResponsiveContainer width="100%" height={CHART_HEIGHT}>
-      <ComposedChart data={data}>
+      <ComposedChart data={data} margin={CHART_MARGIN}>
         <CartesianGrid strokeDasharray="3 3" stroke={theme.palette.divider} />
-        <XAxis dataKey="date" tick={{ fontSize: 12 }} />
-        <YAxis yAxisId="count" allowDecimals={false} tick={{ fontSize: 12 }} />
+        <XAxis dataKey="date" tick={TICK_STYLE} tickMargin={6} />
+        <YAxis yAxisId="count" allowDecimals={false} tick={TICK_STYLE} width={28} />
         {hasAmount && (
           <YAxis
             yAxisId="amount"
             orientation="right"
-            tick={{ fontSize: 12 }}
+            tick={TICK_STYLE}
             unit={unit ?? undefined}
+            width={36}
           />
         )}
         <Tooltip
@@ -169,10 +172,10 @@ export function DiaperChart({ diapers, days = 14 }: DiaperChartProps) {
 
   return (
     <ResponsiveContainer width="100%" height={CHART_HEIGHT}>
-      <BarChart data={data}>
+      <BarChart data={data} margin={CHART_MARGIN}>
         <CartesianGrid strokeDasharray="3 3" stroke={theme.palette.divider} />
-        <XAxis dataKey="date" tick={{ fontSize: 12 }} />
-        <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
+        <XAxis dataKey="date" tick={TICK_STYLE} tickMargin={6} />
+        <YAxis allowDecimals={false} tick={TICK_STYLE} width={28} />
         <Tooltip
           contentStyle={{
             backgroundColor: theme.palette.background.paper,
@@ -223,10 +226,10 @@ export function SleepChart({ sleeps, days = 14 }: SleepChartProps) {
 
   return (
     <ResponsiveContainer width="100%" height={CHART_HEIGHT}>
-      <BarChart data={data}>
+      <BarChart data={data} margin={CHART_MARGIN}>
         <CartesianGrid strokeDasharray="3 3" stroke={theme.palette.divider} />
-        <XAxis dataKey="date" tick={{ fontSize: 12 }} />
-        <YAxis tick={{ fontSize: 12 }} unit="h" />
+        <XAxis dataKey="date" tick={TICK_STYLE} tickMargin={6} />
+        <YAxis tick={TICK_STYLE} unit="h" width={32} />
         <Tooltip
           contentStyle={{
             backgroundColor: theme.palette.background.paper,
@@ -275,10 +278,10 @@ export function TummyTimeChart({ tummyTimes, days = 14 }: TummyTimeChartProps) {
 
   return (
     <ResponsiveContainer width="100%" height={CHART_HEIGHT}>
-      <BarChart data={data}>
+      <BarChart data={data} margin={CHART_MARGIN}>
         <CartesianGrid strokeDasharray="3 3" stroke={theme.palette.divider} />
-        <XAxis dataKey="date" tick={{ fontSize: 12 }} />
-        <YAxis tick={{ fontSize: 12 }} unit="m" />
+        <XAxis dataKey="date" tick={TICK_STYLE} tickMargin={6} />
+        <YAxis tick={TICK_STYLE} unit="m" width={36} />
         <Tooltip
           contentStyle={{
             backgroundColor: theme.palette.background.paper,
@@ -324,10 +327,10 @@ export function PumpingChart({ pumpings, days = 14 }: PumpingChartProps) {
 
   return (
     <ResponsiveContainer width="100%" height={CHART_HEIGHT}>
-      <BarChart data={data}>
+      <BarChart data={data} margin={CHART_MARGIN}>
         <CartesianGrid strokeDasharray="3 3" stroke={theme.palette.divider} />
-        <XAxis dataKey="date" tick={{ fontSize: 12 }} />
-        <YAxis tick={{ fontSize: 12 }} unit={unit} />
+        <XAxis dataKey="date" tick={TICK_STYLE} tickMargin={6} />
+        <YAxis tick={TICK_STYLE} unit={unit} width={36} />
         <Tooltip
           contentStyle={{
             backgroundColor: theme.palette.background.paper,
@@ -370,10 +373,10 @@ export function GrowthChart({ growths }: GrowthChartProps) {
 
   return (
     <ResponsiveContainer width="100%" height={CHART_HEIGHT}>
-      <LineChart data={data}>
+      <LineChart data={data} margin={CHART_MARGIN}>
         <CartesianGrid strokeDasharray="3 3" stroke={theme.palette.divider} />
-        <XAxis dataKey="date" tick={{ fontSize: 12 }} />
-        <YAxis tick={{ fontSize: 12 }} />
+        <XAxis dataKey="date" tick={TICK_STYLE} tickMargin={6} />
+        <YAxis tick={TICK_STYLE} width={32} />
         <Tooltip
           contentStyle={{
             backgroundColor: theme.palette.background.paper,
