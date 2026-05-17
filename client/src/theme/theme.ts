@@ -43,6 +43,16 @@ export function buildTheme(mode: Mode) {
   const borderColor = isLight
     ? "rgba(15, 23, 42, 0.08)"
     : "rgba(255, 255, 255, 0.07)";
+  const surfacePaper = isLight ? "#ffffff" : "#161b27";
+  const selectedBg = isLight
+    ? "rgba(91, 93, 255, 0.10)"
+    : "rgba(165, 180, 252, 0.14)";
+  const selectedHoverBg = isLight
+    ? "rgba(91, 93, 255, 0.16)"
+    : "rgba(165, 180, 252, 0.22)";
+  const hoverBg = isLight
+    ? "rgba(15, 23, 42, 0.04)"
+    : "rgba(255, 255, 255, 0.05)";
 
   return createTheme({
     palette: {
@@ -99,7 +109,21 @@ export function buildTheme(mode: Mode) {
         },
       },
       MuiPaper: {
-        styleOverrides: { rounded: { borderRadius: 16 } },
+        styleOverrides: {
+          rounded: { borderRadius: 16 },
+          root: {
+            backgroundImage: "none",
+          },
+        },
+      },
+      MuiDrawer: {
+        styleOverrides: {
+          paper: {
+            backgroundImage: "none",
+            backgroundColor: surfacePaper,
+            borderRight: isLight ? `1px solid ${borderColor}` : "none",
+          },
+        },
       },
       MuiAppBar: {
         defaultProps: { elevation: 0 },
@@ -123,7 +147,74 @@ export function buildTheme(mode: Mode) {
         styleOverrides: { root: { fontWeight: 500 } },
       },
       MuiDialog: {
-        styleOverrides: { paper: { borderRadius: 20 } },
+        styleOverrides: {
+          paper: {
+            borderRadius: 20,
+            backgroundImage: "none",
+            backgroundColor: surfacePaper,
+            border: `1px solid ${borderColor}`,
+          },
+        },
+      },
+      MuiDialogTitle: {
+        styleOverrides: {
+          root: {
+            fontWeight: 700,
+            fontSize: "1.1rem",
+            letterSpacing: "-0.01em",
+            padding: "20px 24px 8px",
+          },
+        },
+      },
+      MuiDialogContent: {
+        styleOverrides: {
+          root: {
+            padding: "8px 24px 16px",
+            "&.MuiDialogContent-dividers": { padding: "16px 24px" },
+          },
+        },
+      },
+      MuiMenu: {
+        styleOverrides: {
+          paper: {
+            backgroundImage: "none",
+            backgroundColor: surfacePaper,
+            border: `1px solid ${borderColor}`,
+          },
+        },
+      },
+      MuiPopover: {
+        styleOverrides: {
+          paper: {
+            backgroundImage: "none",
+            backgroundColor: surfacePaper,
+          },
+        },
+      },
+      MuiListItemButton: {
+        styleOverrides: {
+          root: {
+            borderRadius: 10,
+            marginInline: 8,
+            paddingInline: 12,
+            "&.Mui-selected": {
+              backgroundColor: selectedBg,
+              "&:hover": { backgroundColor: selectedHoverBg },
+            },
+            "&:hover": { backgroundColor: hoverBg },
+          },
+        },
+      },
+      MuiListItemIcon: {
+        styleOverrides: {
+          root: {
+            minWidth: 36,
+            color: isLight ? "#6a7080" : "#8a93a4",
+            ".Mui-selected &": {
+              color: isLight ? "#5b5dff" : "#a5b4fc",
+            },
+          },
+        },
       },
       MuiDialogActions: {
         styleOverrides: {
