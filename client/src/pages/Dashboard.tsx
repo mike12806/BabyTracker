@@ -593,11 +593,19 @@ export default function Dashboard() {
         <Typography sx={{ fontSize: 11, color: "text.secondary", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em" }}>
           To-do · {activeTodos.length} active
         </Typography>
-        {overdueCount > 0 && (
-          <Typography sx={{ fontSize: 11, color: cat.temp.solid, fontWeight: 600 }}>
-            {overdueCount} overdue
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+          {overdueCount > 0 && (
+            <Typography sx={{ fontSize: 11, color: cat.temp.solid, fontWeight: 600 }}>
+              {overdueCount} overdue
+            </Typography>
+          )}
+          <Typography
+            onClick={() => navigate("/todos")}
+            sx={{ fontSize: 11, color: "text.secondary", display: "flex", alignItems: "center", gap: 0.25, cursor: "pointer" }}
+          >
+            View to-dos <ChevronRightIcon sx={{ fontSize: 13 }} />
           </Typography>
-        )}
+        </Box>
       </Box>
 
       <Box
