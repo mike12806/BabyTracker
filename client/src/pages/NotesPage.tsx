@@ -3,7 +3,6 @@ import {
   Box,
   Button,
   Card,
-  CardActionArea,
   CardContent,
   Chip,
   Dialog,
@@ -15,7 +14,12 @@ import {
   InputAdornment,
   Menu,
   MenuItem,
-  Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
   TextField,
   Typography,
   useMediaQuery,
@@ -54,20 +58,6 @@ function relativeTime(iso: string): string {
   if (dayDiff === 1) return "Yesterday";
   if (dayDiff < 7) return `${dayDiff}d ago`;
   return then.toLocaleDateString(undefined, { month: "short", day: "numeric" });
-}
-
-function formatTime(iso: string): string {
-  const d = new Date(iso);
-  const now = new Date();
-  const time = d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
-  const dayDiff = Math.round(
-    (new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() -
-      new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()) /
-      86400000,
-  );
-  if (dayDiff === 0) return `Today ${time}`;
-  if (dayDiff === 1) return `Yesterday ${time}`;
-  return d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" }) + `, ${time}`;
 }
 
 type NoteTag = "milestone" | "health" | "pattern" | "general";
@@ -190,8 +180,8 @@ export default function NotesPage() {
   if (!selectedChild) return <NoChildPlaceholder />;
 
   return (
-    <Box>
-      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
+    <Box sx={{ pb: { xs: 10, md: 0 } }}>
+      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: { xs: 1.25, md: 2 } }}>
         <Typography variant="h4">Notes</Typography>
         <Button
           variant="contained"
@@ -211,7 +201,7 @@ export default function NotesPage() {
         onChange={(e) => setSearchQuery(e.target.value)}
         fullWidth
         sx={{
-          mb: 2.5,
+          mb: 2,
           "& .MuiOutlinedInput-root": {
             bgcolor: "background.paper",
             borderRadius: 3,
@@ -233,123 +223,213 @@ export default function NotesPage() {
         }}
       />
 
-      {/* Note cards */}
-      {filtered.length === 0 ? (
-        <Box sx={{ textAlign: "center", py: 8, px: 3, color: "text.secondary" }}>
-          <NoteIcon sx={{ fontSize: 72, opacity: 0.25, mb: 2 }} />
-          <Typography variant="h6" gutterBottom>
-            {searchQuery ? "No matching notes" : "No notes yet"}
-          </Typography>
-          <Typography variant="body2">
-            {searchQuery ? "Try a different search term." : "Tap + to write the first one."}
-          </Typography>
-        </Box>
-      ) : (
-        <Stack sx={{ gap: 1.5, pb: 12 }}>
-          {filtered.map((n) => {
-            const tag = inferTag(n);
-            const tc = tagColor(tag);
-            return (
-              <Card
-                key={n.id}
-                sx={{
-                  bgcolor: "background.paper",
-                  border: 1,
-                  borderColor: "divider",
-                  borderRadius: 3,
-                  boxShadow: 1,
-                  overflow: "hidden",
-                }}
-              >
-                <CardActionArea onClick={() => handleEdit(n)}>
-                  <Box sx={{ display: "flex" }}>
-                    {/* Color gutter */}
-                    <Box
-                      sx={{
-                        width: 3,
-                        flexShrink: 0,
-                        bgcolor: tc.solid,
-                      }}
-                    />
-                    <CardContent sx={{ py: 1.75, px: 2, flex: 1, "&:last-child": { pb: 1.75 } }}>
-                      <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1 }}>
-                        <Box sx={{ flex: 1, minWidth: 0 }}>
-                          <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.5 }}>
-                            <Chip
-                              label={tagLabel(tag)}
-                              size="small"
-                              sx={{
-                                bgcolor: tc.soft,
-                                color: tc.ink,
-                                fontWeight: 600,
-                                fontSize: 11,
-                                height: 22,
-                                border: 1,
-                                borderColor: tc.edge,
-                              }}
-                            />
-                            <Typography
-                              variant="caption"
-                              sx={{
-                                color: "text.secondary",
-                                whiteSpace: "nowrap",
-                                fontVariantNumeric: "tabular-nums",
-                                ml: "auto",
-                              }}
-                            >
-                              {relativeTime(n.time)}
-                            </Typography>
-                          </Box>
-                          <Typography
-                            variant="subtitle2"
-                            sx={{ fontWeight: 600, lineHeight: 1.3, mb: 0.25 }}
-                            noWrap
-                          >
-                            {n.title || "Note"}
-                          </Typography>
-                          <Typography
-                            variant="body2"
-                            color="text.secondary"
+      {/* Desktop table */}
+      <Box sx={{ display: { xs: "none", md: "block" } }}>
+        <Card>
+          <CardContent>
+            <TableContainer>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Time</TableCell>
+                    <TableCell>Tag</TableCell>
+                    <TableCell>Title</TableCell>
+                    <TableCell>Content</TableCell>
+                    <TableCell align="right" />
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {filtered.map((n) => {
+                    const tag = inferTag(n);
+                    const tc = tagColor(tag);
+                    return (
+                      <TableRow
+                        key={n.id}
+                        hover
+                        onClick={() => handleEdit(n)}
+                        sx={{ cursor: "pointer" }}
+                      >
+                        <TableCell>{new Date(n.time).toLocaleString()}</TableCell>
+                        <TableCell>
+                          <Chip
+                            label={tagLabel(tag)}
+                            size="small"
                             sx={{
-                              display: "-webkit-box",
-                              WebkitLineClamp: 2,
-                              WebkitBoxOrient: "vertical",
-                              overflow: "hidden",
-                              whiteSpace: "pre-wrap",
-                              mb: 0.5,
+                              bgcolor: tc.soft,
+                              color: tc.ink,
+                              fontWeight: 600,
+                              fontSize: 11,
+                              height: 22,
+                              border: 1,
+                              borderColor: tc.edge,
                             }}
-                          >
-                            {n.content}
-                          </Typography>
-                          <Typography
-                            variant="caption"
-                            sx={{ color: "text.disabled", fontVariantNumeric: "tabular-nums" }}
-                          >
-                            {formatTime(n.time)}
-                          </Typography>
-                        </Box>
-                        <IconButton
-                          aria-label="More actions"
-                          onClick={(e) => openMenu(e, n)}
-                          sx={{ minWidth: 44, minHeight: 44, mt: -0.5, mr: -1 }}
+                          />
+                        </TableCell>
+                        <TableCell sx={{ fontWeight: 500 }}>{n.title || "—"}</TableCell>
+                        <TableCell
+                          sx={{
+                            maxWidth: 380,
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                            color: "text.secondary",
+                          }}
                         >
-                          <MoreVertIcon />
-                        </IconButton>
-                      </Box>
-                    </CardContent>
+                          {n.content}
+                        </TableCell>
+                        <TableCell align="right" onClick={(e) => e.stopPropagation()}>
+                          <IconButton size="small" onClick={() => handleEdit(n)}>
+                            <EditIcon fontSize="small" />
+                          </IconButton>
+                          <IconButton size="small" onClick={() => handleDelete(n.id)}>
+                            <DeleteIcon fontSize="small" />
+                          </IconButton>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                  {filtered.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={5} align="center">
+                        <Typography color="text.secondary">
+                          {searchQuery ? "No matching notes." : "No notes yet."}
+                        </Typography>
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </CardContent>
+        </Card>
+      </Box>
+
+      {/* Mobile card-row design */}
+      <Box sx={{ display: { xs: "block", md: "none" } }}>
+        {filtered.length === 0 ? (
+          <Box sx={{ textAlign: "center", py: 8, px: 3, color: "text.secondary" }}>
+            <NoteIcon sx={{ fontSize: 72, opacity: 0.25, mb: 2 }} />
+            <Typography variant="h6" gutterBottom>
+              {searchQuery ? "No matching notes" : "No notes yet"}
+            </Typography>
+            <Typography variant="body2">
+              {searchQuery ? "Try a different search term." : "Tap + to write the first one."}
+            </Typography>
+          </Box>
+        ) : (
+          <Box sx={{ pb: 12 }}>
+            {filtered.map((n) => {
+              const tag = inferTag(n);
+              const tc = tagColor(tag);
+              return (
+                <Box
+                  key={n.id}
+                  onClick={() => handleEdit(n)}
+                  sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 1,
+                    p: "8px 10px",
+                    bgcolor: "background.paper",
+                    border: 1,
+                    borderColor: "divider",
+                    borderLeftWidth: 3,
+                    borderLeftColor: tc.solid,
+                    borderRadius: 2,
+                    position: "relative",
+                    overflow: "hidden",
+                    boxShadow: 0,
+                    mb: 0.5,
+                    cursor: "pointer",
+                  }}
+                >
+                  <Box
+                    sx={{
+                      width: 26,
+                      height: 26,
+                      borderRadius: "8px",
+                      bgcolor: tc.soft,
+                      color: tc.ink,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      flexShrink: 0,
+                      ml: 0.25,
+                    }}
+                  >
+                    <NoteIcon sx={{ fontSize: 14 }} />
                   </Box>
-                </CardActionArea>
-              </Card>
-            );
-          })}
-        </Stack>
-      )}
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Typography
+                      sx={{
+                        fontSize: 12.5,
+                        fontWeight: 600,
+                        letterSpacing: "-0.005em",
+                        lineHeight: 1.2,
+                      }}
+                      noWrap
+                    >
+                      {n.title || "Note"}
+                    </Typography>
+                    <Typography
+                      sx={{ fontSize: 10.5, color: "text.secondary", mt: 0, lineHeight: 1.2 }}
+                      noWrap
+                    >
+                      {n.content}
+                    </Typography>
+                  </Box>
+                  <Typography
+                    sx={{
+                      fontSize: 11,
+                      color: "text.secondary",
+                      fontWeight: 500,
+                      fontVariantNumeric: "tabular-nums",
+                      flexShrink: 0,
+                      mr: 3.25,
+                    }}
+                  >
+                    {relativeTime(n.time)}
+                  </Typography>
+                  <IconButton
+                    aria-label="More actions"
+                    onClick={(e) => openMenu(e, n)}
+                    sx={{
+                      position: "absolute",
+                      right: 2,
+                      top: "50%",
+                      transform: "translateY(-50%)",
+                      width: 28,
+                      height: 28,
+                      minWidth: 28,
+                      minHeight: 28,
+                    }}
+                  >
+                    <MoreVertIcon sx={{ fontSize: 16 }} />
+                  </IconButton>
+                </Box>
+              );
+            })}
+          </Box>
+        )}
+      </Box>
 
       <Menu anchorEl={menuAnchor} open={Boolean(menuAnchor)} onClose={closeMenu}>
-        <MenuItem onClick={() => { if (menuEntry) handleEdit(menuEntry); closeMenu(); }}>
+        <MenuItem
+          onClick={() => {
+            if (menuEntry) handleEdit(menuEntry);
+            closeMenu();
+          }}
+          sx={{ minHeight: 44 }}
+        >
           <EditIcon fontSize="small" sx={{ mr: 1 }} /> Edit
         </MenuItem>
-        <MenuItem onClick={() => { if (menuEntry) handleDelete(menuEntry.id); closeMenu(); }}>
+        <MenuItem
+          onClick={() => {
+            if (menuEntry) handleDelete(menuEntry.id);
+            closeMenu();
+          }}
+          sx={{ minHeight: 44, color: "error.main" }}
+        >
           <DeleteIcon fontSize="small" sx={{ mr: 1 }} /> Delete
         </MenuItem>
       </Menu>
