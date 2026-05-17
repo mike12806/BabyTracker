@@ -3,7 +3,6 @@ import {
   Box,
   Button,
   Card,
-  CardActionArea,
   CardContent,
   Checkbox,
   Chip,
@@ -18,7 +17,12 @@ import {
   Menu,
   MenuItem,
   Select,
-  Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
   TextField,
   Typography,
   useMediaQuery,
@@ -210,8 +214,8 @@ export default function TodosPage() {
   ];
 
   return (
-    <Box>
-      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
+    <Box sx={{ pb: { xs: 10, md: 0 } }}>
+      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: { xs: 1.25, md: 2 } }}>
         <Typography variant="h4">To-Do</Typography>
         <Button
           variant="contained"
@@ -228,7 +232,7 @@ export default function TodosPage() {
         sx={{
           display: "flex",
           gap: 1,
-          mb: 2.5,
+          mb: 2,
           overflowX: "auto",
           pb: 0.5,
           "&::-webkit-scrollbar": { display: "none" },
@@ -307,122 +311,228 @@ export default function TodosPage() {
         </Box>
       )}
 
-      {/* Todo cards */}
-      {filtered.length === 0 ? (
-        <Box sx={{ textAlign: "center", py: 8, px: 3, color: "text.secondary" }}>
-          <ChecklistIcon sx={{ fontSize: 72, opacity: 0.25, mb: 2 }} />
-          <Typography variant="h6" gutterBottom>
-            {filterTab === "active" ? "All caught up!" : filterTab === "completed" ? "No completed tasks yet." : "Nothing here yet."}
-          </Typography>
-          <Typography variant="body2">
-            {filterTab === "active" ? "No active tasks." : "Tap + to add a task."}
-          </Typography>
-        </Box>
-      ) : (
-        <Stack sx={{ gap: 1.5, pb: 12 }}>
-          {filtered.map((todo) => {
-            const completed = !!todo.completed;
-            const overdue = isOverdue(todo);
-            return (
-              <Card
-                key={todo.id}
-                sx={{
-                  bgcolor: "background.paper",
-                  border: 1,
-                  borderColor: "divider",
-                  borderRadius: 3,
-                  boxShadow: 1,
-                  opacity: completed ? 0.65 : 1,
-                  overflow: "hidden",
-                }}
-              >
-                <CardActionArea onClick={() => openEdit(todo)}>
-                  <Box sx={{ display: "flex" }}>
-                    {/* Priority left gutter */}
-                    <Box
-                      sx={{
-                        width: 3,
-                        flexShrink: 0,
-                        bgcolor: priorityColor(todo.priority),
-                      }}
-                    />
-                    <CardContent sx={{ py: 1.5, px: 2, flex: 1, "&:last-child": { pb: 1.5 } }}>
-                      <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1 }}>
-                        <Checkbox
-                          checked={completed}
-                          onChange={(e) => { e.stopPropagation(); handleToggle(todo); }}
-                          onClick={(e) => e.stopPropagation()}
-                          sx={{ mt: -0.5, ml: -1, color: priorityColor(todo.priority), "&.Mui-checked": { color: priorityColor(todo.priority) } }}
-                        />
-                        <Box sx={{ flex: 1, minWidth: 0 }}>
-                          <Typography
-                            variant="body1"
+      {/* Desktop table */}
+      <Box sx={{ display: { xs: "none", md: "block" } }}>
+        <Card>
+          <CardContent>
+            <TableContainer>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell padding="checkbox" />
+                    <TableCell>Title</TableCell>
+                    <TableCell>Priority</TableCell>
+                    <TableCell>Due</TableCell>
+                    <TableCell>Notes</TableCell>
+                    <TableCell align="right" />
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {filtered.map((todo) => {
+                    const completed = !!todo.completed;
+                    const overdue = isOverdue(todo);
+                    return (
+                      <TableRow
+                        key={todo.id}
+                        hover
+                        onClick={() => openEdit(todo)}
+                        sx={{ cursor: "pointer", opacity: completed ? 0.6 : 1 }}
+                      >
+                        <TableCell padding="checkbox" onClick={(e) => e.stopPropagation()}>
+                          <Checkbox
+                            checked={completed}
+                            onChange={() => handleToggle(todo)}
                             sx={{
-                              fontWeight: 500,
-                              textDecoration: completed ? "line-through" : "none",
-                              lineHeight: 1.3,
+                              color: priorityColor(todo.priority),
+                              "&.Mui-checked": { color: priorityColor(todo.priority) },
                             }}
-                            noWrap
-                          >
-                            {todo.title}
-                          </Typography>
-                          {todo.notes && (
-                            <Typography
-                              variant="body2"
-                              color="text.secondary"
-                              sx={{
-                                display: "-webkit-box",
-                                WebkitLineClamp: 2,
-                                WebkitBoxOrient: "vertical",
-                                overflow: "hidden",
-                                mt: 0.25,
-                              }}
-                            >
-                              {todo.notes}
-                            </Typography>
-                          )}
-                          <Box sx={{ display: "flex", gap: 1, mt: 0.75, flexWrap: "wrap", alignItems: "center" }}>
-                            <Chip
-                              label={priorityLabel(todo.priority)}
-                              size="small"
-                              sx={{
-                                bgcolor: priorityColor(todo.priority),
-                                color: "#fff",
-                                fontWeight: 600,
-                                fontSize: 11,
-                                height: 22,
-                              }}
-                            />
-                            {todo.due_date && (
-                              <Typography
-                                variant="caption"
-                                sx={{
-                                  fontWeight: overdue ? 700 : 400,
-                                  color: overdue ? cat.temp.solid : "text.secondary",
-                                  fontVariantNumeric: "tabular-nums",
-                                }}
-                              >
-                                {formatDueDate(todo.due_date)}
-                              </Typography>
-                            )}
-                          </Box>
-                        </Box>
-                        <IconButton
-                          aria-label="More actions"
-                          onClick={(e) => openMenu(e, todo)}
-                          sx={{ minWidth: 44, minHeight: 44, mt: -0.5, mr: -1 }}
+                          />
+                        </TableCell>
+                        <TableCell
+                          sx={{
+                            fontWeight: 500,
+                            textDecoration: completed ? "line-through" : "none",
+                          }}
                         >
-                          <MoreVertIcon />
-                        </IconButton>
-                      </Box>
-                    </CardContent>
+                          {todo.title}
+                        </TableCell>
+                        <TableCell>
+                          <Chip
+                            label={priorityLabel(todo.priority)}
+                            size="small"
+                            sx={{
+                              bgcolor: priorityColor(todo.priority),
+                              color: "#fff",
+                              fontWeight: 600,
+                              fontSize: 11,
+                              height: 22,
+                            }}
+                          />
+                        </TableCell>
+                        <TableCell
+                          sx={{
+                            fontWeight: overdue ? 700 : 400,
+                            color: overdue ? cat.temp.solid : "text.primary",
+                            fontVariantNumeric: "tabular-nums",
+                          }}
+                        >
+                          {todo.due_date ? formatDueDate(todo.due_date) : "—"}
+                        </TableCell>
+                        <TableCell
+                          sx={{
+                            maxWidth: 320,
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                            color: "text.secondary",
+                          }}
+                        >
+                          {todo.notes || "—"}
+                        </TableCell>
+                        <TableCell align="right" onClick={(e) => e.stopPropagation()}>
+                          <IconButton size="small" onClick={() => openEdit(todo)}>
+                            <EditIcon fontSize="small" />
+                          </IconButton>
+                          <IconButton size="small" onClick={() => handleDelete(todo.id)}>
+                            <DeleteIcon fontSize="small" />
+                          </IconButton>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                  {filtered.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={6} align="center">
+                        <Typography color="text.secondary">
+                          {filterTab === "active"
+                            ? "No active tasks."
+                            : filterTab === "completed"
+                              ? "No completed tasks yet."
+                              : "Nothing here yet."}
+                        </Typography>
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </CardContent>
+        </Card>
+      </Box>
+
+      {/* Mobile card-row design */}
+      <Box sx={{ display: { xs: "block", md: "none" } }}>
+        {filtered.length === 0 ? (
+          <Box sx={{ textAlign: "center", py: 8, px: 3, color: "text.secondary" }}>
+            <ChecklistIcon sx={{ fontSize: 72, opacity: 0.25, mb: 2 }} />
+            <Typography variant="h6" gutterBottom>
+              {filterTab === "active"
+                ? "All caught up!"
+                : filterTab === "completed"
+                  ? "No completed tasks yet."
+                  : "Nothing here yet."}
+            </Typography>
+            <Typography variant="body2">
+              {filterTab === "active" ? "No active tasks." : "Tap + to add a task."}
+            </Typography>
+          </Box>
+        ) : (
+          <Box sx={{ pb: 12 }}>
+            {filtered.map((todo) => {
+              const completed = !!todo.completed;
+              const overdue = isOverdue(todo);
+              const pColor = priorityColor(todo.priority);
+              return (
+                <Box
+                  key={todo.id}
+                  onClick={() => openEdit(todo)}
+                  sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 1,
+                    p: "8px 10px",
+                    bgcolor: "background.paper",
+                    border: 1,
+                    borderColor: "divider",
+                    borderLeftWidth: 3,
+                    borderLeftColor: pColor,
+                    borderRadius: 2,
+                    position: "relative",
+                    overflow: "hidden",
+                    boxShadow: 0,
+                    mb: 0.5,
+                    cursor: "pointer",
+                    opacity: completed ? 0.6 : 1,
+                  }}
+                >
+                  <Checkbox
+                    checked={completed}
+                    onChange={() => handleToggle(todo)}
+                    onClick={(e) => e.stopPropagation()}
+                    size="small"
+                    sx={{
+                      p: 0.5,
+                      ml: 0.25,
+                      color: pColor,
+                      "&.Mui-checked": { color: pColor },
+                    }}
+                  />
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Typography
+                      sx={{
+                        fontSize: 12.5,
+                        fontWeight: 600,
+                        letterSpacing: "-0.005em",
+                        lineHeight: 1.2,
+                        textDecoration: completed ? "line-through" : "none",
+                      }}
+                      noWrap
+                    >
+                      {todo.title}
+                    </Typography>
+                    <Typography
+                      sx={{ fontSize: 10.5, color: "text.secondary", mt: 0, lineHeight: 1.2 }}
+                      noWrap
+                    >
+                      {todo.notes || priorityLabel(todo.priority)}
+                    </Typography>
                   </Box>
-                </CardActionArea>
-              </Card>
-            );
-          })}
-        </Stack>
-      )}
+                  {todo.due_date && (
+                    <Typography
+                      sx={{
+                        fontSize: 11,
+                        color: overdue ? cat.temp.solid : "text.secondary",
+                        fontWeight: overdue ? 700 : 500,
+                        fontVariantNumeric: "tabular-nums",
+                        flexShrink: 0,
+                        mr: 3.25,
+                      }}
+                    >
+                      {formatDueDate(todo.due_date)}
+                    </Typography>
+                  )}
+                  <IconButton
+                    aria-label="More actions"
+                    onClick={(e) => openMenu(e, todo)}
+                    sx={{
+                      position: "absolute",
+                      right: 2,
+                      top: "50%",
+                      transform: "translateY(-50%)",
+                      width: 28,
+                      height: 28,
+                      minWidth: 28,
+                      minHeight: 28,
+                    }}
+                  >
+                    <MoreVertIcon sx={{ fontSize: 16 }} />
+                  </IconButton>
+                </Box>
+              );
+            })}
+          </Box>
+        )}
+      </Box>
 
       <Menu anchorEl={menuAnchor} open={Boolean(menuAnchor)} onClose={closeMenu}>
         <MenuItem
@@ -430,6 +540,7 @@ export default function TodosPage() {
             if (menuTodo) openEdit(menuTodo);
             closeMenu();
           }}
+          sx={{ minHeight: 44 }}
         >
           <EditIcon fontSize="small" sx={{ mr: 1 }} /> Edit
         </MenuItem>
@@ -438,6 +549,7 @@ export default function TodosPage() {
             if (menuTodo) handleToggle(menuTodo);
             closeMenu();
           }}
+          sx={{ minHeight: 44 }}
         >
           <Checkbox
             checked={!!menuTodo?.completed}
@@ -452,7 +564,7 @@ export default function TodosPage() {
             if (menuTodo) handleDelete(menuTodo.id);
             closeMenu();
           }}
-          sx={{ color: "error.main" }}
+          sx={{ minHeight: 44, color: "error.main" }}
         >
           <DeleteIcon fontSize="small" sx={{ mr: 1 }} /> Delete
         </MenuItem>

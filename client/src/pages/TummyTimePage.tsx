@@ -351,11 +351,11 @@ export default function TummyTimePage() {
                       sx={{
                         display: "flex", alignItems: "center", gap: 1, p: "8px 10px",
                         bgcolor: "background.paper", border: 1, borderColor: "divider",
+                        borderLeftWidth: 3, borderLeftColor: c.solid,
                         borderRadius: 2, position: "relative", overflow: "hidden",
                         boxShadow: 0, mb: 0.5, cursor: "pointer",
                       }}
                     >
-                      <Box sx={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 2, bgcolor: c.solid }} />
                       <Box sx={{
                         width: 26, height: 26, borderRadius: "8px",
                         bgcolor: c.soft, color: c.ink,
