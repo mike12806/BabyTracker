@@ -141,10 +141,24 @@ export default function Layout() {
   ];
 
   const drawer = (
-    <Box sx={{ display: "flex", flexDirection: "column", height: "100%" }}>
-      <Toolbar />
+    <Box
+      sx={{
+        display: "flex",
+        flexDirection: "column",
+        height: "100%",
+        bgcolor: "background.paper",
+      }}
+    >
+      <Box
+        sx={{
+          minHeight: {
+            xs: `calc(${APPBAR_HEIGHT_MOBILE}px + env(safe-area-inset-top))`,
+            md: `${APPBAR_HEIGHT_DESKTOP}px`,
+          },
+        }}
+      />
       {children.length > 1 && (
-        <Box sx={{ px: 2, py: 1.5 }}>
+        <Box sx={{ px: 2, pb: 1.5 }}>
           <Select
             fullWidth
             size="small"
@@ -171,7 +185,7 @@ export default function Layout() {
         </Box>
       )}
       <Divider />
-      <List sx={{ flex: 1, overflowY: "auto" }}>
+      <List sx={{ flex: 1, overflowY: "auto", py: 1 }}>
         {navItems.map((item) => (
           <ListItemButton
             key={item.path}
@@ -180,20 +194,40 @@ export default function Layout() {
               navigate(item.path);
               if (isMobile) setDrawerOpen(false);
             }}
-            sx={{ py: 1.5 }}
+            sx={{ py: 1.1, mb: 0.25 }}
           >
             <ListItemIcon>{item.icon}</ListItemIcon>
-            <ListItemText primary={item.label} />
+            <ListItemText
+              primary={item.label}
+              slotProps={{
+                primary: {
+                  sx: {
+                    fontSize: 14.5,
+                    fontWeight: location.pathname === item.path ? 600 : 500,
+                    letterSpacing: "-0.005em",
+                  },
+                },
+              }}
+            />
           </ListItemButton>
         ))}
       </List>
-      <Divider />
       {user && (
-        <Box sx={{ p: 2 }}>
-          <Typography variant="body2" color="text.secondary" noWrap>
-            {user.email}
-          </Typography>
-        </Box>
+        <>
+          <Divider />
+          <Box sx={{ px: 2, py: 1.5 }}>
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              sx={{ fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase", display: "block", mb: 0.25 }}
+            >
+              Signed in
+            </Typography>
+            <Typography variant="body2" sx={{ fontWeight: 500 }} noWrap>
+              {user.email}
+            </Typography>
+          </Box>
+        </>
       )}
     </Box>
   );
