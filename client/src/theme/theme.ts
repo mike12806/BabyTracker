@@ -44,6 +44,22 @@ export function buildTheme(mode: Mode) {
     ? "rgba(15, 23, 42, 0.08)"
     : "rgba(255, 255, 255, 0.07)";
   const surfacePaper = isLight ? "#ffffff" : "#161b27";
+  // Dialogs sit one step above the page, so use a slightly lighter
+  // navy in dark mode to read as "elevated" rather than blending into
+  // the page cards.
+  const dialogPaper = isLight ? "#ffffff" : "#1c2236";
+  const dialogBorder = isLight
+    ? "rgba(15, 23, 42, 0.10)"
+    : "rgba(255, 255, 255, 0.10)";
+  const inputBorder = isLight
+    ? "rgba(15, 23, 42, 0.18)"
+    : "rgba(255, 255, 255, 0.22)";
+  const inputBorderHover = isLight
+    ? "rgba(15, 23, 42, 0.32)"
+    : "rgba(255, 255, 255, 0.38)";
+  const inputBackground = isLight
+    ? "rgba(15, 23, 42, 0.02)"
+    : "rgba(255, 255, 255, 0.04)";
   const selectedBg = isLight
     ? "rgba(91, 93, 255, 0.10)"
     : "rgba(165, 180, 252, 0.14)";
@@ -53,6 +69,12 @@ export function buildTheme(mode: Mode) {
   const hoverBg = isLight
     ? "rgba(15, 23, 42, 0.04)"
     : "rgba(255, 255, 255, 0.05)";
+  const dialogShadow = isLight
+    ? "0 24px 56px rgba(15, 23, 42, 0.18), 0 8px 16px rgba(15, 23, 42, 0.10)"
+    : "0 32px 72px rgba(0, 0, 0, 0.65), 0 12px 24px rgba(0, 0, 0, 0.45)";
+  const backdropColor = isLight
+    ? "rgba(15, 23, 42, 0.45)"
+    : "rgba(2, 4, 8, 0.65)";
 
   return createTheme({
     palette: {
@@ -151,8 +173,47 @@ export function buildTheme(mode: Mode) {
           paper: {
             borderRadius: 20,
             backgroundImage: "none",
-            backgroundColor: surfacePaper,
-            border: `1px solid ${borderColor}`,
+            backgroundColor: dialogPaper,
+            border: `1px solid ${dialogBorder}`,
+            boxShadow: dialogShadow,
+          },
+        },
+      },
+      MuiBackdrop: {
+        styleOverrides: {
+          root: {
+            backgroundColor: backdropColor,
+            backdropFilter: "blur(2px)",
+            WebkitBackdropFilter: "blur(2px)",
+            "&.MuiBackdrop-invisible": {
+              backgroundColor: "transparent",
+              backdropFilter: "none",
+              WebkitBackdropFilter: "none",
+            },
+          },
+        },
+      },
+      MuiOutlinedInput: {
+        styleOverrides: {
+          root: {
+            backgroundColor: inputBackground,
+            "& .MuiOutlinedInput-notchedOutline": {
+              borderColor: inputBorder,
+              transition: "border-color 120ms ease",
+            },
+            "&:hover:not(.Mui-disabled):not(.Mui-focused) .MuiOutlinedInput-notchedOutline": {
+              borderColor: inputBorderHover,
+            },
+          },
+        },
+      },
+      MuiInputLabel: {
+        styleOverrides: {
+          root: {
+            color: isLight ? "#5b6271" : "#a3acba",
+            "&.Mui-focused": {
+              color: isLight ? "#5b5dff" : "#a5b4fc",
+            },
           },
         },
       },
