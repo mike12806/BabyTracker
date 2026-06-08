@@ -7,7 +7,7 @@
     "server"
   ],
   "overrides": {
-    "undici": "7.27.0"
+    "undici": "7.27.1"
   },
   "scripts": {
     "dev:client": "npm run dev -w client",
