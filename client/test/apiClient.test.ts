@@ -8,6 +8,7 @@ vi.stubGlobal("fetch", mockFetch);
 describe("API Client", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    sessionStorage.clear();
     // Prevent location.reload from throwing
     Object.defineProperty(window, "location", {
       writable: true,
@@ -87,6 +88,13 @@ describe("API Client", () => {
       status: 401,
       json: () => Promise.resolve({ error: "Unauthorized" }),
     });
+
+    await expect(api.get("/children")).rejects.toThrow("Unauthorized");
+    expect(window.location.reload).toHaveBeenCalled();
+  });
+
+  it("reloads page when fetch throws (e.g. CF Access redirect blocked by CORS)", async () => {
+    mockFetch.mockRejectedValueOnce(new TypeError("Failed to fetch"));
 
     await expect(api.get("/children")).rejects.toThrow("Unauthorized");
     expect(window.location.reload).toHaveBeenCalled();
