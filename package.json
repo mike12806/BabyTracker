@@ -7,7 +7,7 @@
     "server"
   ],
   "overrides": {
-    "undici": "7.27.1",
+    "undici": "7.28.0",
     "esbuild": "0.28.1"
   },
   "scripts": {
