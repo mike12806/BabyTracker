@@ -19,6 +19,8 @@ export default function StatCard({ label, value, sublabel, accentColor }: StatCa
         bgcolor: "background.paper",
         border: 1,
         borderColor: "divider",
+        borderLeftWidth: 3,
+        borderLeftColor: accentColor,
         borderRadius: 1.25,
         p: "5px 9px",
         position: "relative",
@@ -27,7 +29,6 @@ export default function StatCard({ label, value, sublabel, accentColor }: StatCa
         minWidth: 0,
       }}
     >
-      <Box sx={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 2, bgcolor: accentColor }} />
       <Typography
         sx={{
           fontSize: 9.5,
