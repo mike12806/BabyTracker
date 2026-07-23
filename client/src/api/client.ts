@@ -1,12 +1,18 @@
 export const API_BASE = import.meta.env.VITE_API_URL || "/api";
 
 function triggerReauth(): void {
-  // Reload once so CF Access can re-authenticate; guard prevents infinite loop
+  // Navigate (don't reload) to an /api/* URL: the service worker serves
+  // cached HTML for normal navigations, so a reload never reaches Cloudflare
+  // Access and the login flow can't run — this is what left the installed
+  // PWA spinning forever once its session expired. Guard prevents a loop.
   const key = "auth_reload_ts";
   const last = sessionStorage.getItem(key);
   if (!last || Date.now() - Number(last) > 10_000) {
     sessionStorage.setItem(key, String(Date.now()));
-    window.location.reload();
+    const redirect = encodeURIComponent(
+      window.location.pathname + window.location.search
+    );
+    window.location.href = `${API_BASE}/auth/login?redirect=${redirect}`;
   }
 }
 

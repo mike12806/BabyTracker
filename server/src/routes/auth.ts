@@ -14,4 +14,16 @@ auth.get("/me", (c) => {
   });
 });
 
+// GET /api/auth/login — protected navigation target used to force a fresh
+// Cloudflare Access login. The PWA's service worker answers normal
+// navigations with cached HTML, so the client re-auths by navigating here
+// (/api/* bypasses the SW); Access runs its login flow at the edge, then
+// this handler bounces back into the app.
+auth.get("/login", (c) => {
+  const redirect = c.req.query("redirect") || "/";
+  // Same-origin paths only — reject protocol-relative (//host) redirects
+  const safe = /^\/(?![/\\])/.test(redirect) ? redirect : "/";
+  return c.redirect(safe);
+});
+
 export { auth };

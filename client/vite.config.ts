@@ -32,11 +32,17 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ["**/*.{js,css,html,svg,png,ico,woff2}"],
-        navigateFallbackDenylist: [/^\/api\//],
+        // /cdn-cgi/ is the Cloudflare Access login callback — if the SW
+        // answers it with cached HTML the auth cookie is never set.
+        navigateFallbackDenylist: [/^\/api\//, /^\/cdn-cgi\//],
         runtimeCaching: [
           {
+            // Never intercept navigations: top-level requests to /api/auth/login
+            // must reach the edge so Access can run its redirect flow.
             urlPattern: ({ url, request }) =>
-              request.method === "GET" && url.pathname.startsWith("/api/"),
+              request.method === "GET" &&
+              request.mode !== "navigate" &&
+              url.pathname.startsWith("/api/"),
             handler: "NetworkFirst",
             options: {
               cacheName: "api-cache",
