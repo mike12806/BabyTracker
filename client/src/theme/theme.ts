@@ -177,6 +177,17 @@ export function buildTheme(mode: Mode) {
             border: `1px solid ${dialogBorder}`,
             boxShadow: dialogShadow,
           },
+          // Full-screen dialogs (used on mobile) fill the viewport, which
+          // sits under the device status bar / notch and home indicator
+          // because the app opts into `viewport-fit=cover`. Inset the paper
+          // by the safe-area so the title no longer collides with the
+          // status-bar clock and the actions clear the home indicator.
+          paperFullScreen: {
+            paddingTop: "env(safe-area-inset-top)",
+            paddingBottom: "env(safe-area-inset-bottom)",
+            paddingLeft: "env(safe-area-inset-left)",
+            paddingRight: "env(safe-area-inset-right)",
+          },
         },
       },
       MuiBackdrop: {
