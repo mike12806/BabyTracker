@@ -9,10 +9,10 @@ describe("API Client", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     sessionStorage.clear();
-    // Prevent location.reload from throwing
+    // Replace location so href assignment doesn't trigger a real navigation
     Object.defineProperty(window, "location", {
       writable: true,
-      value: { ...window.location, reload: vi.fn() },
+      value: { ...window.location, href: "", pathname: "/feedings", search: "" },
     });
   });
 
@@ -82,7 +82,7 @@ describe("API Client", () => {
     await expect(api.get("/children")).rejects.toThrow("Bad request");
   });
 
-  it("reloads page on 401", async () => {
+  it("navigates to the login route on 401", async () => {
     mockFetch.mockResolvedValueOnce({
       ok: false,
       status: 401,
@@ -90,13 +90,22 @@ describe("API Client", () => {
     });
 
     await expect(api.get("/children")).rejects.toThrow("Unauthorized");
-    expect(window.location.reload).toHaveBeenCalled();
+    expect(window.location.href).toBe("/api/auth/login?redirect=%2Ffeedings");
   });
 
-  it("reloads page when fetch throws (e.g. CF Access redirect blocked by CORS)", async () => {
+  it("navigates to the login route when fetch throws (e.g. CF Access redirect blocked by CORS)", async () => {
     mockFetch.mockRejectedValueOnce(new TypeError("Failed to fetch"));
 
     await expect(api.get("/children")).rejects.toThrow("Unauthorized");
-    expect(window.location.reload).toHaveBeenCalled();
+    expect(window.location.href).toBe("/api/auth/login?redirect=%2Ffeedings");
+  });
+
+  it("does not redirect twice within the loop-guard window", async () => {
+    mockFetch.mockRejectedValue(new TypeError("Failed to fetch"));
+
+    await expect(api.get("/children")).rejects.toThrow("Unauthorized");
+    window.location.href = "";
+    await expect(api.get("/children")).rejects.toThrow("Unauthorized");
+    expect(window.location.href).toBe("");
   });
 });

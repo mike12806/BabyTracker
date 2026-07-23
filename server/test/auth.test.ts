@@ -30,6 +30,26 @@ describe("Auth API", () => {
     expect(user.email).toBe("newuser@example.com");
     expect(user.name).toBe("New User");
   });
+
+  it("GET /api/auth/login redirects to the requested path", async () => {
+    const res = await api.get("/api/auth/login?redirect=%2Ffeedings%3Fchild%3D1");
+    expect(res.status).toBe(302);
+    expect(res.headers.get("Location")).toBe("/feedings?child=1");
+  });
+
+  it("GET /api/auth/login defaults to / when redirect is missing", async () => {
+    const res = await api.get("/api/auth/login");
+    expect(res.status).toBe(302);
+    expect(res.headers.get("Location")).toBe("/");
+  });
+
+  it("GET /api/auth/login rejects non-relative redirects", async () => {
+    for (const bad of ["https://evil.com", "//evil.com", "/\\evil.com"]) {
+      const res = await api.get(`/api/auth/login?redirect=${encodeURIComponent(bad)}`);
+      expect(res.status).toBe(302);
+      expect(res.headers.get("Location")).toBe("/");
+    }
+  });
 });
 
 describe("Access Control", () => {
