@@ -51,6 +51,12 @@ const FEEDING_TYPES = [
   { value: "fortified_breast_milk", label: "Fortified Breast Milk" },
 ];
 
+const BREAST_FEEDING_TYPES = ["breast_left", "breast_right", "both_breasts"];
+
+function isBreastFeeding(type: string): boolean {
+  return BREAST_FEEDING_TYPES.includes(type);
+}
+
 function feedingTypeLabel(type: Feeding["type"]): string {
   return FEEDING_TYPES.find((t) => t.value === type)?.label ?? type.replace(/_/g, " ");
 }
@@ -165,12 +171,13 @@ export default function FeedingsPage() {
 
   const handleSave = async () => {
     if (!selectedChild) return;
+    const trackAmount = !isBreastFeeding(form.type) && form.amount;
     const payload = {
       type: form.type,
       start_time: new Date(form.start_time).toISOString(),
       end_time: form.end_time ? new Date(form.end_time).toISOString() : null,
-      amount: form.amount ? parseFloat(form.amount) : null,
-      amount_unit: form.amount ? form.amount_unit : null,
+      amount: trackAmount ? parseFloat(form.amount) : null,
+      amount_unit: trackAmount ? form.amount_unit : null,
       notes: form.notes || null,
     };
     try {
@@ -466,28 +473,34 @@ export default function FeedingsPage() {
             />
             <NowButton onSetNow={(v) => setForm({ ...form, end_time: v })} />
           </Box>
-          <Box sx={{ display: "flex", gap: 2 }}>
-            <TextField
-              margin="dense"
-              label="Amount"
-              type="number"
-              sx={{ flex: 1 }}
-              value={form.amount}
-              onChange={(e) => setForm({ ...form, amount: e.target.value })}
-            />
-            <TextField
-              select
-              margin="dense"
-              label="Unit"
-              sx={{ width: 100 }}
-              value={form.amount_unit}
-              onChange={(e) => setForm({ ...form, amount_unit: e.target.value })}
-            >
-              <MenuItem value="oz">oz</MenuItem>
-              <MenuItem value="ml">ml</MenuItem>
-              <MenuItem value="g">g</MenuItem>
-            </TextField>
-          </Box>
+          {isBreastFeeding(form.type) ? (
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+              Amount not tracked for breastfeeding — set an end time to log duration.
+            </Typography>
+          ) : (
+            <Box sx={{ display: "flex", gap: 2 }}>
+              <TextField
+                margin="dense"
+                label="Amount"
+                type="number"
+                sx={{ flex: 1 }}
+                value={form.amount}
+                onChange={(e) => setForm({ ...form, amount: e.target.value })}
+              />
+              <TextField
+                select
+                margin="dense"
+                label="Unit"
+                sx={{ width: 100 }}
+                value={form.amount_unit}
+                onChange={(e) => setForm({ ...form, amount_unit: e.target.value })}
+              >
+                <MenuItem value="oz">oz</MenuItem>
+                <MenuItem value="ml">ml</MenuItem>
+                <MenuItem value="g">g</MenuItem>
+              </TextField>
+            </Box>
+          )}
           <TextField
             margin="dense"
             label="Notes"
