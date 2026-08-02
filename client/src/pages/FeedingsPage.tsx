@@ -45,7 +45,8 @@ const FEEDING_TYPES = [
   { value: "breast_left", label: "Breast (Left)" },
   { value: "breast_right", label: "Breast (Right)" },
   { value: "both_breasts", label: "Both Breasts" },
-  { value: "bottle", label: "Bottle" },
+  { value: "bottle_breast_milk", label: "Bottle (Breast Milk)" },
+  { value: "bottle_formula", label: "Bottle (Formula)" },
   { value: "solid", label: "Solid Food" },
   { value: "fortified_breast_milk", label: "Fortified Breast Milk" },
 ];
@@ -121,7 +122,7 @@ export default function FeedingsPage() {
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
   const [menuEntry, setMenuEntry] = useState<Feeding | null>(null);
   const [form, setForm] = useState({
-    type: "bottle",
+    type: "bottle_formula",
     start_time: "",
     end_time: "",
     amount: "",
@@ -145,7 +146,7 @@ export default function FeedingsPage() {
 
   const openAddDialog = () => {
     setEditingEntry(null);
-    setForm({ type: "bottle", start_time: "", end_time: "", amount: "", amount_unit: "oz", notes: "" });
+    setForm({ type: "bottle_formula", start_time: "", end_time: "", amount: "", amount_unit: "oz", notes: "" });
     setDialogOpen(true);
   };
 
@@ -180,7 +181,7 @@ export default function FeedingsPage() {
       }
       setDialogOpen(false);
       setEditingEntry(null);
-      setForm({ type: "bottle", start_time: "", end_time: "", amount: "", amount_unit: "oz", notes: "" });
+      setForm({ type: "bottle_formula", start_time: "", end_time: "", amount: "", amount_unit: "oz", notes: "" });
       await load();
     } catch (err) {
       notify(err instanceof Error ? err.message : "Failed to save feeding.", "error");

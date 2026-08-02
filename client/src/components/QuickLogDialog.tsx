@@ -49,7 +49,8 @@ const FEEDING_TYPES = [
   { value: "breast_left", label: "Breast (Left)" },
   { value: "breast_right", label: "Breast (Right)" },
   { value: "both_breasts", label: "Both Breasts" },
-  { value: "bottle", label: "Bottle" },
+  { value: "bottle_breast_milk", label: "Bottle (Breast Milk)" },
+  { value: "bottle_formula", label: "Bottle (Formula)" },
   { value: "solid", label: "Solid Food" },
   { value: "fortified_breast_milk", label: "Fortified Breast Milk" },
 ];
@@ -84,7 +85,7 @@ function emptyForm(): FormState {
     time: nowLocal(),
     end_time: "",
     notes: "",
-    feedingType: "bottle",
+    feedingType: "bottle_formula",
     amount: "",
     amountUnit: "oz",
     diaperType: "wet",

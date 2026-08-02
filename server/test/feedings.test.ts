@@ -29,7 +29,7 @@ describe("Feedings API", () => {
   it("POST /api/feedings creates a feeding", async () => {
     const res = await api.post("/api/feedings", {
       child_id: childId,
-      type: "bottle",
+      type: "bottle_formula",
       start_time: "2024-12-01T08:00:00Z",
       end_time: "2024-12-01T08:20:00Z",
       amount: 4,
@@ -38,7 +38,7 @@ describe("Feedings API", () => {
     });
     expect(res.status).toBe(201);
     const feeding = (await res.json()) as Record<string, unknown>;
-    expect(feeding.type).toBe("bottle");
+    expect(feeding.type).toBe("bottle_formula");
     expect(feeding.amount).toBe(4);
     expect(feeding.amount_unit).toBe("oz");
     expect(feeding.notes).toBe("Morning bottle");
@@ -47,7 +47,7 @@ describe("Feedings API", () => {
   it("GET /api/feedings lists feedings for a child", async () => {
     await api.post("/api/feedings", {
       child_id: childId,
-      type: "bottle",
+      type: "bottle_formula",
       start_time: "2024-12-01T08:00:00Z",
     });
     await api.post("/api/feedings", {
@@ -65,7 +65,7 @@ describe("Feedings API", () => {
   it("PUT /api/feedings/:id updates a feeding", async () => {
     const createRes = await api.post("/api/feedings", {
       child_id: childId,
-      type: "bottle",
+      type: "bottle_formula",
       start_time: "2024-12-01T08:00:00Z",
     });
     const created = (await createRes.json()) as { id: number };
@@ -82,7 +82,7 @@ describe("Feedings API", () => {
   it("DELETE /api/feedings/:id deletes a feeding", async () => {
     const createRes = await api.post("/api/feedings", {
       child_id: childId,
-      type: "bottle",
+      type: "bottle_formula",
       start_time: "2024-12-01T08:00:00Z",
     });
     const created = (await createRes.json()) as { id: number };

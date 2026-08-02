@@ -75,7 +75,7 @@ export function FeedingChart({ feedings, days = 14 }: FeedingChartProps) {
     for (const f of feedings) {
       const key = toDateKey(f.start_time);
       if (!map[key]) continue;
-      if (f.type === "bottle" || f.type === "fortified_breast_milk") map[key].bottle++;
+      if (f.type === "bottle_breast_milk" || f.type === "bottle_formula" || f.type === "fortified_breast_milk") map[key].bottle++;
       else if (f.type === "solid") map[key].solid++;
       else map[key].breast++;
       if (f.amount != null) {
