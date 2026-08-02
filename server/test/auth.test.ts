@@ -105,7 +105,7 @@ describe("Access Control", () => {
     // User B can create a feeding for that child
     const feedingRes = await api.post(
       "/api/feedings",
-      { child_id: child.id, type: "bottle", start_time: "2024-12-01T08:00:00Z" },
+      { child_id: child.id, type: "bottle_formula", start_time: "2024-12-01T08:00:00Z" },
       { "X-Test-Email": "userB@example.com" }
     );
     expect(feedingRes.status).toBe(201);

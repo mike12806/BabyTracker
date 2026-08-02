@@ -22,7 +22,7 @@ Monorepo for a baby tracking application. Two packages:
 Core entities modeled after Baby Buddy:
 
 - **Child** — name, birth date
-- **Feeding** — type (breast left/right, bottle, solid), start/end time, amount, notes
+- **Feeding** — type (breast left/right, bottle (breast milk/formula), solid), start/end time, amount, notes
 - **Diaper Change** — time, type (wet/solid/both), color, notes
 - **Sleep** — start/end time, nap vs. night, notes
 - **Tummy Time** — start/end time, milestone, notes

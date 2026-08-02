@@ -74,7 +74,7 @@ const baseChild: Child = {
 const baseFeeding: Feeding = {
   id: 1,
   child_id: 1,
-  type: "bottle",
+  type: "bottle_formula",
   start_time: "2024-12-01T08:00:00Z",
   end_time: "2024-12-01T08:18:00Z",
   amount: null,
@@ -181,7 +181,7 @@ describe("Dashboard – Recent Feedings amount display", () => {
 
     render(<Dashboard />, { wrapper: Wrapper });
 
-    expect(await screen.findByText("Bottle · 5")).toBeTruthy();
+    expect(await screen.findByText("Bottle Formula · 5")).toBeTruthy();
     expect(screen.getByText(/18m/)).toBeTruthy();
     expect(screen.queryByText(/5 oz/)).toBeNull();
     expect(screen.queryByText(/5 ml/)).toBeNull();
@@ -241,7 +241,7 @@ describe("Dashboard – quick action buttons", () => {
 
     expect(mockApi.post).toHaveBeenCalledWith(
       "/feedings",
-      expect.objectContaining({ child_id: 1, type: "bottle" })
+      expect.objectContaining({ child_id: 1, type: "bottle_formula" })
     );
     // Dashboard data should be refreshed
     expect(mockApi.get).toHaveBeenCalledWith(expect.stringContaining("/feedings"));

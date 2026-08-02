@@ -18,7 +18,7 @@ export interface Child {
 export interface Feeding {
   id: number;
   child_id: number;
-  type: "breast_left" | "breast_right" | "both_breasts" | "bottle" | "solid" | "fortified_breast_milk";
+  type: "breast_left" | "breast_right" | "both_breasts" | "bottle_breast_milk" | "bottle_formula" | "solid" | "fortified_breast_milk";
   start_time: string;
   end_time: string | null;
   amount: number | null;

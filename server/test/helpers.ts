@@ -21,6 +21,8 @@ import migration0003 from "../migrations/0003_add_user_settings.sql?raw";
 import migration0004 from "../migrations/0004_add_email_reports.sql?raw";
 import migration0005 from "../migrations/0005_add_medications.sql?raw";
 import migration0006 from "../migrations/0006_add_created_by_user_id.sql?raw";
+import migration0007 from "../migrations/0007_add_todos.sql?raw";
+import migration0008 from "../migrations/0008_split_bottle_feeding_type.sql?raw";
 
 type AppEnv = { Bindings: Env; Variables: { userId: number; userEmail: string; userName: string } };
 
@@ -80,6 +82,7 @@ export function createTestApp() {
 export async function applyMigrations(db: D1Database) {
   // Drop all tables first to ensure clean state between tests
   const dropSQL = `
+    DROP TABLE IF EXISTS todos;
     DROP TABLE IF EXISTS user_settings;
     DROP TABLE IF EXISTS timers;
     DROP TABLE IF EXISTS medications;
@@ -97,7 +100,7 @@ export async function applyMigrations(db: D1Database) {
   `;
 
   // Execute the real migration files in order to keep test schema in sync
-  const migrations = [migration0001, migration0002, migration0003, migration0004, migration0005, migration0006];
+  const migrations = [migration0001, migration0002, migration0003, migration0004, migration0005, migration0006, migration0007, migration0008];
 
   // D1 batch doesn't support multi-statement, so split and execute individually
   const allSQL = dropSQL + migrations.join("\n");

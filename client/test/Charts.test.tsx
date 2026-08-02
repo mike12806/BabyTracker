@@ -135,7 +135,7 @@ describe("FeedingChart", () => {
 
   it("renders with feeding data", () => {
     const feedings = [
-      makeFeeding("bottle", today, 8),
+      makeFeeding("bottle_formula", today, 8),
       makeFeeding("breast_left", today, 10),
       makeFeeding("solid", today, 12),
     ];
@@ -145,20 +145,20 @@ describe("FeedingChart", () => {
 
   it("aggregates feedings by type correctly", () => {
     const feedings = [
-      makeFeeding("bottle", today, 7),
-      makeFeeding("bottle", today, 10),
+      makeFeeding("bottle_formula", today, 7),
+      makeFeeding("bottle_breast_milk", today, 10),
       makeFeeding("breast_left", today, 8),
       makeFeeding("breast_right", today, 12),
       makeFeeding("solid", today, 14),
       makeFeeding("fortified_breast_milk", today, 16),
-      makeFeeding("bottle", yesterday, 9),
+      makeFeeding("bottle_formula", yesterday, 9),
     ];
     const { container } = render(<FeedingChart feedings={feedings} days={3} />, { wrapper: Wrapper });
     const chart = container.querySelector("[data-testid='chart']");
     const data = JSON.parse(chart!.getAttribute("data-chart-data")!);
 
     const todayData = data[data.length - 1];
-    // 2 bottle + 1 fortified = 3 Bottle
+    // 1 bottle_formula + 1 bottle_breast_milk + 1 fortified = 3 Bottle
     expect(todayData.Bottle).toBe(3);
     // 2 breast (left + right)
     expect(todayData.Breast).toBe(2);
@@ -172,7 +172,7 @@ describe("FeedingChart", () => {
   });
 
   it("ignores data outside the date range", () => {
-    const oldFeeding = makeFeeding("bottle", daysAgoStr(30), 8);
+    const oldFeeding = makeFeeding("bottle_formula", daysAgoStr(30), 8);
     const { container } = render(<FeedingChart feedings={[oldFeeding]} days={7} />, { wrapper: Wrapper });
     const chart = container.querySelector("[data-testid='chart']");
     const data = JSON.parse(chart!.getAttribute("data-chart-data")!);

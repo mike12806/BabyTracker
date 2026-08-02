@@ -25,19 +25,19 @@ SELECT u.id, 2 FROM users u WHERE u.email = 'parent2@example.com';
 
 -- Feedings (last few days)
 INSERT INTO feedings (child_id, type, start_time, end_time, amount, amount_unit, notes) VALUES
-  (1, 'bottle', '2026-03-13T06:30:00Z', '2026-03-13T06:50:00Z', 6, 'oz', 'Morning bottle'),
+  (1, 'bottle_formula', '2026-03-13T06:30:00Z', '2026-03-13T06:50:00Z', 6, 'oz', 'Morning bottle'),
   (1, 'solid', '2026-03-13T08:00:00Z', '2026-03-13T08:30:00Z', NULL, NULL, 'Oatmeal and banana'),
-  (1, 'bottle', '2026-03-13T11:00:00Z', '2026-03-13T11:20:00Z', 5, 'oz', NULL),
+  (1, 'bottle_formula', '2026-03-13T11:00:00Z', '2026-03-13T11:20:00Z', 5, 'oz', NULL),
   (1, 'solid', '2026-03-13T12:30:00Z', '2026-03-13T13:00:00Z', NULL, NULL, 'Sweet potato and peas'),
-  (1, 'bottle', '2026-03-13T15:00:00Z', '2026-03-13T15:15:00Z', 4, 'oz', 'Afternoon bottle'),
+  (1, 'bottle_formula', '2026-03-13T15:00:00Z', '2026-03-13T15:15:00Z', 4, 'oz', 'Afternoon bottle'),
   (1, 'solid', '2026-03-13T17:30:00Z', '2026-03-13T18:00:00Z', NULL, NULL, 'Chicken and rice'),
-  (1, 'bottle', '2026-03-13T19:30:00Z', '2026-03-13T19:45:00Z', 6, 'oz', 'Bedtime bottle'),
-  (1, 'bottle', '2026-03-12T06:15:00Z', '2026-03-12T06:35:00Z', 6, 'oz', NULL),
+  (1, 'bottle_formula', '2026-03-13T19:30:00Z', '2026-03-13T19:45:00Z', 6, 'oz', 'Bedtime bottle'),
+  (1, 'bottle_formula', '2026-03-12T06:15:00Z', '2026-03-12T06:35:00Z', 6, 'oz', NULL),
   (1, 'solid', '2026-03-12T08:00:00Z', '2026-03-12T08:25:00Z', NULL, NULL, 'Yogurt and berries'),
-  (1, 'bottle', '2026-03-12T11:30:00Z', '2026-03-12T11:50:00Z', 5, 'oz', NULL),
+  (1, 'bottle_formula', '2026-03-12T11:30:00Z', '2026-03-12T11:50:00Z', 5, 'oz', NULL),
   (1, 'solid', '2026-03-12T12:30:00Z', '2026-03-12T13:00:00Z', NULL, NULL, 'Avocado toast'),
-  (1, 'bottle', '2026-03-12T15:30:00Z', '2026-03-12T15:45:00Z', 4, 'oz', NULL),
-  (1, 'bottle', '2026-03-12T19:30:00Z', '2026-03-12T19:50:00Z', 6, 'oz', 'Bedtime bottle');
+  (1, 'bottle_formula', '2026-03-12T15:30:00Z', '2026-03-12T15:45:00Z', 4, 'oz', NULL),
+  (1, 'bottle_formula', '2026-03-12T19:30:00Z', '2026-03-12T19:50:00Z', 6, 'oz', 'Bedtime bottle');
 
 -- Diaper changes
 INSERT INTO diaper_changes (child_id, time, type, color, notes) VALUES
@@ -101,7 +101,7 @@ INSERT INTO feedings (child_id, type, start_time, end_time, amount, amount_unit,
   (2, 'breast_left', '2026-03-13T06:00:00Z', '2026-03-13T06:20:00Z', NULL, NULL, NULL),
   (2, 'breast_right', '2026-03-13T08:30:00Z', '2026-03-13T08:50:00Z', NULL, NULL, NULL),
   (2, 'breast_left', '2026-03-13T11:00:00Z', '2026-03-13T11:25:00Z', NULL, NULL, 'Good latch'),
-  (2, 'bottle', '2026-03-13T13:30:00Z', '2026-03-13T13:45:00Z', 3, 'oz', 'Pumped milk'),
+  (2, 'bottle_breast_milk', '2026-03-13T13:30:00Z', '2026-03-13T13:45:00Z', 3, 'oz', 'Pumped milk'),
   (2, 'breast_right', '2026-03-13T16:00:00Z', '2026-03-13T16:20:00Z', NULL, NULL, NULL),
   (2, 'breast_left', '2026-03-13T18:30:00Z', '2026-03-13T18:55:00Z', NULL, NULL, NULL),
   (2, 'breast_right', '2026-03-13T21:00:00Z', '2026-03-13T21:15:00Z', NULL, NULL, 'Cluster feeding'),
