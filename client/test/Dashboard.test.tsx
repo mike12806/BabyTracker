@@ -46,6 +46,7 @@ vi.mock("recharts", () => {
 });
 
 import { useChildren } from "../src/hooks/useChildren";
+import { DataRefreshProvider } from "../src/hooks/useDataRefresh";
 import { api } from "../src/api/client";
 
 const mockUseChildren = vi.mocked(useChildren);
@@ -55,9 +56,15 @@ const theme = createTheme();
 function Wrapper({ children }: { children: React.ReactNode }) {
   return (
     <MemoryRouter>
-      <ThemeProvider theme={theme}>{children}</ThemeProvider>
+      <ThemeProvider theme={theme}>
+        <DataRefreshProvider>{children}</DataRefreshProvider>
+      </ThemeProvider>
     </MemoryRouter>
   );
+}
+
+function fetchCountFor(resource: string): number {
+  return mockApi.get.mock.calls.filter(([url]) => String(url).includes(resource)).length;
 }
 
 const baseChild: Child = {
@@ -243,8 +250,8 @@ describe("Dashboard – quick action buttons", () => {
       "/feedings",
       expect.objectContaining({ child_id: 1, type: "bottle_formula" })
     );
-    // Dashboard data should be refreshed
-    expect(mockApi.get).toHaveBeenCalledWith(expect.stringContaining("/feedings"));
+    // Dashboard data should be refetched, not just loaded once on mount
+    await waitFor(() => expect(fetchCountFor("/feedings")).toBe(2));
   });
 
   it("submits the diaper form, calls api.post, and refreshes dashboard data", async () => {
@@ -261,7 +268,7 @@ describe("Dashboard – quick action buttons", () => {
       "/diaper-changes",
       expect.objectContaining({ child_id: 1, type: "wet" })
     );
-    expect(mockApi.get).toHaveBeenCalledWith(expect.stringContaining("/diaper-changes"));
+    await waitFor(() => expect(fetchCountFor("/diaper-changes")).toBe(2));
   });
 
   it("submits the sleep form, calls api.post, and refreshes dashboard data", async () => {
@@ -279,7 +286,7 @@ describe("Dashboard – quick action buttons", () => {
       "/sleep",
       expect.objectContaining({ child_id: 1, is_nap: 1 })
     );
-    expect(mockApi.get).toHaveBeenCalledWith(expect.stringContaining("/sleep"));
+    await waitFor(() => expect(fetchCountFor("/sleep")).toBe(2));
   });
 
   it("closes the feeding dialog when Cancel is clicked", async () => {

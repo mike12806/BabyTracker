@@ -30,6 +30,7 @@ import ChecklistIcon from "@mui/icons-material/Checklist";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import { api, API_BASE } from "../api/client";
 import { useChildren } from "../hooks/useChildren";
+import { useDataRefresh } from "../hooks/useDataRefresh";
 import { useNotification } from "../hooks/useNotification";
 import NoChildPlaceholder from "../components/NoChildPlaceholder";
 import QuickLogDialog, { type QuickLogCategory } from "../components/QuickLogDialog";
@@ -134,6 +135,7 @@ const CAT_ICONS_SM: CatIcons = {
 
 export default function Dashboard() {
   const { selectedChild } = useChildren();
+  const { refreshKey, refreshData } = useDataRefresh();
   const { notify } = useNotification();
   const navigate = useNavigate();
   const theme = useTheme();
@@ -151,38 +153,52 @@ export default function Dashboard() {
 
   const [quickLogCategory, setQuickLogCategory] = useState<QuickLogCategory | null>(null);
 
-  const reloadAll = async (childId: number) => {
-    const [f, d, s, t, tt, p, td] = await Promise.all([
-      api.get<Feeding[]>(`/feedings?child_id=${childId}&limit=500`),
-      api.get<DiaperChange[]>(`/diaper-changes?child_id=${childId}&limit=500`),
-      api.get<SleepEntry[]>(`/sleep?child_id=${childId}&limit=500`),
-      api.get<Timer[]>(`/timers?child_id=${childId}&active=true`),
-      api.get<TummyTime[]>(`/tummy-time?child_id=${childId}&limit=500`),
-      api.get<Pumping[]>(`/pumping?child_id=${childId}&limit=500`),
-      api.get<Todo[]>(`/todos?child_id=${childId}&limit=200`),
-    ]);
-    setFeedings(f);
-    setDiapers(d);
-    setSleeps(s);
-    setTimers(t);
-    setTummyTimes(tt);
-    setPumpings(p);
-    setTodos(td);
-  };
-
   const handleTodoToggle = async (todo: Todo) => {
     try {
       await api.put(`/todos/${todo.id}`, { completed: !todo.completed });
-      if (selectedChild) await reloadAll(selectedChild.id);
+      refreshData();
     } catch (err) {
       notify(err instanceof Error ? err.message : "Failed to update todo.", "error");
     }
   };
 
+  // Refetches on mount, when the child changes, and whenever `refreshKey` is
+  // bumped — logging an entry from anywhere in the app (including the bottom-nav
+  // FAB, which renders its dialog outside this page) updates these cards without
+  // a page reload.
   useEffect(() => {
     if (!selectedChild) return;
-    reloadAll(selectedChild.id);
-  }, [selectedChild]);
+    const childId = selectedChild.id;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const [f, d, s, t, tt, p, td] = await Promise.all([
+          api.get<Feeding[]>(`/feedings?child_id=${childId}&limit=500`),
+          api.get<DiaperChange[]>(`/diaper-changes?child_id=${childId}&limit=500`),
+          api.get<SleepEntry[]>(`/sleep?child_id=${childId}&limit=500`),
+          api.get<Timer[]>(`/timers?child_id=${childId}&active=true`),
+          api.get<TummyTime[]>(`/tummy-time?child_id=${childId}&limit=500`),
+          api.get<Pumping[]>(`/pumping?child_id=${childId}&limit=500`),
+          api.get<Todo[]>(`/todos?child_id=${childId}&limit=200`),
+        ]);
+        if (cancelled) return;
+        setFeedings(f);
+        setDiapers(d);
+        setSleeps(s);
+        setTimers(t);
+        setTummyTimes(tt);
+        setPumpings(p);
+        setTodos(td);
+      } catch (err) {
+        if (!cancelled) notify(err instanceof Error ? err.message : "Failed to load data.", "error");
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedChild, refreshKey]);
 
   if (!selectedChild) return <NoChildPlaceholder />;
 
@@ -678,9 +694,6 @@ export default function Dashboard() {
       <QuickLogDialog
         category={quickLogCategory}
         onClose={() => setQuickLogCategory(null)}
-        onLogged={() => {
-          if (selectedChild) reloadAll(selectedChild.id);
-        }}
       />
     </Box>
   );

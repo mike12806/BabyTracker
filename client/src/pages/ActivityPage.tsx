@@ -17,6 +17,7 @@ import Button from "@mui/material/Button";
 import IconButton from "@mui/material/IconButton";
 import { api } from "../api/client";
 import { useChildren } from "../hooks/useChildren";
+import { useDataRefresh } from "../hooks/useDataRefresh";
 import { useNotification } from "../hooks/useNotification";
 import NoChildPlaceholder from "../components/NoChildPlaceholder";
 import {
@@ -255,6 +256,7 @@ export default function ActivityPage() {
   const cat = useMemo(() => buildCategoryColors(isDark), [isDark]);
 
   const { selectedChild } = useChildren();
+  const { refreshKey } = useDataRefresh();
   const { notify } = useNotification();
 
   const [entries, setEntries] = useState<ActivityEntry[]>([]);
@@ -300,7 +302,7 @@ export default function ActivityPage() {
     if (!selectedChild) return;
     setOffset(0);
     load(selectedChild.id, 0);
-  }, [selectedChild, load]);
+  }, [selectedChild, refreshKey, load]);
 
   const handlePageChange = (newOffset: number) => {
     if (!selectedChild) return;

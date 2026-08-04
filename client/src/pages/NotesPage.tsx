@@ -34,6 +34,7 @@ import SearchIcon from "@mui/icons-material/Search";
 import FilterListIcon from "@mui/icons-material/FilterList";
 import { api } from "../api/client";
 import { useChildren } from "../hooks/useChildren";
+import { useDataRefresh } from "../hooks/useDataRefresh";
 import { useNotification } from "../hooks/useNotification";
 import NowButton from "../components/NowButton";
 import { FAB_BOTTOM_OFFSET } from "../components/Layout";
@@ -74,6 +75,7 @@ export default function NotesPage() {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const { selectedChild } = useChildren();
+  const { refreshKey } = useDataRefresh();
   const { notify } = useNotification();
   const isDark = theme.palette.mode === "dark";
   const cat = useMemo(() => buildCategoryColors(isDark), [isDark]);
@@ -111,7 +113,7 @@ export default function NotesPage() {
 
   useEffect(() => {
     load();
-  }, [selectedChild]);
+  }, [selectedChild, refreshKey]);
 
   const filtered = useMemo(() => {
     if (!searchQuery.trim()) return entries;
