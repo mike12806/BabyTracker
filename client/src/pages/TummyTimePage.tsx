@@ -32,6 +32,7 @@ import AccessibilityNewIcon from "@mui/icons-material/AccessibilityNew";
 import EmojiEventsIcon from "@mui/icons-material/EmojiEvents";
 import { api } from "../api/client";
 import { useChildren } from "../hooks/useChildren";
+import { useDataRefresh } from "../hooks/useDataRefresh";
 import { useNotification } from "../hooks/useNotification";
 import NowButton from "../components/NowButton";
 import { FAB_BOTTOM_OFFSET } from "../components/Layout";
@@ -117,6 +118,7 @@ function dateSectionLabel(iso: string): string {
 
 export default function TummyTimePage() {
   const { selectedChild } = useChildren();
+  const { refreshKey } = useDataRefresh();
   const { notify } = useNotification();
   const theme = useTheme();
   const isDark = theme.palette.mode === "dark";
@@ -143,7 +145,7 @@ export default function TummyTimePage() {
 
   useEffect(() => {
     load();
-  }, [selectedChild]);
+  }, [selectedChild, refreshKey]);
 
   const openAdd = () => {
     setEditingEntry(null);

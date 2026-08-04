@@ -16,6 +16,7 @@ import {
 } from "@mui/material";
 import { api } from "../api/client";
 import { useChildren } from "../hooks/useChildren";
+import { useDataRefresh } from "../hooks/useDataRefresh";
 import { useNotification } from "../hooks/useNotification";
 import NowButton from "./NowButton";
 
@@ -107,6 +108,7 @@ export default function QuickLogDialog({ category, onClose, onLogged }: QuickLog
   const fullScreen = useMediaQuery(theme.breakpoints.down("sm"));
   const { selectedChild } = useChildren();
   const { notify } = useNotification();
+  const { refreshData } = useDataRefresh();
   const [form, setForm] = useState<FormState>(emptyForm);
   const [saving, setSaving] = useState(false);
 
@@ -184,6 +186,7 @@ export default function QuickLogDialog({ category, onClose, onLogged }: QuickLog
         });
       }
       notify("Logged.", "success");
+      refreshData();
       onLogged?.(category);
       onClose();
     } catch (err) {

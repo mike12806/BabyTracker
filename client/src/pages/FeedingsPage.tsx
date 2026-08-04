@@ -30,6 +30,7 @@ import MoreVertIcon from "@mui/icons-material/MoreVert";
 import RestaurantIcon from "@mui/icons-material/Restaurant";
 import { api } from "../api/client";
 import { useChildren } from "../hooks/useChildren";
+import { useDataRefresh } from "../hooks/useDataRefresh";
 import { useNotification } from "../hooks/useNotification";
 import NowButton from "../components/NowButton";
 import { FAB_BOTTOM_OFFSET } from "../components/Layout";
@@ -121,6 +122,7 @@ export default function FeedingsPage() {
   const c = cat.feed;
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const { selectedChild } = useChildren();
+  const { refreshKey } = useDataRefresh();
   const { notify } = useNotification();
   const [feedings, setFeedings] = useState<Feeding[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -148,7 +150,7 @@ export default function FeedingsPage() {
 
   useEffect(() => {
     load();
-  }, [selectedChild]);
+  }, [selectedChild, refreshKey]);
 
   const openAddDialog = () => {
     setEditingEntry(null);

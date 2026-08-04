@@ -15,6 +15,7 @@ import BedtimeIcon from "@mui/icons-material/Bedtime";
 import OpacityIcon from "@mui/icons-material/Opacity";
 import { api } from "../api/client";
 import { useChildren } from "../hooks/useChildren";
+import { useDataRefresh } from "../hooks/useDataRefresh";
 import NoChildPlaceholder from "../components/NoChildPlaceholder";
 import {
   FeedingChart,
@@ -52,6 +53,7 @@ function rangeSubtitle(range: RangeKey): string {
 
 export default function ChartsPage() {
   const { selectedChild } = useChildren();
+  const { refreshKey } = useDataRefresh();
   const theme = useTheme();
   const dark = theme.palette.mode === "dark";
   const colors = useMemo(() => buildCategoryColors(dark), [dark]);
@@ -78,7 +80,7 @@ export default function ChartsPage() {
       setPumpings(p);
       setLoading(false);
     });
-  }, [selectedChild]);
+  }, [selectedChild, refreshKey]);
 
   if (!selectedChild) return <NoChildPlaceholder />;
 
