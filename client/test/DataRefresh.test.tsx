@@ -126,6 +126,50 @@ describe("Dashboard refresh after logging from outside the page", () => {
     await waitFor(() => expect(feedingFetchCount()).toBe(2));
   });
 
+  it("does not refetch while a form is open", async () => {
+    const user = userEvent.setup();
+    render(<AppShell />, { wrapper: Wrapper });
+
+    await waitFor(() => expect(feedingFetchCount()).toBe(1));
+
+    await user.click(screen.getByRole("button", { name: /fab log feeding/i }));
+    await screen.findByRole("dialog");
+
+    // A native date picker or the keyboard blurs and re-focuses the window
+    // while the user is filling the form — that must not rebuild the page.
+    await act(async () => {
+      document.dispatchEvent(new Event("visibilitychange"));
+      window.dispatchEvent(new Event("focus"));
+    });
+
+    expect(feedingFetchCount()).toBe(1);
+  });
+
+  it("runs the held-back refresh once the form is closed", async () => {
+    const user = userEvent.setup();
+    render(<AppShell />, { wrapper: Wrapper });
+
+    await waitFor(() => expect(feedingFetchCount()).toBe(1));
+
+    await user.click(screen.getByRole("button", { name: /fab log feeding/i }));
+    await screen.findByRole("dialog");
+
+    await act(async () => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    expect(feedingFetchCount()).toBe(1);
+
+    await user.click(screen.getByRole("button", { name: /cancel/i }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+
+    await act(async () => {
+      document.dispatchEvent(new Event("focusout"));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    await waitFor(() => expect(feedingFetchCount()).toBe(2));
+  });
+
   it("throttles duplicate refreshes when visibilitychange and focus both fire", async () => {
     render(<AppShell />, { wrapper: Wrapper });
 

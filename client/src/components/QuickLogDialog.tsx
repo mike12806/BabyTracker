@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Box,
   Button,
@@ -18,6 +18,7 @@ import { api } from "../api/client";
 import { useChildren } from "../hooks/useChildren";
 import { useDataRefresh } from "../hooks/useDataRefresh";
 import { useNotification } from "../hooks/useNotification";
+import { clearDraft, loadDraft, saveDraft } from "../utils/formDraft";
 import NowButton from "./NowButton";
 
 export type QuickLogCategory = "feed" | "diaper" | "sleep" | "pump" | "tummy" | "note";
@@ -87,6 +88,11 @@ interface FormState {
   content: string;
 }
 
+/** Has anything been entered since the dialog opened? */
+function isUnchanged(form: FormState, opened: FormState): boolean {
+  return (Object.keys(opened) as (keyof FormState)[]).every((k) => form[k] === opened[k]);
+}
+
 function emptyForm(): FormState {
   return {
     time: nowLocal(),
@@ -111,12 +117,44 @@ export default function QuickLogDialog({ category, onClose, onLogged }: QuickLog
   const { refreshData } = useDataRefresh();
   const [form, setForm] = useState<FormState>(emptyForm);
   const [saving, setSaving] = useState(false);
+  const childId = selectedChild?.id ?? null;
+
+  // What the form looked like when it opened — anything else means the user
+  // has typed something worth keeping.
+  const openedWith = useRef<FormState>(form);
 
   useEffect(() => {
-    if (category) setForm(emptyForm());
-  }, [category]);
+    if (!category) return;
+    const fresh = emptyForm();
+    openedWith.current = fresh;
+
+    const draft = loadDraft<FormState>(category, childId);
+    if (draft) {
+      setForm({ ...fresh, ...draft });
+      notify("Picked up where you left off.", "info");
+      return;
+    }
+    setForm(fresh);
+  }, [category, childId]);
+
+  // Persist on every edit: whatever interrupts the page (an expired Access
+  // session navigating to re-auth, iOS evicting the PWA) gives no warning.
+  useEffect(() => {
+    if (!category) return;
+    if (isUnchanged(form, openedWith.current)) {
+      clearDraft(category, childId);
+      return;
+    }
+    saveDraft(category, childId, form);
+  }, [category, childId, form]);
 
   if (!category) return null;
+
+  /** Dismissing the form is an explicit discard — don't offer it back later. */
+  const handleClose = () => {
+    clearDraft(category, childId);
+    onClose();
+  };
 
   const handleSave = async () => {
     if (!selectedChild) {
@@ -188,7 +226,7 @@ export default function QuickLogDialog({ category, onClose, onLogged }: QuickLog
       notify("Logged.", "success");
       refreshData();
       onLogged?.(category);
-      onClose();
+      handleClose();
     } catch (err) {
       notify(err instanceof Error ? err.message : "Failed to save.", "error");
     } finally {
@@ -239,7 +277,7 @@ export default function QuickLogDialog({ category, onClose, onLogged }: QuickLog
   );
 
   return (
-    <Dialog open onClose={onClose} fullWidth maxWidth="sm" fullScreen={fullScreen}>
+    <Dialog open onClose={handleClose} fullWidth maxWidth="sm" fullScreen={fullScreen}>
       <DialogTitle>{TITLES[category]}</DialogTitle>
       <DialogContent sx={{ p: 2 }}>
         {!selectedChild && (
@@ -395,7 +433,7 @@ export default function QuickLogDialog({ category, onClose, onLogged }: QuickLog
         )}
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose}>Cancel</Button>
+        <Button onClick={handleClose}>Cancel</Button>
         <Button onClick={handleSave} variant="contained" disabled={saving || !selectedChild}>
           {saving ? "Saving…" : "Save"}
         </Button>
