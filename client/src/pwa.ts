@@ -4,20 +4,29 @@
 // Vite config but don't ship a service worker) can safely skip registration
 // without bundling the module.
 
+import { createDeferredReload } from "./utils/deferredReload";
+
 export function registerServiceWorker(): void {
   if (typeof window === "undefined") return;
   if (!("serviceWorker" in navigator)) return;
 
+  const pendingUpdate = createDeferredReload(() => window.location.reload());
+
   void import("virtual:pwa-register")
     .then(({ registerSW }) => {
-      // With registerType: 'autoUpdate', the new SW activates as soon as it's
-      // ready. We reload once on update so the user picks up fresh assets
-      // without any prompt — this app is single-user, so a brief refresh is
-      // friendlier than a banner.
       registerSW({
         immediate: true,
-        onNeedRefresh() {
-          window.location.reload();
+        // With registerType: 'autoUpdate' the new service worker activates as
+        // soon as it's ready, and vite-plugin-pwa reloads the page right then
+        // unless we take over via `onNeedReload`. That reload lands seconds
+        // after the app is opened following a deploy — often mid-form — and
+        // wipes out whatever has been typed. Picking up fresh assets still
+        // needs a reload, so hold it until the app is in the background.
+        //
+        // (`onNeedRefresh` is never called in autoUpdate mode; `onNeedReload`
+        // is the hook that suppresses the plugin's built-in reload.)
+        onNeedReload() {
+          pendingUpdate.request();
         },
       });
     })

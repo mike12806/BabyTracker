@@ -94,10 +94,46 @@ describe("API Client", () => {
   });
 
   it("navigates to the login route when fetch throws (e.g. CF Access redirect blocked by CORS)", async () => {
-    mockFetch.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    // The session probe is blocked the same way, confirming the session is gone.
+    mockFetch.mockRejectedValue(new TypeError("Failed to fetch"));
 
     await expect(api.get("/children")).rejects.toThrow("Unauthorized");
     expect(window.location.href).toBe("/api/auth/login?redirect=%2Ffeedings");
+  });
+
+  it("reports a network error instead of re-authing when the session is still good", async () => {
+    mockFetch
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValueOnce({ ok: true, status: 200, json: () => Promise.resolve({ id: 1 }) });
+
+    await expect(api.get("/children")).rejects.toThrow(/network error/i);
+    // A dropped connection must not navigate away from a half-filled form.
+    expect(window.location.href).toBe("");
+  });
+
+  it("does not re-send a failed POST while probing the session", async () => {
+    mockFetch
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValueOnce({ ok: true, status: 200, json: () => Promise.resolve({ id: 1 }) });
+
+    await expect(api.post("/feedings", { child_id: 1 })).rejects.toThrow(/network error/i);
+
+    const posts = mockFetch.mock.calls.filter(([, init]) => (init as RequestInit)?.method === "POST");
+    expect(posts).toHaveLength(1);
+  });
+
+  it("treats a failure while offline as a network error, without probing", async () => {
+    const onLine = Object.getOwnPropertyDescriptor(Navigator.prototype, "onLine");
+    Object.defineProperty(navigator, "onLine", { configurable: true, get: () => false });
+    mockFetch.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+
+    try {
+      await expect(api.get("/children")).rejects.toThrow(/network error/i);
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect(window.location.href).toBe("");
+    } finally {
+      if (onLine) Object.defineProperty(navigator, "onLine", onLine);
+    }
   });
 
   it("does not redirect twice within the loop-guard window", async () => {

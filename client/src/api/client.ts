@@ -16,13 +16,39 @@ function triggerReauth(): void {
   }
 }
 
+/**
+ * Can an authenticated request still reach the API?
+ *
+ * Used to tell an expired Access session apart from a dropped connection when
+ * fetch() throws. The cache-busting param matters: the service worker answers
+ * /api/ GETs network-first and would otherwise hand back a cached 200 from
+ * before the session expired.
+ */
+async function sessionIsAlive(): Promise<boolean> {
+  if (typeof navigator !== "undefined" && navigator.onLine === false) return true;
+  try {
+    const res = await fetch(`${API_BASE}/auth/me?probe=${Date.now()}`, {
+      credentials: "include",
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 async function doFetch(path: string, options: RequestInit): Promise<Response> {
   try {
     return await fetch(`${API_BASE}${path}`, options);
   } catch {
-    // fetch() throws (surfaced by the browser as a CORS error) when Cloudflare
-    // Access redirects an unauthenticated request to its login domain instead
-    // of reaching this API — treat it the same as an expired session.
+    // fetch() throws for two very different reasons: Cloudflare Access
+    // redirecting an unauthenticated request to its login domain (surfaced as
+    // a CORS error), and an ordinary dropped connection — routine on a phone.
+    // Re-authing navigates away from whatever is on screen, so only do it once
+    // we know the session is actually gone. Retrying the original request
+    // isn't an option: a POST that failed on the way back would double-log.
+    if (await sessionIsAlive()) {
+      throw new Error("Network error — check your connection and try again.");
+    }
     triggerReauth();
     throw new Error("Unauthorized");
   }
