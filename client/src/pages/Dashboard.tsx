@@ -26,6 +26,8 @@ import TimerIcon from "@mui/icons-material/Timer";
 import AccessibilityNewIcon from "@mui/icons-material/AccessibilityNew";
 import OpacityIcon from "@mui/icons-material/Opacity";
 import NoteIcon from "@mui/icons-material/Note";
+import ThermostatIcon from "@mui/icons-material/Thermostat";
+import MedicationIcon from "@mui/icons-material/Medication";
 import ChecklistIcon from "@mui/icons-material/Checklist";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import { api, API_BASE } from "../api/client";
@@ -44,6 +46,9 @@ import type {
   Timer,
   TummyTime,
   Pumping,
+  Temperature,
+  Note,
+  Medication,
   Todo,
 } from "../types/models";
 
@@ -70,6 +75,16 @@ function formatDuration(start: string, end: string | null): string {
   if (mins < 60) return `${mins}m`;
   const hrs = Math.floor(mins / 60);
   return `${hrs}h ${mins % 60}m`;
+}
+
+// "" for entries logged today, otherwise the day they belong to.
+function dayLabel(iso: string, todayStart: Date): string {
+  const when = new Date(iso);
+  if (when >= todayStart) return "";
+  const yesterdayStart = new Date(todayStart);
+  yesterdayStart.setDate(yesterdayStart.getDate() - 1);
+  if (when >= yesterdayStart) return "Yesterday";
+  return when.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
 function prettifyType(type: string): string {
@@ -133,6 +148,8 @@ const CAT_ICONS_SM: CatIcons = {
   pump: <OpacityIcon sx={{ fontSize: 14 }} />,
   tummy: <AccessibilityNewIcon sx={{ fontSize: 14 }} />,
   note: <NoteIcon sx={{ fontSize: 14 }} />,
+  temp: <ThermostatIcon sx={{ fontSize: 14 }} />,
+  med: <MedicationIcon sx={{ fontSize: 14 }} />,
 };
 
 export default function Dashboard() {
@@ -151,6 +168,9 @@ export default function Dashboard() {
   const [timers, setTimers] = useState<Timer[]>([]);
   const [tummyTimes, setTummyTimes] = useState<TummyTime[]>([]);
   const [pumpings, setPumpings] = useState<Pumping[]>([]);
+  const [temperatures, setTemperatures] = useState<Temperature[]>([]);
+  const [notes, setNotes] = useState<Note[]>([]);
+  const [medications, setMedications] = useState<Medication[]>([]);
   const [todos, setTodos] = useState<Todo[]>([]);
 
   const [quickLogCategory, setQuickLogCategory] = useState<QuickLogCategory | null>(null);
@@ -175,13 +195,18 @@ export default function Dashboard() {
 
     (async () => {
       try {
-        const [f, d, s, t, tt, p, td] = await Promise.all([
+        const [f, d, s, t, tt, p, temp, n, m, td] = await Promise.all([
           api.get<Feeding[]>(`/feedings?child_id=${childId}&limit=500`),
           api.get<DiaperChange[]>(`/diaper-changes?child_id=${childId}&limit=500`),
           api.get<SleepEntry[]>(`/sleep?child_id=${childId}&limit=500`),
           api.get<Timer[]>(`/timers?child_id=${childId}&active=true`),
           api.get<TummyTime[]>(`/tummy-time?child_id=${childId}&limit=500`),
           api.get<Pumping[]>(`/pumping?child_id=${childId}&limit=500`),
+          // Temperatures, notes and medications feed the recent-activity list
+          // only — the tiles and today's totals above do not summarise them.
+          api.get<Temperature[]>(`/temperature?child_id=${childId}&limit=50`),
+          api.get<Note[]>(`/notes?child_id=${childId}&limit=50`),
+          api.get<Medication[]>(`/medications?child_id=${childId}&limit=50`),
           api.get<Todo[]>(`/todos?child_id=${childId}&limit=200`),
         ]);
         if (cancelled) return;
@@ -191,6 +216,9 @@ export default function Dashboard() {
         setTimers(t);
         setTummyTimes(tt);
         setPumpings(p);
+        setTemperatures(temp);
+        setNotes(n);
+        setMedications(m);
         setTodos(td);
       } catch (err) {
         if (!cancelled) notify(err instanceof Error ? err.message : "Failed to load data.", "error");
@@ -287,20 +315,34 @@ export default function Dashboard() {
     { cat: "pump", value: todayPumpOz > 0 ? `${todayPumpOz} oz` : `${todayPumpCount}`, label: "pumped", sub: todayPumpCount > 0 ? `${todayPumpCount} sessions` : "today" },
   ];
 
-  const recentActivity: { id: number; cat: CategoryKey; title: string; time: string; meta: string; live?: boolean }[] = [];
+  // Each row keeps the entry's real timestamp (`ts`) alongside the formatted
+  // clock time it displays: sorting on the formatted string would compare
+  // times of day with the date thrown away, which both misorders entries from
+  // different days and fails outright in browsers that reject the non-standard
+  // date string — leaving the feed in per-category insertion order, so only
+  // feedings survived the cutoff.
+  const recentActivity: { id: number; cat: CategoryKey; title: string; ts: string; time: string; meta: string; live?: boolean }[] = [];
   const cutoff = 6;
+  const clockTime = (iso: string) => new Date(iso).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  // The row only shows a time of day, so anything before today says which day.
+  const withDay = (meta: string, iso: string) => {
+    const day = dayLabel(iso, todayStart);
+    if (!day) return meta;
+    return meta ? `${meta} · ${day}` : day;
+  };
   const allEvents: typeof recentActivity = [];
-  feedings.slice(0, 10).forEach((f) => allEvents.push({ id: f.id, cat: "feed", title: `${prettifyType(f.type)}${f.amount ? ` · ${f.amount}${f.amount_unit ? ` ${f.amount_unit}` : ""}` : ""}`, time: new Date(f.start_time).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }), meta: formatDuration(f.start_time, f.end_time) }));
-  diapers.slice(0, 10).forEach((d) => allEvents.push({ id: d.id, cat: "diaper", title: `Diaper · ${prettifyType(d.type)}`, time: new Date(d.time).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }), meta: d.color || "" }));
-  sleeps.slice(0, 10).forEach((s) => allEvents.push({ id: s.id, cat: "sleep", title: s.is_nap ? "Nap" : "Sleep", time: new Date(s.start_time).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }), meta: s.end_time ? formatDuration(s.start_time, s.end_time) : `Active · ${formatDuration(s.start_time, null)}`, live: !s.end_time }));
-  pumpings.slice(0, 10).forEach((p) => allEvents.push({ id: p.id, cat: "pump", title: `Pump${sideLabel(p.side) ? ` · ${sideLabel(p.side)}` : ""}${p.amount ? ` · ${p.amount}${p.amount_unit ? ` ${p.amount_unit}` : ""}` : ""}`, time: new Date(p.start_time).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }), meta: formatDuration(p.start_time, p.end_time) }));
-  tummyTimes.slice(0, 10).forEach((tt) => allEvents.push({ id: tt.id, cat: "tummy", title: "Tummy time", time: new Date(tt.start_time).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }), meta: formatDuration(tt.start_time, tt.end_time) }));
+  feedings.slice(0, 10).forEach((f) => allEvents.push({ id: f.id, cat: "feed", title: `${prettifyType(f.type)}${f.amount ? ` · ${f.amount}${f.amount_unit ? ` ${f.amount_unit}` : ""}` : ""}`, ts: f.start_time, time: clockTime(f.start_time), meta: withDay(formatDuration(f.start_time, f.end_time), f.start_time) }));
+  diapers.slice(0, 10).forEach((d) => allEvents.push({ id: d.id, cat: "diaper", title: `Diaper · ${prettifyType(d.type)}`, ts: d.time, time: clockTime(d.time), meta: withDay(d.color || "", d.time) }));
+  sleeps.slice(0, 10).forEach((s) => allEvents.push({ id: s.id, cat: "sleep", title: s.is_nap ? "Nap" : "Sleep", ts: s.start_time, time: clockTime(s.start_time), meta: s.end_time ? withDay(formatDuration(s.start_time, s.end_time), s.start_time) : `Active · ${formatDuration(s.start_time, null)}`, live: !s.end_time }));
+  pumpings.slice(0, 10).forEach((p) => allEvents.push({ id: p.id, cat: "pump", title: `Pump${sideLabel(p.side) ? ` · ${sideLabel(p.side)}` : ""}${p.amount ? ` · ${p.amount}${p.amount_unit ? ` ${p.amount_unit}` : ""}` : ""}`, ts: p.start_time, time: clockTime(p.start_time), meta: withDay(formatDuration(p.start_time, p.end_time), p.start_time) }));
+  tummyTimes.slice(0, 10).forEach((tt) => allEvents.push({ id: tt.id, cat: "tummy", title: "Tummy time", ts: tt.start_time, time: clockTime(tt.start_time), meta: withDay(formatDuration(tt.start_time, tt.end_time), tt.start_time) }));
+  // Point-in-time entries: no duration to show, so the subtitle carries their
+  // own detail (mirroring the wording the full activity feed uses).
+  temperatures.slice(0, 10).forEach((t) => allEvents.push({ id: t.id, cat: "temp", title: `Temp · ${t.reading}°${t.reading_unit}`, ts: t.time, time: clockTime(t.time), meta: withDay("", t.time) }));
+  notes.slice(0, 10).forEach((n) => allEvents.push({ id: n.id, cat: "note", title: `Note · ${n.title || n.content.slice(0, 60)}`, ts: n.time, time: clockTime(n.time), meta: withDay(n.title ? n.content.slice(0, 60) : "", n.time) }));
+  medications.slice(0, 10).forEach((m) => allEvents.push({ id: m.id, cat: "med", title: `${m.name}${m.dosage ? ` · ${m.dosage}${m.dosage_unit ? ` ${m.dosage_unit}` : ""}` : ""}`, ts: m.time, time: clockTime(m.time), meta: withDay("", m.time) }));
 
-  allEvents.sort((a, b) => {
-    const ta = new Date(`1970-01-01 ${a.time}`).getTime();
-    const tb = new Date(`1970-01-01 ${b.time}`).getTime();
-    return tb - ta;
-  });
+  allEvents.sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime());
   recentActivity.push(...allEvents.slice(0, cutoff));
 
   const now = new Date();
