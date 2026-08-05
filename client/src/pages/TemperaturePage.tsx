@@ -43,6 +43,7 @@ import type { Temperature } from "../types/models";
 import { isoToLocal } from "../utils/dateTime";
 import { buildCategoryColors } from "../theme/categoryColors";
 import type { Chip as _Chip } from "@mui/material";
+import { useEditEntryParam } from "../hooks/useEditEntryParam";
 
 type FeverLevel = "normal" | "lowFever" | "highFever";
 
@@ -148,6 +149,10 @@ export default function TemperaturePage() {
     });
     setDialogOpen(true);
   };
+
+  // Opening this page as `?edit=<id>` (from the dashboard or the activity
+  // feed) drops straight into that entry's edit form.
+  useEditEntryParam<Temperature>("temperature", handleEdit);
 
   const handleSave = async () => {
     if (!selectedChild) return;

@@ -14,6 +14,8 @@ import { temperature } from "../src/routes/temperature.js";
 import { notes } from "../src/routes/notes.js";
 import { timers } from "../src/routes/timers.js";
 import { settings } from "../src/routes/settings.js";
+import { medications } from "../src/routes/medications.js";
+import { activity } from "../src/routes/activity.js";
 import type { MiddlewareHandler } from "hono";
 import migration0001 from "../migrations/0001_initial_schema.sql?raw";
 import migration0002 from "../migrations/0002_add_picture_blob.sql?raw";
@@ -76,6 +78,8 @@ export function createTestApp() {
   app.route("/api/notes", notes);
   app.route("/api/timers", timers);
   app.route("/api/settings", settings);
+  app.route("/api/medications", medications);
+  app.route("/api/activity", activity);
 
   return app;
 }

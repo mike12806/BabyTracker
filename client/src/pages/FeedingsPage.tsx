@@ -41,6 +41,7 @@ import NoChildPlaceholder from "../components/NoChildPlaceholder";
 import type { Feeding } from "../types/models";
 import { isoToLocal } from "../utils/dateTime";
 import { buildCategoryColors } from "../theme/categoryColors";
+import { useEditEntryParam } from "../hooks/useEditEntryParam";
 
 const FEEDING_TYPES = [
   { value: "breast_left", label: "Breast (Left)" },
@@ -170,6 +171,10 @@ export default function FeedingsPage() {
     });
     setDialogOpen(true);
   };
+
+  // Opening this page as `?edit=<id>` (from the dashboard or the activity
+  // feed) drops straight into that entry's edit form.
+  useEditEntryParam<Feeding>("feedings", handleEdit);
 
   const handleSave = async () => {
     if (!selectedChild) return;

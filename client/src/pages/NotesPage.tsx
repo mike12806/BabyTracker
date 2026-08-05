@@ -42,6 +42,7 @@ import NoChildPlaceholder from "../components/NoChildPlaceholder";
 import { buildCategoryColors } from "../theme/categoryColors";
 import type { Note } from "../types/models";
 import { isoToLocal } from "../utils/dateTime";
+import { useEditEntryParam } from "../hooks/useEditEntryParam";
 
 function relativeTime(iso: string): string {
   const now = new Date();
@@ -136,6 +137,10 @@ export default function NotesPage() {
     setForm({ time: isoToLocal(entry.time), title: entry.title || "", content: entry.content });
     setDialogOpen(true);
   };
+
+  // Opening this page as `?edit=<id>` (from the dashboard or the activity
+  // feed) drops straight into that entry's edit form.
+  useEditEntryParam<Note>("notes", handleEdit);
 
   const handleSave = async () => {
     if (!selectedChild) return;

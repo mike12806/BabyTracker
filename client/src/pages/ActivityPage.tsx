@@ -15,6 +15,7 @@ import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import Button from "@mui/material/Button";
 import IconButton from "@mui/material/IconButton";
+import { useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import { useChildren } from "../hooks/useChildren";
 import { useDataRefresh } from "../hooks/useDataRefresh";
@@ -25,12 +26,14 @@ import {
   type CategoryKey,
   type CategoryColorSet,
 } from "../theme/categoryColors";
+import { editEntryPath } from "../utils/activityLinks";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
 /* ------------------------------------------------------------------ */
 
 interface ActivityEntry {
+  id: number;
   activity_type: string;
   event_time: string;
   detail: string;
@@ -258,6 +261,7 @@ export default function ActivityPage() {
   const { selectedChild } = useChildren();
   const { refreshKey } = useDataRefresh();
   const { notify } = useNotification();
+  const navigate = useNavigate();
 
   const [entries, setEntries] = useState<ActivityEntry[]>([]);
   const [total, setTotal] = useState(0);
@@ -707,9 +711,10 @@ export default function ActivityPage() {
                 <Stack sx={{ gap: 1.5 }}>
                   {items.map((entry, i) => {
                     const cc = catColors(entry.activity_type);
+                    const editPath = editEntryPath(cc.key, entry.id);
                     return (
                       <Box
-                        key={`${entry.activity_type}-${entry.event_time}-${i}`}
+                        key={`${entry.activity_type}-${entry.id}-${i}`}
                         sx={{ position: "relative" }}
                       >
                         {/* Timeline dot */}
@@ -738,9 +743,24 @@ export default function ActivityPage() {
                           />
                         </Box>
 
-                        {/* Event card */}
+                        {/* Event card — tapping opens the entry's edit form on
+                            the section page that owns it. */}
                         <Box
+                          component={editPath ? "button" : "div"}
+                          type={editPath ? "button" : undefined}
+                          onClick={
+                            editPath ? () => navigate(editPath) : undefined
+                          }
+                          aria-label={
+                            editPath
+                              ? `Edit ${entry.activity_type} at ${formatTime(entry.event_time)}`
+                              : undefined
+                          }
                           sx={{
+                            width: "100%",
+                            font: "inherit",
+                            color: "inherit",
+                            textAlign: "left",
                             bgcolor: "background.paper",
                             border: 1,
                             borderColor: "divider",
@@ -751,6 +771,11 @@ export default function ActivityPage() {
                             display: "flex",
                             alignItems: "center",
                             gap: 1.5,
+                            ...(editPath && {
+                              cursor: "pointer",
+                              transition: "border-color 0.15s ease",
+                              "&:hover": { borderColor: cc.edge },
+                            }),
                           }}
                         >
                           {/* Icon */}
@@ -796,6 +821,17 @@ export default function ActivityPage() {
                           >
                             {formatTime(entry.event_time)}
                           </Typography>
+
+                          {editPath && (
+                            <ChevronRightIcon
+                              sx={{
+                                fontSize: 16,
+                                color: "text.disabled",
+                                flexShrink: 0,
+                                ml: -0.75,
+                              }}
+                            />
+                          )}
                         </Box>
                       </Box>
                     );
