@@ -38,6 +38,7 @@ import NoChildPlaceholder from "../components/NoChildPlaceholder";
 import type { Medication } from "../types/models";
 import { isoToLocal } from "../utils/dateTime";
 import { buildCategoryColors } from "../theme/categoryColors";
+import { useEditEntryParam } from "../hooks/useEditEntryParam";
 
 function relativeTime(iso: string): string {
   const then = new Date(iso).getTime();
@@ -140,6 +141,10 @@ export default function MedicationsPage() {
     });
     setDialogOpen(true);
   };
+
+  // Opening this page as `?edit=<id>` (from the dashboard or the activity
+  // feed) drops straight into that entry's edit form.
+  useEditEntryParam<Medication>("medications", handleEdit);
 
   const handleSave = async () => {
     if (!selectedChild) return;

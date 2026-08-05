@@ -44,6 +44,7 @@ import NoChildPlaceholder from "../components/NoChildPlaceholder";
 import type { SleepEntry } from "../types/models";
 import { isoToLocal } from "../utils/dateTime";
 import { buildCategoryColors } from "../theme/categoryColors";
+import { useEditEntryParam } from "../hooks/useEditEntryParam";
 
 function humanDuration(ms: number): string {
   if (ms < 0) ms = 0;
@@ -172,6 +173,10 @@ export default function SleepPage() {
     });
     setDialogOpen(true);
   };
+
+  // Opening this page as `?edit=<id>` (from the dashboard or the activity
+  // feed) drops straight into that entry's edit form.
+  useEditEntryParam<SleepEntry>("sleep", handleEdit);
 
   const closeDialog = () => {
     setDialogOpen(false);

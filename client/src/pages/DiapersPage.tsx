@@ -42,6 +42,7 @@ import NoChildPlaceholder from "../components/NoChildPlaceholder";
 import type { DiaperChange } from "../types/models";
 import { isoToLocal } from "../utils/dateTime";
 import { buildCategoryColors } from "../theme/categoryColors";
+import { useEditEntryParam } from "../hooks/useEditEntryParam";
 
 const KNOWN_COLOR_SWATCHES: Record<string, string> = {
   yellow: "#f9d71c",
@@ -136,6 +137,10 @@ export default function DiapersPage() {
     });
     setDialogOpen(true);
   };
+
+  // Opening this page as `?edit=<id>` (from the dashboard or the activity
+  // feed) drops straight into that entry's edit form.
+  useEditEntryParam<DiaperChange>("diaper-changes", handleEdit);
 
   const handleAdd = () => {
     setEditingEntry(null);

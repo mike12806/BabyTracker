@@ -42,6 +42,7 @@ import type { Pumping } from "../types/models";
 import { isoToLocal } from "../utils/dateTime";
 import { PUMPING_SIDES, sideLabel } from "../utils/pumping";
 import { buildCategoryColors } from "../theme/categoryColors";
+import { useEditEntryParam } from "../hooks/useEditEntryParam";
 
 function relativeTime(iso: string): string {
   const then = new Date(iso).getTime();
@@ -143,6 +144,10 @@ export default function PumpingPage() {
     });
     setDialogOpen(true);
   };
+
+  // Opening this page as `?edit=<id>` (from the dashboard or the activity
+  // feed) drops straight into that entry's edit form.
+  useEditEntryParam<Pumping>("pumping", handleEdit);
 
   const openAdd = () => {
     setEditingEntry(null);

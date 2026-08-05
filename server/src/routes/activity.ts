@@ -4,6 +4,7 @@ import type { Env } from "../types/env.js";
 type AppEnv = { Bindings: Env; Variables: { userId: number; userEmail: string; userName: string } };
 
 interface ActivityEntry {
+  id: number;
   activity_type: string;
   event_time: string;
   detail: string;
@@ -48,7 +49,7 @@ activity.get("/", async (c) => {
   const [feedings, diapers, sleepSessions, tummyTimes, pumping, temperatures, notes, medications] =
     await Promise.all([
       c.env.DB.prepare(`
-        SELECT 'Feeding' AS activity_type, f.start_time AS event_time,
+        SELECT 'Feeding' AS activity_type, f.id AS id, f.start_time AS event_time,
           REPLACE(f.type, '_', ' ') AS detail,
           ${childNameExpr} AS child_name, ${loggedByExpr} AS logged_by
         FROM feedings f
@@ -57,7 +58,7 @@ activity.get("/", async (c) => {
         WHERE f.child_id = ? AND f.start_time >= ? AND f.start_time <= ?
       `).bind(childId, fromDate, toDate).all<ActivityEntry>(),
       c.env.DB.prepare(`
-        SELECT 'Diaper Change' AS activity_type, d.time AS event_time,
+        SELECT 'Diaper Change' AS activity_type, d.id AS id, d.time AS event_time,
           d.type || CASE WHEN d.color IS NOT NULL AND d.color != '' THEN ' (' || d.color || ')' ELSE '' END AS detail,
           ${childNameExpr} AS child_name, ${loggedByExpr} AS logged_by
         FROM diaper_changes d
@@ -66,7 +67,7 @@ activity.get("/", async (c) => {
         WHERE d.child_id = ? AND d.time >= ? AND d.time <= ?
       `).bind(childId, fromDate, toDate).all<ActivityEntry>(),
       c.env.DB.prepare(`
-        SELECT 'Sleep' AS activity_type, s.start_time AS event_time,
+        SELECT 'Sleep' AS activity_type, s.id AS id, s.start_time AS event_time,
           CASE WHEN s.is_nap = 1 THEN 'nap' ELSE 'night sleep' END AS detail,
           ${childNameExpr} AS child_name, ${loggedByExpr} AS logged_by
         FROM sleep s
@@ -75,7 +76,7 @@ activity.get("/", async (c) => {
         WHERE s.child_id = ? AND s.start_time >= ? AND s.start_time <= ?
       `).bind(childId, fromDate, toDate).all<ActivityEntry>(),
       c.env.DB.prepare(`
-        SELECT 'Tummy Time' AS activity_type, t.start_time AS event_time,
+        SELECT 'Tummy Time' AS activity_type, t.id AS id, t.start_time AS event_time,
           CASE WHEN t.milestone IS NOT NULL AND t.milestone != '' THEN 'tummy time - ' || t.milestone ELSE 'tummy time' END AS detail,
           ${childNameExpr} AS child_name, ${loggedByExpr} AS logged_by
         FROM tummy_time t
@@ -84,7 +85,7 @@ activity.get("/", async (c) => {
         WHERE t.child_id = ? AND t.start_time >= ? AND t.start_time <= ?
       `).bind(childId, fromDate, toDate).all<ActivityEntry>(),
       c.env.DB.prepare(`
-        SELECT 'Pumping' AS activity_type, p.start_time AS event_time,
+        SELECT 'Pumping' AS activity_type, p.id AS id, p.start_time AS event_time,
           CASE WHEN p.amount IS NOT NULL THEN 'pumped ' || p.amount || ' ' || COALESCE(p.amount_unit, '') ELSE 'pumping' END
             || CASE p.side WHEN 'left' THEN ' · left breast' WHEN 'right' THEN ' · right breast' WHEN 'both' THEN ' · both breasts' ELSE '' END AS detail,
           ${childNameExpr} AS child_name, ${loggedByExpr} AS logged_by
@@ -94,7 +95,7 @@ activity.get("/", async (c) => {
         WHERE p.child_id = ? AND p.start_time >= ? AND p.start_time <= ?
       `).bind(childId, fromDate, toDate).all<ActivityEntry>(),
       c.env.DB.prepare(`
-        SELECT 'Temperature' AS activity_type, t.time AS event_time,
+        SELECT 'Temperature' AS activity_type, t.id AS id, t.time AS event_time,
           t.reading || '°' || t.reading_unit AS detail,
           ${childNameExpr} AS child_name, ${loggedByExpr} AS logged_by
         FROM temperature t
@@ -103,7 +104,7 @@ activity.get("/", async (c) => {
         WHERE t.child_id = ? AND t.time >= ? AND t.time <= ?
       `).bind(childId, fromDate, toDate).all<ActivityEntry>(),
       c.env.DB.prepare(`
-        SELECT 'Note' AS activity_type, n.time AS event_time,
+        SELECT 'Note' AS activity_type, n.id AS id, n.time AS event_time,
           COALESCE(n.title, SUBSTR(n.content, 1, 60)) AS detail,
           ${childNameExpr} AS child_name, ${loggedByExpr} AS logged_by
         FROM notes n
@@ -112,7 +113,7 @@ activity.get("/", async (c) => {
         WHERE n.child_id = ? AND n.time >= ? AND n.time <= ?
       `).bind(childId, fromDate, toDate).all<ActivityEntry>(),
       c.env.DB.prepare(`
-        SELECT 'Medication' AS activity_type, m.time AS event_time,
+        SELECT 'Medication' AS activity_type, m.id AS id, m.time AS event_time,
           m.name || CASE WHEN m.dosage IS NOT NULL THEN ' ' || m.dosage || COALESCE(' ' || m.dosage_unit, '') ELSE '' END AS detail,
           ${childNameExpr} AS child_name, ${loggedByExpr} AS logged_by
         FROM medications m

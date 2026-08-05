@@ -43,6 +43,7 @@ import NoChildPlaceholder from "../components/NoChildPlaceholder";
 import type { TummyTime } from "../types/models";
 import { isoToLocal } from "../utils/dateTime";
 import { buildCategoryColors } from "../theme/categoryColors";
+import { useEditEntryParam } from "../hooks/useEditEntryParam";
 
 function relativeTime(iso: string): string {
   const ms = Date.now() - new Date(iso).getTime();
@@ -163,6 +164,10 @@ export default function TummyTimePage() {
     });
     setDialogOpen(true);
   };
+
+  // Opening this page as `?edit=<id>` (from the dashboard or the activity
+  // feed) drops straight into that entry's edit form.
+  useEditEntryParam<TummyTime>("tummy-time", handleEdit);
 
   const handleSave = async () => {
     if (!selectedChild) return;
