@@ -7,8 +7,11 @@ import type {
   Child,
   DiaperChange,
   Feeding,
+  Medication,
+  Note,
   Pumping,
   SleepEntry,
+  Temperature,
   TummyTime,
 } from "../src/types/models";
 
@@ -127,6 +130,39 @@ const tummyTime = (id: number, start: string, end: string): TummyTime => ({
   updated_at: start,
 });
 
+const temperature = (id: number, time: string): Temperature => ({
+  id,
+  child_id: 1,
+  time,
+  reading: 98.6,
+  reading_unit: "F",
+  notes: null,
+  created_at: time,
+  updated_at: time,
+});
+
+const note = (id: number, time: string, title: string | null, content: string): Note => ({
+  id,
+  child_id: 1,
+  time,
+  title,
+  content,
+  created_at: time,
+  updated_at: time,
+});
+
+const medication = (id: number, time: string): Medication => ({
+  id,
+  child_id: 1,
+  time,
+  name: "Tylenol",
+  dosage: 2.5,
+  dosage_unit: "ml",
+  notes: null,
+  created_at: time,
+  updated_at: time,
+});
+
 /** Titles of the Recent activity rows, in the order they are rendered. */
 function recentActivityTitles(): string[] {
   return screen
@@ -169,6 +205,66 @@ describe("Dashboard – recent activity feed", () => {
       "Nap",
       "Tummy time",
     ]);
+  });
+
+  it("includes temperatures, notes and medications", async () => {
+    mockApi.get.mockImplementation((url: string) => {
+      if (url.includes("/temperature")) return Promise.resolve([temperature(6, hoursAgo(1))]);
+      if (url.includes("/notes")) return Promise.resolve([note(7, hoursAgo(2), null, "Slept through the night")]);
+      if (url.includes("/medications")) return Promise.resolve([medication(8, hoursAgo(3))]);
+      if (url.includes("/feedings")) return Promise.resolve([feeding(1, hoursAgo(0.5), hoursAgo(0.25))]);
+      return Promise.resolve([]);
+    });
+
+    render(<Dashboard />, { wrapper: Wrapper });
+
+    await screen.findByText(/Temp · 98.6°F/);
+    expect(recentActivityTitles()).toEqual([
+      "Bottle Formula · 5 cc",
+      "Temp · 98.6°F",
+      "Note · Slept through the night",
+      "Tylenol · 2.5 ml",
+    ]);
+  });
+
+  it("titles a note by its title and keeps the body as the subtitle", async () => {
+    mockApi.get.mockImplementation((url: string) => {
+      if (url.includes("/notes")) return Promise.resolve([note(7, hoursAgo(1), "Rash", "Small red patch on left arm")]);
+      return Promise.resolve([]);
+    });
+
+    render(<Dashboard />, { wrapper: Wrapper });
+
+    expect(await screen.findByText("Note · Rash")).toBeTruthy();
+    expect(screen.getByText("Small red patch on left arm")).toBeTruthy();
+  });
+
+  it("excludes to-dos, which have their own section", async () => {
+    mockApi.get.mockImplementation((url: string) => {
+      if (url.includes("/todos")) {
+        return Promise.resolve([
+          {
+            id: 9,
+            child_id: 1,
+            title: "Book 6 month checkup",
+            notes: null,
+            due_date: null,
+            priority: "high",
+            completed: 0,
+            completed_at: null,
+            created_at: hoursAgo(1),
+            updated_at: hoursAgo(1),
+          },
+        ]);
+      }
+      if (url.includes("/feedings")) return Promise.resolve([feeding(1, hoursAgo(2), hoursAgo(1.75))]);
+      return Promise.resolve([]);
+    });
+
+    render(<Dashboard />, { wrapper: Wrapper });
+
+    await screen.findByText("Bottle Formula · 5 cc");
+    expect(recentActivityTitles()).toEqual(["Bottle Formula · 5 cc"]);
   });
 
   it("does not let a run of feedings crowd out other activity", async () => {
