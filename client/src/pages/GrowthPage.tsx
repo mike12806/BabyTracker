@@ -37,11 +37,13 @@ import NowButton from "../components/NowButton";
 import { FAB_BOTTOM_OFFSET } from "../components/Layout";
 import NoChildPlaceholder from "../components/NoChildPlaceholder";
 import { buildCategoryColors } from "../theme/categoryColors";
+import { formatWeight, lbOzToPounds, poundsToLbOz } from "../utils/weight";
 import type { Growth } from "../types/models";
 
 const EMPTY_FORM = {
   date: "",
   weight: "",
+  weight_oz: "",
   weight_unit: "lb",
   height: "",
   height_unit: "in",
@@ -76,13 +78,15 @@ interface MetricCardProps {
   label: string;
   value: number;
   unit: string;
+  /** Pre-formatted value (e.g. "7 lb 4 oz") shown instead of the value + unit pair. */
+  valueText?: string;
   data: { v: number }[];
   tileColor: string;
   solidColor: string;
   icon: React.ReactNode;
 }
 
-function MetricCard({ label, value, unit, data, tileColor, solidColor, icon }: MetricCardProps) {
+function MetricCard({ label, value, unit, valueText, data, tileColor, solidColor, icon }: MetricCardProps) {
   return (
     <Card
       sx={{
@@ -114,11 +118,13 @@ function MetricCard({ label, value, unit, data, tileColor, solidColor, icon }: M
         </Stack>
         <Stack direction="row" spacing={0.5} sx={{ alignItems: "baseline", mb: 0 }}>
           <Typography sx={{ fontSize: 16, fontWeight: 700, lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>
-            {value}
+            {valueText ?? value}
           </Typography>
-          <Typography sx={{ fontSize: 11, color: "text.secondary", fontWeight: 500 }}>
-            {unit}
-          </Typography>
+          {!valueText && (
+            <Typography sx={{ fontSize: 11, color: "text.secondary", fontWeight: 500 }}>
+              {unit}
+            </Typography>
+          )}
         </Stack>
         <Box sx={{ height: 36, mx: -1 }}>
           {data.length >= 2 ? (
@@ -181,7 +187,7 @@ function EntryCard({ entry, onEdit, onDelete, gutterColor }: EntryCardProps) {
               <Stack direction="row" spacing={0.75} useFlexGap sx={{ flexWrap: "wrap" }}>
                 {entry.weight != null && (
                   <Typography variant="body2" sx={{ fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
-                    {entry.weight} {entry.weight_unit ?? ""}
+                    {formatWeight(entry.weight, entry.weight_unit)}
                   </Typography>
                 )}
                 {entry.height != null && (
@@ -202,7 +208,7 @@ function EntryCard({ entry, onEdit, onDelete, gutterColor }: EntryCardProps) {
                   <Chip
                     size="small"
                     icon={<MonitorWeightIcon />}
-                    label={`${entry.weight} ${entry.weight_unit ?? ""}`.trim()}
+                    label={formatWeight(entry.weight, entry.weight_unit)}
                     sx={{ fontWeight: 500 }}
                   />
                 )}
@@ -338,11 +344,15 @@ export default function GrowthPage() {
   };
 
   const handleEdit = (entry: Growth) => {
+    const unit = entry.weight_unit || "lb";
+    // Pounds are edited as a lb + oz pair, so split the stored decimal value.
+    const parts = unit === "lb" && entry.weight != null ? poundsToLbOz(entry.weight) : null;
     setEditingEntry(entry);
     setForm({
       date: entry.date,
-      weight: entry.weight != null ? String(entry.weight) : "",
-      weight_unit: entry.weight_unit || "lb",
+      weight: parts ? String(parts.lb) : entry.weight != null ? String(entry.weight) : "",
+      weight_oz: parts && parts.oz !== 0 ? String(parts.oz) : "",
+      weight_unit: unit,
       height: entry.height != null ? String(entry.height) : "",
       height_unit: entry.height_unit || "in",
       head_circumference: entry.head_circumference != null ? String(entry.head_circumference) : "",
@@ -354,10 +364,16 @@ export default function GrowthPage() {
 
   const handleSave = async () => {
     if (!selectedChild) return;
+    const weight =
+      form.weight_unit === "lb"
+        ? lbOzToPounds(form.weight, form.weight_oz)
+        : form.weight
+          ? parseFloat(form.weight)
+          : null;
     const payload = {
       date: form.date,
-      weight: form.weight ? parseFloat(form.weight) : null,
-      weight_unit: form.weight ? form.weight_unit : null,
+      weight,
+      weight_unit: weight != null ? form.weight_unit : null,
       height: form.height ? parseFloat(form.height) : null,
       height_unit: form.height ? form.height_unit : null,
       head_circumference: form.head_circumference ? parseFloat(form.head_circumference) : null,
@@ -422,6 +438,7 @@ export default function GrowthPage() {
                 label="Weight"
                 value={trends.weight.latest}
                 unit={trends.weight.unit}
+                valueText={trends.weight.unit === "lb" ? formatWeight(trends.weight.latest, "lb") : undefined}
                 data={trends.weight.series}
                 tileColor={cat.temp.tile}
                 solidColor={cat.temp.solid}
@@ -548,21 +565,38 @@ export default function GrowthPage() {
             <NowButton type="date" onSetNow={(v) => setForm({ ...form, date: v })} />
           </Box>
           <Box sx={{ display: "flex", gap: 2 }}>
-            <TextField
-              margin="dense"
-              label="Weight"
-              type="number"
-              sx={{ flex: 1 }}
-              value={form.weight}
-              onChange={(e) => setForm({ ...form, weight: e.target.value })}
-            />
+            {/* Pounds are entered as a lb + oz pair; the unit column stays aligned with the rows below. */}
+            <Box sx={{ display: "flex", gap: 1, flex: 1 }}>
+              <TextField
+                margin="dense"
+                label={form.weight_unit === "lb" ? "Weight (lb)" : "Weight"}
+                type="number"
+                sx={{ flex: 1.4 }}
+                value={form.weight}
+                onChange={(e) => setForm({ ...form, weight: e.target.value })}
+              />
+              {form.weight_unit === "lb" && (
+                <TextField
+                  margin="dense"
+                  label="oz"
+                  type="number"
+                  sx={{ flex: 1 }}
+                  value={form.weight_oz}
+                  onChange={(e) => setForm({ ...form, weight_oz: e.target.value })}
+                />
+              )}
+            </Box>
             <TextField
               select
               margin="dense"
               label="Unit"
-              sx={{ width: 100 }}
+              sx={{ width: 100, flexShrink: 0 }}
               value={form.weight_unit}
-              onChange={(e) => setForm({ ...form, weight_unit: e.target.value })}
+              onChange={(e) => {
+                const weight_unit = e.target.value;
+                // The oz companion field only exists for pounds.
+                setForm({ ...form, weight_unit, weight_oz: weight_unit === "lb" ? form.weight_oz : "" });
+              }}
             >
               <MenuItem value="lb">lb</MenuItem>
               <MenuItem value="kg">kg</MenuItem>
