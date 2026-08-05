@@ -61,11 +61,14 @@ export interface TummyTime {
   updated_at: string;
 }
 
+export type PumpingSide = "left" | "right" | "both";
+
 export interface Pumping {
   id: number;
   child_id: number;
   start_time: string;
   end_time: string | null;
+  side: PumpingSide | null;
   amount: number | null;
   amount_unit: "ml" | "oz" | null;
   notes: string | null;

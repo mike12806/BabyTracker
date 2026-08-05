@@ -19,6 +19,7 @@ import { useChildren } from "../hooks/useChildren";
 import { useDataRefresh } from "../hooks/useDataRefresh";
 import { useNotification } from "../hooks/useNotification";
 import { clearDraft, loadDraft, saveDraft } from "../utils/formDraft";
+import { PUMPING_SIDES } from "../utils/pumping";
 import NowButton from "./NowButton";
 
 export type QuickLogCategory = "feed" | "diaper" | "sleep" | "pump" | "tummy" | "note";
@@ -78,6 +79,8 @@ interface FormState {
   feedingType: string;
   amount: string;
   amountUnit: string;
+  // pumping
+  pumpSide: string;
   // diaper
   diaperType: string;
   color: string;
@@ -101,6 +104,7 @@ function emptyForm(): FormState {
     feedingType: "bottle_formula",
     amount: "",
     amountUnit: "oz",
+    pumpSide: "both",
     diaperType: "wet",
     color: "",
     isNap: true,
@@ -198,6 +202,7 @@ export default function QuickLogDialog({ category, onClose, onLogged }: QuickLog
           child_id: selectedChild.id,
           start_time: startIso,
           end_time: endIso,
+          side: form.pumpSide,
           amount: form.amount ? parseFloat(form.amount) : null,
           amount_unit: form.amount ? form.amountUnit : null,
           notes: form.notes || null,
@@ -376,6 +381,18 @@ export default function QuickLogDialog({ category, onClose, onLogged }: QuickLog
         )}
         {category === "pump" && (
           <>
+            <TextField
+              select
+              margin="dense"
+              label="Breast"
+              fullWidth
+              value={form.pumpSide}
+              onChange={(e) => setForm({ ...form, pumpSide: e.target.value })}
+            >
+              {PUMPING_SIDES.map((s) => (
+                <MenuItem key={s.value} value={s.value}>{s.label}</MenuItem>
+              ))}
+            </TextField>
             {timeField}
             {endTimeField}
             <Box sx={{ display: "flex", gap: 2 }}>

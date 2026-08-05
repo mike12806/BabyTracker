@@ -85,7 +85,8 @@ activity.get("/", async (c) => {
       `).bind(childId, fromDate, toDate).all<ActivityEntry>(),
       c.env.DB.prepare(`
         SELECT 'Pumping' AS activity_type, p.start_time AS event_time,
-          CASE WHEN p.amount IS NOT NULL THEN 'pumped ' || p.amount || ' ' || COALESCE(p.amount_unit, '') ELSE 'pumping' END AS detail,
+          CASE WHEN p.amount IS NOT NULL THEN 'pumped ' || p.amount || ' ' || COALESCE(p.amount_unit, '') ELSE 'pumping' END
+            || CASE p.side WHEN 'left' THEN ' · left breast' WHEN 'right' THEN ' · right breast' WHEN 'both' THEN ' · both breasts' ELSE '' END AS detail,
           ${childNameExpr} AS child_name, ${loggedByExpr} AS logged_by
         FROM pumping p
         JOIN children c ON c.id = p.child_id

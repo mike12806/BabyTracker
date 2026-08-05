@@ -136,12 +136,12 @@ INSERT INTO tummy_time (child_id, start_time, end_time, milestone, notes) VALUES
   (2, '2026-03-12T10:00:00Z', '2026-03-12T10:07:00Z', 'Looking around', NULL);
 
 -- Pumping sessions
-INSERT INTO pumping (child_id, start_time, end_time, amount, amount_unit, notes) VALUES
-  (1, '2026-03-13T07:00:00Z', '2026-03-13T07:20:00Z', 5, 'oz', 'Morning pump'),
-  (1, '2026-03-13T13:00:00Z', '2026-03-13T13:20:00Z', 4, 'oz', 'Afternoon pump'),
-  (1, '2026-03-13T21:00:00Z', '2026-03-13T21:15:00Z', 3, 'oz', 'Evening pump'),
-  (1, '2026-03-12T07:00:00Z', '2026-03-12T07:20:00Z', 5, 'oz', NULL),
-  (1, '2026-03-12T13:00:00Z', '2026-03-12T13:15:00Z', 4, 'oz', NULL);
+INSERT INTO pumping (child_id, start_time, end_time, side, amount, amount_unit, notes) VALUES
+  (1, '2026-03-13T07:00:00Z', '2026-03-13T07:20:00Z', 'both', 5, 'oz', 'Morning pump'),
+  (1, '2026-03-13T13:00:00Z', '2026-03-13T13:20:00Z', 'left', 4, 'oz', 'Afternoon pump'),
+  (1, '2026-03-13T21:00:00Z', '2026-03-13T21:15:00Z', 'right', 3, 'oz', 'Evening pump'),
+  (1, '2026-03-12T07:00:00Z', '2026-03-12T07:20:00Z', 'both', 5, 'oz', NULL),
+  (1, '2026-03-12T13:00:00Z', '2026-03-12T13:15:00Z', 'both', 4, 'oz', NULL);
 
 -- Growth for Liam
 INSERT INTO growth (child_id, date, weight, weight_unit, height, height_unit, head_circumference, head_circumference_unit, notes) VALUES

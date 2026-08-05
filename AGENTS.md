@@ -26,7 +26,7 @@ Core entities modeled after Baby Buddy:
 - **Diaper Change** — time, type (wet/solid/both), color, notes
 - **Sleep** — start/end time, nap vs. night, notes
 - **Tummy Time** — start/end time, milestone, notes
-- **Pumping** — start/end time, amount, notes
+- **Pumping** — start/end time, breast side (left/right/both), amount, notes
 - **Growth** — date, weight, height, head circumference
 - **Temperature** — time, reading, notes
 - **Note** — freeform note attached to a child and time
