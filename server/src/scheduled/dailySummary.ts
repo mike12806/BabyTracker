@@ -52,10 +52,16 @@ interface FeedingRow { type: string; start_time: string; end_time: string | null
 interface DiaperRow { time: string; type: string; color: string | null }
 interface SleepRow { start_time: string; end_time: string | null; is_nap: number }
 interface TummyRow { start_time: string; end_time: string | null; milestone: string | null }
-interface PumpingRow { start_time: string; end_time: string | null; amount: number | null; amount_unit: string | null }
+interface PumpingRow { start_time: string; end_time: string | null; side: string | null; amount: number | null; amount_unit: string | null }
 interface TemperatureRow { time: string; reading: number; reading_unit: string }
 interface NoteRow { time: string; title: string | null; content: string }
 interface HistoryEntryRow { activity_type: string; event_time: string; detail: string; child_name: string; logged_by: string }
+
+const PUMPING_SIDE_LABELS: Record<string, string> = {
+  left: "left breast",
+  right: "right breast",
+  both: "both breasts",
+};
 
 // ── Data fetching ─────────────────────────────────────────────────────────────
 
@@ -88,7 +94,7 @@ async function fetchChildData(
         "SELECT start_time, end_time, milestone FROM tummy_time WHERE child_id = ? AND start_time < ? AND (end_time IS NULL OR end_time > ?) ORDER BY start_time"
       ).bind(childId, end, start).all<TummyRow>(),
       env.DB.prepare(
-        "SELECT start_time, end_time, amount, amount_unit FROM pumping WHERE child_id = ? AND start_time < ? AND (end_time IS NULL OR end_time > ?) ORDER BY start_time"
+        "SELECT start_time, end_time, side, amount, amount_unit FROM pumping WHERE child_id = ? AND start_time < ? AND (end_time IS NULL OR end_time > ?) ORDER BY start_time"
       ).bind(childId, end, start).all<PumpingRow>(),
       env.DB.prepare(
         "SELECT time, reading, reading_unit FROM temperature WHERE child_id = ? AND time >= ? AND time < ? ORDER BY time"
@@ -164,7 +170,8 @@ async function fetchActivityHistory(
       `).bind(userId, windowStart, windowEnd).all<HistoryEntryRow>(),
       env.DB.prepare(`
         SELECT 'Pumping' AS activity_type, p.start_time AS event_time,
-          CASE WHEN p.amount IS NOT NULL THEN 'pumped ' || p.amount || ' ' || COALESCE(p.amount_unit, '') ELSE 'pumping' END AS detail,
+          CASE WHEN p.amount IS NOT NULL THEN 'pumped ' || p.amount || ' ' || COALESCE(p.amount_unit, '') ELSE 'pumping' END
+            || CASE p.side WHEN 'left' THEN ' · left breast' WHEN 'right' THEN ' · right breast' WHEN 'both' THEN ' · both breasts' ELSE '' END AS detail,
           ${childNameExpr} AS child_name, ${loggedByExpr} AS logged_by
         FROM pumping p
         JOIN children c ON c.id = p.child_id
@@ -326,8 +333,10 @@ function buildChildSection(
     const totalStr = totalAmount > 0 ? ` · ${totalAmount.toFixed(1)} ${esc(unit)} total` : "";
     rows.push(sectionHeader("🍶", `Pumping (${pumping.length} session${pumping.length !== 1 ? "s" : ""}${totalStr})`));
     for (const p of pumping) {
+      const sideLabel = PUMPING_SIDE_LABELS[p.side ?? ""];
+      const side = sideLabel ? ` · ${sideLabel}` : "";
       const amount = p.amount != null ? ` · ${p.amount} ${esc(p.amount_unit ?? "")}` : "";
-      rows.push(row(`${esc(formatTime(p.start_time))} &mdash; ${esc(fmtDuration(durationMins(p.start_time, p.end_time)))}${amount}`));
+      rows.push(row(`${esc(formatTime(p.start_time))} &mdash; ${esc(fmtDuration(durationMins(p.start_time, p.end_time)))}${side}${amount}`));
     }
   }
 

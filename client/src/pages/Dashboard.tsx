@@ -35,6 +35,7 @@ import { useNotification } from "../hooks/useNotification";
 import NoChildPlaceholder from "../components/NoChildPlaceholder";
 import QuickLogDialog, { type QuickLogCategory } from "../components/QuickLogDialog";
 import { buildCategoryColors, type CategoryKey } from "../theme/categoryColors";
+import { sideLabel } from "../utils/pumping";
 import type {
   Feeding,
   DiaperChange,
@@ -291,7 +292,7 @@ export default function Dashboard() {
   feedings.slice(0, 10).forEach((f) => allEvents.push({ cat: "feed", title: `${prettifyType(f.type)}${f.amount ? ` · ${f.amount}${f.amount_unit ? ` ${f.amount_unit}` : ""}` : ""}`, time: new Date(f.start_time).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }), meta: formatDuration(f.start_time, f.end_time) }));
   diapers.slice(0, 10).forEach((d) => allEvents.push({ cat: "diaper", title: `Diaper · ${prettifyType(d.type)}`, time: new Date(d.time).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }), meta: d.color || "" }));
   sleeps.slice(0, 10).forEach((s) => allEvents.push({ cat: "sleep", title: s.is_nap ? "Nap" : "Sleep", time: new Date(s.start_time).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }), meta: s.end_time ? formatDuration(s.start_time, s.end_time) : `Active · ${formatDuration(s.start_time, null)}`, live: !s.end_time }));
-  pumpings.slice(0, 10).forEach((p) => allEvents.push({ cat: "pump", title: `Pump${p.amount ? ` · ${p.amount}${p.amount_unit ? ` ${p.amount_unit}` : ""}` : ""}`, time: new Date(p.start_time).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }), meta: formatDuration(p.start_time, p.end_time) }));
+  pumpings.slice(0, 10).forEach((p) => allEvents.push({ cat: "pump", title: `Pump${sideLabel(p.side) ? ` · ${sideLabel(p.side)}` : ""}${p.amount ? ` · ${p.amount}${p.amount_unit ? ` ${p.amount_unit}` : ""}` : ""}`, time: new Date(p.start_time).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }), meta: formatDuration(p.start_time, p.end_time) }));
   tummyTimes.slice(0, 10).forEach((tt) => allEvents.push({ cat: "tummy", title: "Tummy time", time: new Date(tt.start_time).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }), meta: formatDuration(tt.start_time, tt.end_time) }));
 
   allEvents.sort((a, b) => {

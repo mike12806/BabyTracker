@@ -40,6 +40,7 @@ import NoChildPlaceholder from "../components/NoChildPlaceholder";
 
 import type { Pumping } from "../types/models";
 import { isoToLocal } from "../utils/dateTime";
+import { PUMPING_SIDES, sideLabel } from "../utils/pumping";
 import { buildCategoryColors } from "../theme/categoryColors";
 
 function relativeTime(iso: string): string {
@@ -112,7 +113,7 @@ export default function PumpingPage() {
   const [entries, setEntries] = useState<Pumping[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState<Pumping | null>(null);
-  const [form, setForm] = useState({ start_time: "", end_time: "", amount: "", amount_unit: "oz", notes: "" });
+  const [form, setForm] = useState({ start_time: "", end_time: "", side: "both", amount: "", amount_unit: "oz", notes: "" });
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
   const [menuEntry, setMenuEntry] = useState<Pumping | null>(null);
 
@@ -135,6 +136,7 @@ export default function PumpingPage() {
     setForm({
       start_time: isoToLocal(entry.start_time),
       end_time: entry.end_time ? isoToLocal(entry.end_time) : "",
+      side: entry.side ?? "both",
       amount: entry.amount != null ? String(entry.amount) : "",
       amount_unit: entry.amount_unit || "oz",
       notes: entry.notes || "",
@@ -144,7 +146,7 @@ export default function PumpingPage() {
 
   const openAdd = () => {
     setEditingEntry(null);
-    setForm({ start_time: "", end_time: "", amount: "", amount_unit: "oz", notes: "" });
+    setForm({ start_time: "", end_time: "", side: "both", amount: "", amount_unit: "oz", notes: "" });
     setDialogOpen(true);
   };
 
@@ -153,6 +155,7 @@ export default function PumpingPage() {
     const payload = {
       start_time: new Date(form.start_time).toISOString(),
       end_time: form.end_time ? new Date(form.end_time).toISOString() : null,
+      side: form.side,
       amount: form.amount ? parseFloat(form.amount) : null,
       amount_unit: form.amount ? form.amount_unit : null,
       notes: form.notes || null,
@@ -165,7 +168,7 @@ export default function PumpingPage() {
       }
       setDialogOpen(false);
       setEditingEntry(null);
-      setForm({ start_time: "", end_time: "", amount: "", amount_unit: "oz", notes: "" });
+      setForm({ start_time: "", end_time: "", side: "both", amount: "", amount_unit: "oz", notes: "" });
       await load();
     } catch (err) {
       notify(err instanceof Error ? err.message : "Failed to save pumping session.", "error");
@@ -290,10 +293,12 @@ export default function PumpingPage() {
                 </Box>
                 {items.map((p) => {
                   const duration = humanDuration(p.start_time, p.end_time);
-                  const primary =
+                  const side = sideLabel(p.side);
+                  const summary =
                     p.amount != null
                       ? `${p.amount} ${p.amount_unit ?? "oz"}`
                       : duration ?? "In progress";
+                  const primary = side ? `${side} · ${summary}` : summary;
                   const meta = duration && p.amount != null ? duration : (p.notes || "—");
                   return (
                     <Box
@@ -348,6 +353,7 @@ export default function PumpingPage() {
                     <TableCell>Start</TableCell>
                     <TableCell>End</TableCell>
                     <TableCell>Duration</TableCell>
+                    <TableCell>Breast</TableCell>
                     <TableCell>Amount</TableCell>
                     <TableCell>Notes</TableCell>
                     <TableCell />
@@ -359,6 +365,7 @@ export default function PumpingPage() {
                       <TableCell>{new Date(p.start_time).toLocaleString()}</TableCell>
                       <TableCell>{p.end_time ? new Date(p.end_time).toLocaleString() : "In progress"}</TableCell>
                       <TableCell>{humanDuration(p.start_time, p.end_time) ?? "—"}</TableCell>
+                      <TableCell>{sideLabel(p.side) ?? "—"}</TableCell>
                       <TableCell>{p.amount ? `${p.amount} ${p.amount_unit}` : "—"}</TableCell>
                       <TableCell>{p.notes || "—"}</TableCell>
                       <TableCell>
@@ -373,7 +380,7 @@ export default function PumpingPage() {
                   ))}
                   {sortedEntries.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={6} align="center">
+                      <TableCell colSpan={7} align="center">
                         <Typography color="text.secondary">No pumping sessions recorded.</Typography>
                       </TableCell>
                     </TableRow>
@@ -457,6 +464,18 @@ export default function PumpingPage() {
             />
             <NowButton onSetNow={(v) => setForm({ ...form, end_time: v })} />
           </Box>
+          <TextField
+            select
+            margin="dense"
+            label="Breast"
+            fullWidth
+            value={form.side}
+            onChange={(e) => setForm({ ...form, side: e.target.value })}
+          >
+            {PUMPING_SIDES.map((s) => (
+              <MenuItem key={s.value} value={s.value}>{s.label}</MenuItem>
+            ))}
+          </TextField>
           <Box sx={{ display: "flex", gap: 2 }}>
             <TextField
               margin="dense"

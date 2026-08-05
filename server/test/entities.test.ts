@@ -98,3 +98,67 @@ describe("Sleep API", () => {
     expect(entries).toHaveLength(1);
   });
 });
+
+describe("Pumping API", () => {
+  let api: ReturnType<typeof testRequest>;
+  let childId: number;
+
+  beforeEach(async () => {
+    const app = createTestApp();
+    await applyMigrations(env.DB);
+    api = testRequest(app, env.DB);
+
+    const res = await api.post("/api/children", {
+      first_name: "Emma",
+      birth_date: "2024-06-15",
+    });
+    childId = ((await res.json()) as { id: number }).id;
+  });
+
+  it("POST /api/pumping stores the breast side", async () => {
+    const res = await api.post("/api/pumping", {
+      child_id: childId,
+      start_time: "2024-12-01T07:00:00Z",
+      end_time: "2024-12-01T07:20:00Z",
+      side: "left",
+      amount: 4,
+      amount_unit: "oz",
+    });
+    expect(res.status).toBe(201);
+    const entry = (await res.json()) as Record<string, unknown>;
+    expect(entry.side).toBe("left");
+  });
+
+  it("POST /api/pumping leaves side null when omitted", async () => {
+    const res = await api.post("/api/pumping", {
+      child_id: childId,
+      start_time: "2024-12-01T07:00:00Z",
+    });
+    expect(res.status).toBe(201);
+    const entry = (await res.json()) as Record<string, unknown>;
+    expect(entry.side).toBeNull();
+  });
+
+  it("PUT /api/pumping/:id updates the breast side", async () => {
+    const created = await api.post("/api/pumping", {
+      child_id: childId,
+      start_time: "2024-12-01T07:00:00Z",
+      side: "right",
+    });
+    const { id } = (await created.json()) as { id: number };
+
+    const res = await api.put(`/api/pumping/${id}`, { side: "both" });
+    expect(res.status).toBe(200);
+    const entry = (await res.json()) as Record<string, unknown>;
+    expect(entry.side).toBe("both");
+  });
+
+  it("POST /api/pumping rejects an unknown breast side", async () => {
+    const res = await api.post("/api/pumping", {
+      child_id: childId,
+      start_time: "2024-12-01T07:00:00Z",
+      side: "middle",
+    });
+    expect(res.status).toBe(500);
+  });
+});
