@@ -44,6 +44,20 @@ describe("Feedings API", () => {
     expect(feeding.notes).toBe("Morning bottle");
   });
 
+  it("POST /api/feedings accepts cc as an amount unit", async () => {
+    const res = await api.post("/api/feedings", {
+      child_id: childId,
+      type: "bottle_breast_milk",
+      start_time: "2024-12-01T08:00:00Z",
+      amount: 120,
+      amount_unit: "cc",
+    });
+    expect(res.status).toBe(201);
+    const feeding = (await res.json()) as Record<string, unknown>;
+    expect(feeding.amount).toBe(120);
+    expect(feeding.amount_unit).toBe("cc");
+  });
+
   it("GET /api/feedings lists feedings for a child", async () => {
     await api.post("/api/feedings", {
       child_id: childId,

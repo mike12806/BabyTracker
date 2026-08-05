@@ -22,7 +22,7 @@ export interface Feeding {
   start_time: string;
   end_time: string | null;
   amount: number | null;
-  amount_unit: "ml" | "oz" | "g" | null;
+  amount_unit: "ml" | "oz" | "g" | "cc" | null;
   notes: string | null;
   created_at: string;
   updated_at: string;

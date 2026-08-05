@@ -499,6 +499,7 @@ export default function FeedingsPage() {
               >
                 <MenuItem value="oz">oz</MenuItem>
                 <MenuItem value="ml">ml</MenuItem>
+                <MenuItem value="cc">cc</MenuItem>
                 <MenuItem value="g">g</MenuItem>
               </TextField>
             </Box>
