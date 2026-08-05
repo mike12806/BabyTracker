@@ -1,0 +1,213 @@
+import { render, screen } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { MemoryRouter } from "react-router-dom";
+import { ThemeProvider, createTheme } from "@mui/material/styles";
+import Dashboard from "../src/pages/Dashboard";
+import type {
+  Child,
+  DiaperChange,
+  Feeding,
+  Pumping,
+  SleepEntry,
+  TummyTime,
+} from "../src/types/models";
+
+vi.mock("../src/api/client", () => ({
+  api: {
+    get: vi.fn(),
+    post: vi.fn(),
+    put: vi.fn(),
+    delete: vi.fn(),
+    upload: vi.fn(),
+  },
+  API_BASE: "/api",
+}));
+
+vi.mock("../src/hooks/useChildren", () => ({
+  useChildren: vi.fn(),
+}));
+
+import { useChildren } from "../src/hooks/useChildren";
+import { DataRefreshProvider } from "../src/hooks/useDataRefresh";
+import { api } from "../src/api/client";
+
+const mockUseChildren = vi.mocked(useChildren);
+const mockApi = vi.mocked(api);
+
+const theme = createTheme();
+function Wrapper({ children }: { children: React.ReactNode }) {
+  return (
+    <MemoryRouter>
+      <ThemeProvider theme={theme}>
+        <DataRefreshProvider>{children}</DataRefreshProvider>
+      </ThemeProvider>
+    </MemoryRouter>
+  );
+}
+
+const child: Child = {
+  id: 1,
+  first_name: "Nolan",
+  last_name: "Faherty",
+  birth_date: "2025-06-01",
+  picture_url: null,
+  picture_content_type: null,
+  created_at: "2025-06-01T12:00:00Z",
+  updated_at: "2025-06-01T12:00:00Z",
+};
+
+// Anchored to local noon so every "hours ago" offset below lands on the same
+// calendar day regardless of when the suite runs.
+const noonToday = (() => {
+  const d = new Date();
+  d.setHours(12, 0, 0, 0);
+  return d;
+})();
+
+function hoursAgo(hours: number): string {
+  return new Date(noonToday.getTime() - hours * 3600_000).toISOString();
+}
+
+const feeding = (id: number, start: string, end: string): Feeding => ({
+  id,
+  child_id: 1,
+  type: "bottle_formula",
+  start_time: start,
+  end_time: end,
+  amount: 5,
+  amount_unit: "cc",
+  notes: null,
+  created_at: start,
+  updated_at: start,
+});
+
+const diaper = (id: number, time: string): DiaperChange => ({
+  id,
+  child_id: 1,
+  time,
+  type: "wet",
+  color: null,
+  notes: null,
+  created_at: time,
+  updated_at: time,
+});
+
+const sleep = (id: number, start: string, end: string): SleepEntry => ({
+  id,
+  child_id: 1,
+  start_time: start,
+  end_time: end,
+  is_nap: 1,
+  notes: null,
+  created_at: start,
+  updated_at: start,
+});
+
+const pumping = (id: number, start: string, end: string): Pumping => ({
+  id,
+  child_id: 1,
+  start_time: start,
+  end_time: end,
+  side: "both",
+  amount: 3,
+  amount_unit: "oz",
+  notes: null,
+  created_at: start,
+  updated_at: start,
+});
+
+const tummyTime = (id: number, start: string, end: string): TummyTime => ({
+  id,
+  child_id: 1,
+  start_time: start,
+  end_time: end,
+  milestone: null,
+  notes: null,
+  created_at: start,
+  updated_at: start,
+});
+
+/** Titles of the Recent activity rows, in the order they are rendered. */
+function recentActivityTitles(): string[] {
+  return screen
+    .getAllByRole("button", { name: /^Edit .+ at / })
+    .map((row) => row.getAttribute("aria-label")!.replace(/^Edit /, "").replace(/ at [^ ]+ [AP]?M?$/, ""));
+}
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  mockUseChildren.mockReturnValue({
+    children: [child],
+    selectedChild: child,
+    selectChild: vi.fn(),
+    refreshChildren: vi.fn().mockResolvedValue(undefined),
+    loading: false,
+    defaultChildId: null,
+    setDefaultChild: vi.fn().mockResolvedValue(undefined),
+  });
+  mockApi.get.mockResolvedValue([]);
+});
+
+describe("Dashboard – recent activity feed", () => {
+  it("interleaves every activity type in reverse-chronological order", async () => {
+    mockApi.get.mockImplementation((url: string) => {
+      if (url.includes("/feedings")) return Promise.resolve([feeding(1, hoursAgo(1), hoursAgo(0.75))]);
+      if (url.includes("/diaper-changes")) return Promise.resolve([diaper(2, hoursAgo(0.5))]);
+      if (url.includes("/sleep")) return Promise.resolve([sleep(3, hoursAgo(3), hoursAgo(2.5))]);
+      if (url.includes("/pumping")) return Promise.resolve([pumping(4, hoursAgo(2), hoursAgo(1.75))]);
+      if (url.includes("/tummy-time")) return Promise.resolve([tummyTime(5, hoursAgo(4), hoursAgo(3.75))]);
+      return Promise.resolve([]);
+    });
+
+    render(<Dashboard />, { wrapper: Wrapper });
+
+    await screen.findByText(/Diaper · Wet/);
+    expect(recentActivityTitles()).toEqual([
+      "Diaper · Wet",
+      "Bottle Formula · 5 cc",
+      "Pump · Both · 3 oz",
+      "Nap",
+      "Tummy time",
+    ]);
+  });
+
+  it("does not let a run of feedings crowd out other activity", async () => {
+    // The feed shows six rows; ten feedings alone would fill it if the entries
+    // were not merged by timestamp.
+    const feedings = Array.from({ length: 10 }, (_, i) =>
+      feeding(100 + i, hoursAgo(i + 1), hoursAgo(i + 0.75)),
+    );
+    mockApi.get.mockImplementation((url: string) => {
+      if (url.includes("/feedings")) return Promise.resolve(feedings);
+      if (url.includes("/diaper-changes")) return Promise.resolve([diaper(2, hoursAgo(0.25))]);
+      return Promise.resolve([]);
+    });
+
+    render(<Dashboard />, { wrapper: Wrapper });
+
+    await screen.findByText(/Diaper · Wet/);
+    expect(recentActivityTitles()[0]).toBe("Diaper · Wet");
+    expect(recentActivityTitles()).toHaveLength(6);
+  });
+
+  it("ranks by date, not by time of day, and marks entries from earlier days", async () => {
+    // Regression: sorting on the formatted clock time put last night's 11:30 PM
+    // feeding above this morning's diaper — or, in browsers that reject the
+    // string, left the feed in per-category order so only feedings showed.
+    const lastNight = new Date(noonToday);
+    lastNight.setDate(lastNight.getDate() - 1);
+    lastNight.setHours(23, 30, 0, 0);
+
+    mockApi.get.mockImplementation((url: string) => {
+      if (url.includes("/feedings")) return Promise.resolve([feeding(1, lastNight.toISOString(), lastNight.toISOString())]);
+      if (url.includes("/diaper-changes")) return Promise.resolve([diaper(2, hoursAgo(4))]);
+      return Promise.resolve([]);
+    });
+
+    render(<Dashboard />, { wrapper: Wrapper });
+
+    await screen.findByText(/Diaper · Wet/);
+    expect(recentActivityTitles()).toEqual(["Diaper · Wet", "Bottle Formula · 5 cc"]);
+    expect(screen.getByText(/Yesterday/)).toBeTruthy();
+  });
+});

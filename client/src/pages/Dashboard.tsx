@@ -72,6 +72,16 @@ function formatDuration(start: string, end: string | null): string {
   return `${hrs}h ${mins % 60}m`;
 }
 
+// "" for entries logged today, otherwise the day they belong to.
+function dayLabel(iso: string, todayStart: Date): string {
+  const when = new Date(iso);
+  if (when >= todayStart) return "";
+  const yesterdayStart = new Date(todayStart);
+  yesterdayStart.setDate(yesterdayStart.getDate() - 1);
+  if (when >= yesterdayStart) return "Yesterday";
+  return when.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
 function prettifyType(type: string): string {
   return type.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
@@ -287,20 +297,29 @@ export default function Dashboard() {
     { cat: "pump", value: todayPumpOz > 0 ? `${todayPumpOz} oz` : `${todayPumpCount}`, label: "pumped", sub: todayPumpCount > 0 ? `${todayPumpCount} sessions` : "today" },
   ];
 
-  const recentActivity: { id: number; cat: CategoryKey; title: string; time: string; meta: string; live?: boolean }[] = [];
+  // Each row keeps the entry's real timestamp (`ts`) alongside the formatted
+  // clock time it displays: sorting on the formatted string would compare
+  // times of day with the date thrown away, which both misorders entries from
+  // different days and fails outright in browsers that reject the non-standard
+  // date string — leaving the feed in per-category insertion order, so only
+  // feedings survived the cutoff.
+  const recentActivity: { id: number; cat: CategoryKey; title: string; ts: string; time: string; meta: string; live?: boolean }[] = [];
   const cutoff = 6;
+  const clockTime = (iso: string) => new Date(iso).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  // The row only shows a time of day, so anything before today says which day.
+  const withDay = (meta: string, iso: string) => {
+    const day = dayLabel(iso, todayStart);
+    if (!day) return meta;
+    return meta ? `${meta} · ${day}` : day;
+  };
   const allEvents: typeof recentActivity = [];
-  feedings.slice(0, 10).forEach((f) => allEvents.push({ id: f.id, cat: "feed", title: `${prettifyType(f.type)}${f.amount ? ` · ${f.amount}${f.amount_unit ? ` ${f.amount_unit}` : ""}` : ""}`, time: new Date(f.start_time).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }), meta: formatDuration(f.start_time, f.end_time) }));
-  diapers.slice(0, 10).forEach((d) => allEvents.push({ id: d.id, cat: "diaper", title: `Diaper · ${prettifyType(d.type)}`, time: new Date(d.time).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }), meta: d.color || "" }));
-  sleeps.slice(0, 10).forEach((s) => allEvents.push({ id: s.id, cat: "sleep", title: s.is_nap ? "Nap" : "Sleep", time: new Date(s.start_time).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }), meta: s.end_time ? formatDuration(s.start_time, s.end_time) : `Active · ${formatDuration(s.start_time, null)}`, live: !s.end_time }));
-  pumpings.slice(0, 10).forEach((p) => allEvents.push({ id: p.id, cat: "pump", title: `Pump${sideLabel(p.side) ? ` · ${sideLabel(p.side)}` : ""}${p.amount ? ` · ${p.amount}${p.amount_unit ? ` ${p.amount_unit}` : ""}` : ""}`, time: new Date(p.start_time).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }), meta: formatDuration(p.start_time, p.end_time) }));
-  tummyTimes.slice(0, 10).forEach((tt) => allEvents.push({ id: tt.id, cat: "tummy", title: "Tummy time", time: new Date(tt.start_time).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }), meta: formatDuration(tt.start_time, tt.end_time) }));
+  feedings.slice(0, 10).forEach((f) => allEvents.push({ id: f.id, cat: "feed", title: `${prettifyType(f.type)}${f.amount ? ` · ${f.amount}${f.amount_unit ? ` ${f.amount_unit}` : ""}` : ""}`, ts: f.start_time, time: clockTime(f.start_time), meta: withDay(formatDuration(f.start_time, f.end_time), f.start_time) }));
+  diapers.slice(0, 10).forEach((d) => allEvents.push({ id: d.id, cat: "diaper", title: `Diaper · ${prettifyType(d.type)}`, ts: d.time, time: clockTime(d.time), meta: withDay(d.color || "", d.time) }));
+  sleeps.slice(0, 10).forEach((s) => allEvents.push({ id: s.id, cat: "sleep", title: s.is_nap ? "Nap" : "Sleep", ts: s.start_time, time: clockTime(s.start_time), meta: s.end_time ? withDay(formatDuration(s.start_time, s.end_time), s.start_time) : `Active · ${formatDuration(s.start_time, null)}`, live: !s.end_time }));
+  pumpings.slice(0, 10).forEach((p) => allEvents.push({ id: p.id, cat: "pump", title: `Pump${sideLabel(p.side) ? ` · ${sideLabel(p.side)}` : ""}${p.amount ? ` · ${p.amount}${p.amount_unit ? ` ${p.amount_unit}` : ""}` : ""}`, ts: p.start_time, time: clockTime(p.start_time), meta: withDay(formatDuration(p.start_time, p.end_time), p.start_time) }));
+  tummyTimes.slice(0, 10).forEach((tt) => allEvents.push({ id: tt.id, cat: "tummy", title: "Tummy time", ts: tt.start_time, time: clockTime(tt.start_time), meta: withDay(formatDuration(tt.start_time, tt.end_time), tt.start_time) }));
 
-  allEvents.sort((a, b) => {
-    const ta = new Date(`1970-01-01 ${a.time}`).getTime();
-    const tb = new Date(`1970-01-01 ${b.time}`).getTime();
-    return tb - ta;
-  });
+  allEvents.sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime());
   recentActivity.push(...allEvents.slice(0, cutoff));
 
   const now = new Date();
