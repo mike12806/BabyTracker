@@ -4,7 +4,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import { ThemeProvider, createTheme } from "@mui/material/styles";
 import Dashboard from "../src/pages/Dashboard";
-import type { Child, Feeding } from "../src/types/models";
+import type { Child, Feeding, Pumping } from "../src/types/models";
 
 vi.mock("../src/api/client", () => ({
   api: {
@@ -281,6 +281,71 @@ describe("Dashboard – Today so far feeding total", () => {
     const tile = await feedTile();
     expect(within(tile).getByText("30 cc")).toBeTruthy();
     expect(within(tile).getByText("1 feed")).toBeTruthy();
+  });
+});
+
+describe("Dashboard – Today so far pumping total", () => {
+  function todayAt(hour: number): string {
+    const d = new Date();
+    d.setHours(hour, 0, 0, 0);
+    return d.toISOString();
+  }
+
+  function pumping(id: number, amount: number | null, amount_unit: Pumping["amount_unit"], hour: number): Pumping {
+    return {
+      id,
+      child_id: 1,
+      start_time: todayAt(hour),
+      end_time: null,
+      side: "both",
+      amount,
+      amount_unit,
+      notes: null,
+      created_at: todayAt(hour),
+      updated_at: todayAt(hour),
+    };
+  }
+
+  function mockPumpings(pumpings: Pumping[]) {
+    mockApi.get.mockImplementation((url: string) => {
+      if (url.includes("/pumping")) return Promise.resolve(pumpings);
+      return Promise.resolve([]);
+    });
+  }
+
+  async function pumpTile(): Promise<HTMLElement> {
+    const heading = await screen.findByText("pumped");
+    return heading.parentElement!.parentElement as HTMLElement;
+  }
+
+  it("totals the amount pumped today in the unit it was recorded in", async () => {
+    mockPumpings([pumping(1, 90, "ml", 7), pumping(2, 60, "ml", 13)]);
+
+    render(<Dashboard />, { wrapper: Wrapper });
+
+    const tile = within(await pumpTile());
+    expect(tile.getByText("150 mL")).toBeTruthy();
+    expect(tile.getByText("2 sessions")).toBeTruthy();
+  });
+
+  it("normalizes to mL when the day mixes units", async () => {
+    // 3 oz = 88.7205 mL, + 60 mL = 149
+    mockPumpings([pumping(1, 3, "oz", 7), pumping(2, 60, "ml", 13)]);
+
+    render(<Dashboard />, { wrapper: Wrapper });
+
+    const tile = within(await pumpTile());
+    expect(tile.getByText("149 mL")).toBeTruthy();
+  });
+
+  it("falls back to the session count when no amount was recorded", async () => {
+    mockPumpings([pumping(1, null, null, 7)]);
+
+    render(<Dashboard />, { wrapper: Wrapper });
+
+    const tile = within(await pumpTile());
+    expect(tile.getByText("1")).toBeTruthy();
+    expect(tile.getByText("1 session")).toBeTruthy();
   });
 });
 

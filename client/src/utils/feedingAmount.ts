@@ -96,6 +96,42 @@ export function amountTotals(entries: AmountEntry[]): AmountTotal[] {
 /** "118 mL", "4 oz", "100 g", or a bare number for unit-less amounts. */
 export function formatAmountTotal(total: AmountTotal): string {
   if (total.unit == null) return `${total.value}`;
-  // Millilitres are the one unit written with a capital L.
-  return `${total.value} ${total.unit === "ml" ? "mL" : total.unit}`;
+  return `${total.value} ${unitLabel(total.unit)}`;
+}
+
+/** Millilitres are the one unit written with a capital L. */
+export function unitLabel(unit: string): string {
+  return unit === "ml" ? "mL" : unit;
+}
+
+/** Can this unit be converted to millilitres? Grams cannot — they are a mass. */
+export function isVolumeUnit(unit: string | null | undefined): boolean {
+  return unit != null && unit in ML_PER_UNIT;
+}
+
+/**
+ * Restate a volume in another volume unit. Returns null when either side is
+ * not a volume, so callers cannot silently mix a mass into a volume total.
+ */
+export function convertVolume(value: number, from: string, to: string): number | null {
+  const fromMl = ML_PER_UNIT[from];
+  const toMl = ML_PER_UNIT[to];
+  if (fromMl == null || toMl == null) return null;
+  return (value * fromMl) / toMl;
+}
+
+/**
+ * The single unit a series of entries should be charted in: the one they all
+ * share, or millilitres once more than one shows up. A chart has one axis, so
+ * unlike `amountTotals` this has to decide across the whole series rather than
+ * per day. Returns null when nothing was measured by volume.
+ */
+export function commonVolumeUnit(entries: AmountEntry[]): string | null {
+  const units = new Set<string>();
+  for (const e of entries) {
+    if (e.amount != null && isVolumeUnit(e.amount_unit)) units.add(e.amount_unit as string);
+  }
+  if (units.size === 0) return null;
+  if (units.size === 1) return units.values().next().value as string;
+  return "ml";
 }

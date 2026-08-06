@@ -239,8 +239,9 @@ export default function Dashboard() {
   const todayFeedings = feedings.filter((f) => f.start_time >= todayStartIso);
   const todayDiapers = diapers.filter((d) => d.time >= todayStartIso);
   const todayFeedAmounts = amountTotals(todayFeedings);
-  const todayPumpOz = pumpings.filter((p) => p.start_time >= todayStartIso).reduce((sum, p) => (p.amount && p.amount_unit === "oz" ? sum + p.amount : sum), 0);
-  const todayPumpCount = pumpings.filter((p) => p.start_time >= todayStartIso).length;
+  const todayPumpings = pumpings.filter((p) => p.start_time >= todayStartIso);
+  const todayPumpAmounts = amountTotals(todayPumpings);
+  const todayPumpCount = todayPumpings.length;
   const lastFeeding = feedings[0] ?? null;
   const lastDiaper = diapers[0] ?? null;
   const activeSleep = sleeps.find((s) => !s.end_time) ?? null;
@@ -326,7 +327,12 @@ export default function Dashboard() {
     },
     { cat: "diaper", value: `${todayDiapers.length}`, label: "diapers", sub: "today" },
     { cat: "sleep", value: formatDuration("", null).replace(/.*/, () => { const h = Math.floor(todaySleepMins / 60); const m = Math.round(todaySleepMins % 60); return h > 0 ? `${h}h ${m}m` : `${m}m`; }), label: "asleep", sub: activeSleep ? "+ active" : "today" },
-    { cat: "pump", value: todayPumpOz > 0 ? `${todayPumpOz} oz` : `${todayPumpCount}`, label: "pumped", sub: todayPumpCount > 0 ? `${todayPumpCount} sessions` : "today" },
+    {
+      cat: "pump",
+      value: todayPumpAmounts.length > 0 ? formatAmountTotal(todayPumpAmounts[0]) : `${todayPumpCount}`,
+      label: "pumped",
+      sub: todayPumpCount > 0 ? `${todayPumpCount} session${todayPumpCount === 1 ? "" : "s"}` : "today",
+    },
   ];
 
   // Each row keeps the entry's real timestamp (`ts`) alongside the formatted

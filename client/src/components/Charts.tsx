@@ -13,6 +13,7 @@ import {
   ResponsiveContainer,
   Legend,
 } from "recharts";
+import { commonVolumeUnit, convertVolume, isVolumeUnit, unitLabel } from "../utils/feedingAmount";
 import type {
   Feeding,
   DiaperChange,
@@ -64,7 +65,9 @@ interface FeedingChartProps {
 
 export function FeedingChart({ feedings, days = 14 }: FeedingChartProps) {
   const theme = useTheme();
-  const data = useMemo(() => {
+  // The amount line shares one axis across every day on show, so the unit has
+  // to be settled over the whole visible range rather than per day.
+  const { data, unit } = useMemo(() => {
     const dateKeys = lastNDays(days);
     const map: Record<
       string,
@@ -72,29 +75,42 @@ export function FeedingChart({ feedings, days = 14 }: FeedingChartProps) {
     > = {};
     for (const d of dateKeys) map[d] = { breast: 0, bottle: 0, solid: 0, amountSum: 0, amountCount: 0 };
 
-    for (const f of feedings) {
+    const inRange = feedings.filter((f) => map[toDateKey(f.start_time)]);
+    const chartUnit = commonVolumeUnit(inRange);
+
+    for (const f of inRange) {
       const key = toDateKey(f.start_time);
-      if (!map[key]) continue;
       if (f.type === "bottle_breast_milk" || f.type === "bottle_formula" || f.type === "fortified_breast_milk") map[key].bottle++;
       else if (f.type === "solid") map[key].solid++;
       else map[key].breast++;
-      if (f.amount != null) {
-        map[key].amountSum += f.amount;
-        map[key].amountCount++;
-      }
+      if (f.amount == null) continue;
+      // A solid logged in grams is a mass; it cannot join a volume axis.
+      // Amounts saved without a unit are taken to be in the charted one.
+      const amount =
+        f.amount_unit == null
+          ? f.amount
+          : chartUnit != null && isVolumeUnit(f.amount_unit)
+            ? convertVolume(f.amount, f.amount_unit, chartUnit)
+            : null;
+      if (amount == null) continue;
+      map[key].amountSum += amount;
+      map[key].amountCount++;
     }
 
-    return dateKeys.map((d) => ({
-      date: formatDateLabel(d),
-      Breast: map[d].breast,
-      Bottle: map[d].bottle,
-      Solid: map[d].solid,
-      Amount: map[d].amountCount > 0 ? Math.round(map[d].amountSum * 10) / 10 : undefined,
-    }));
+    return {
+      unit: chartUnit,
+      data: dateKeys.map((d) => ({
+        date: formatDateLabel(d),
+        Breast: map[d].breast,
+        Bottle: map[d].bottle,
+        Solid: map[d].solid,
+        Amount: map[d].amountCount > 0 ? Math.round(map[d].amountSum * 10) / 10 : undefined,
+      })),
+    };
   }, [feedings, days]);
 
-  const unit = feedings.find((f) => f.amount != null && f.amount_unit)?.amount_unit ?? null;
   const hasAmount = data.some((d) => d.Amount !== undefined);
+  const unitText = unit ? unitLabel(unit) : null;
 
   return (
     <ResponsiveContainer width="100%" height={CHART_HEIGHT}>
@@ -107,7 +123,7 @@ export function FeedingChart({ feedings, days = 14 }: FeedingChartProps) {
             yAxisId="amount"
             orientation="right"
             tick={TICK_STYLE}
-            unit={unit ?? undefined}
+            unit={unitText ?? undefined}
             width={36}
           />
         )}
@@ -118,7 +134,7 @@ export function FeedingChart({ feedings, days = 14 }: FeedingChartProps) {
             borderRadius: 8,
           }}
           formatter={(value, name) => {
-            if (name === "Amount") return [`${value}${unit ? ` ${unit}` : ""}`, "Amount"];
+            if (name === "Amount") return [`${value}${unitText ? ` ${unitText}` : ""}`, "Amount"];
             return [value, name];
           }}
         />

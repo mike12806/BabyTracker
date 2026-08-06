@@ -179,6 +179,69 @@ describe("FeedingChart", () => {
     const total = data.reduce((sum: number, d: { Bottle: number }) => sum + d.Bottle, 0);
     expect(total).toBe(0);
   });
+
+  // The amount line rides a single right-hand axis, so every day it plots has
+  // to be in one unit no matter what units the entries were logged in.
+  describe("amount line", () => {
+    const withAmount = (
+      dateStr: string,
+      hour: number,
+      amount: number,
+      amount_unit: Feeding["amount_unit"],
+    ): Feeding => ({ ...makeFeeding("bottle_formula", dateStr, hour), amount, amount_unit });
+
+    function amountsFor(feedings: Feeding[], days = 3): (number | undefined)[] {
+      const { container } = render(<FeedingChart feedings={feedings} days={days} />, {
+        wrapper: Wrapper,
+      });
+      const chart = container.querySelector("[data-testid='chart']");
+      const data = JSON.parse(chart!.getAttribute("data-chart-data")!);
+      return data.map((d: { Amount?: number }) => d.Amount);
+    }
+
+    it("sums a day's amounts when every entry shares a unit", () => {
+      const amounts = amountsFor([
+        withAmount(today, 8, 30, "cc"),
+        withAmount(today, 12, 20, "cc"),
+        withAmount(yesterday, 9, 45, "cc"),
+      ]);
+      expect(amounts[amounts.length - 1]).toBe(50);
+      expect(amounts[amounts.length - 2]).toBe(45);
+    });
+
+    it("converts every day to mL once the range mixes units", () => {
+      // Today: 4 oz = 118.294 -> 118.3. Yesterday: 30 cc stays 30 mL.
+      const amounts = amountsFor([
+        withAmount(today, 8, 4, "oz"),
+        withAmount(yesterday, 9, 30, "cc"),
+      ]);
+      expect(amounts[amounts.length - 1]).toBe(118.3);
+      expect(amounts[amounts.length - 2]).toBe(30);
+    });
+
+    it("converts within a single day that mixes units", () => {
+      // 4 oz + 30 ml + 20 cc = 168.294 -> 168.3
+      const amounts = amountsFor([
+        withAmount(today, 8, 4, "oz"),
+        withAmount(today, 12, 30, "ml"),
+        withAmount(today, 16, 20, "cc"),
+      ]);
+      expect(amounts[amounts.length - 1]).toBe(168.3);
+    });
+
+    it("keeps grams off the volume axis", () => {
+      const amounts = amountsFor([
+        withAmount(today, 8, 60, "cc"),
+        { ...makeFeeding("solid", today, 12), amount: 100, amount_unit: "g" },
+      ]);
+      expect(amounts[amounts.length - 1]).toBe(60);
+    });
+
+    it("plots nothing for days with no recorded amount", () => {
+      const amounts = amountsFor([makeFeeding("breast_left", today, 8)]);
+      expect(amounts.every((a) => a === undefined)).toBe(true);
+    });
+  });
 });
 
 // ── DiaperChart ──────────────────────────────────────────────
