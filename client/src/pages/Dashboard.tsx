@@ -39,6 +39,7 @@ import QuickLogDialog, { type QuickLogCategory } from "../components/QuickLogDia
 import { buildCategoryColors, type CategoryKey } from "../theme/categoryColors";
 import { editEntryPath } from "../utils/activityLinks";
 import { sideLabel } from "../utils/pumping";
+import { amountTotals, formatAmountTotal } from "../utils/feedingAmount";
 import type {
   Feeding,
   DiaperChange,
@@ -237,7 +238,7 @@ export default function Dashboard() {
   const todayStartIso = todayStart.toISOString();
   const todayFeedings = feedings.filter((f) => f.start_time >= todayStartIso);
   const todayDiapers = diapers.filter((d) => d.time >= todayStartIso);
-  const todayFeedingOz = todayFeedings.reduce((sum, f) => (f.amount && f.amount_unit === "oz" ? sum + f.amount : sum), 0);
+  const todayFeedAmounts = amountTotals(todayFeedings);
   const todayPumpOz = pumpings.filter((p) => p.start_time >= todayStartIso).reduce((sum, p) => (p.amount && p.amount_unit === "oz" ? sum + p.amount : sum), 0);
   const todayPumpCount = pumpings.filter((p) => p.start_time >= todayStartIso).length;
   const lastFeeding = feedings[0] ?? null;
@@ -309,7 +310,20 @@ export default function Dashboard() {
   ];
 
   const todayTotals: { cat: CategoryKey; value: string; label: string; sub: string }[] = [
-    { cat: "feed", value: `${todayFeedings.length}`, label: "feeds", sub: todayFeedingOz > 0 ? `${todayFeedingOz} oz` : "today" },
+    // Headline the amount fed when any was recorded, keeping the feed count as
+    // the subtitle; breastfeeding-only days have no amount and stay a count.
+    {
+      cat: "feed",
+      value: todayFeedAmounts.length > 0 ? formatAmountTotal(todayFeedAmounts[0]) : `${todayFeedings.length}`,
+      label: todayFeedAmounts.length > 0 ? "fed" : "feeds",
+      sub: todayFeedAmounts.length > 0
+        ? [
+            `${todayFeedings.length} feed${todayFeedings.length === 1 ? "" : "s"}`,
+            // A gram total cannot be folded into the volume, so it rides along.
+            ...todayFeedAmounts.slice(1).map(formatAmountTotal),
+          ].join(" · ")
+        : "today",
+    },
     { cat: "diaper", value: `${todayDiapers.length}`, label: "diapers", sub: "today" },
     { cat: "sleep", value: formatDuration("", null).replace(/.*/, () => { const h = Math.floor(todaySleepMins / 60); const m = Math.round(todaySleepMins % 60); return h > 0 ? `${h}h ${m}m` : `${m}m`; }), label: "asleep", sub: activeSleep ? "+ active" : "today" },
     { cat: "pump", value: todayPumpOz > 0 ? `${todayPumpOz} oz` : `${todayPumpCount}`, label: "pumped", sub: todayPumpCount > 0 ? `${todayPumpCount} sessions` : "today" },
