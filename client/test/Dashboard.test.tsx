@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { MemoryRouter } from "react-router-dom";
@@ -192,6 +192,95 @@ describe("Dashboard – Recent Feedings amount display", () => {
     expect(screen.getByText(/18m/)).toBeTruthy();
     expect(screen.queryByText(/5 oz/)).toBeNull();
     expect(screen.queryByText(/5 ml/)).toBeNull();
+  });
+});
+
+describe("Dashboard – Today so far feeding total", () => {
+  function todayAt(hour: number, minute = 0): string {
+    const d = new Date();
+    d.setHours(hour, minute, 0, 0);
+    return d.toISOString();
+  }
+
+  function todayFeeding(id: number, amount: number | null, amount_unit: string | null, hour: number): Feeding {
+    return { ...baseFeeding, id, amount, amount_unit, start_time: todayAt(hour), end_time: null };
+  }
+
+  function mockFeedings(feedings: Feeding[]) {
+    mockApi.get.mockImplementation((url: string) => {
+      if (url.includes("/feedings")) return Promise.resolve(feedings);
+      return Promise.resolve([]);
+    });
+  }
+
+  /** The tile that headlines today's feeding total. */
+  async function feedTile(): Promise<HTMLElement> {
+    const heading = await screen.findByText(/^(fed|feeds)$/);
+    return heading.parentElement!.parentElement as HTMLElement;
+  }
+
+  it("totals the amount fed today in the unit it was recorded in", async () => {
+    mockFeedings([
+      todayFeeding(1, 30, "cc", 11),
+      todayFeeding(2, 20, "cc", 14),
+      todayFeeding(3, 30, "cc", 17),
+    ]);
+
+    render(<Dashboard />, { wrapper: Wrapper });
+
+    const tile = await feedTile();
+    expect(within(tile).getByText("fed")).toBeTruthy();
+    expect(within(tile).getByText("80 cc")).toBeTruthy();
+    expect(within(tile).getByText("3 feeds")).toBeTruthy();
+  });
+
+  it("normalizes to mL when the day mixes units", async () => {
+    // 4 oz = 118.294 mL, + 30 mL + 20 cc = 168
+    mockFeedings([
+      todayFeeding(1, 4, "oz", 9),
+      todayFeeding(2, 30, "ml", 13),
+      todayFeeding(3, 20, "cc", 17),
+    ]);
+
+    render(<Dashboard />, { wrapper: Wrapper });
+
+    const tile = await feedTile();
+    expect(within(tile).getByText("168 mL")).toBeTruthy();
+    expect(within(tile).getByText("3 feeds")).toBeTruthy();
+  });
+
+  it("carries a solid's gram total alongside the volume", async () => {
+    mockFeedings([todayFeeding(1, 60, "cc", 10), todayFeeding(2, 100, "g", 12)]);
+
+    render(<Dashboard />, { wrapper: Wrapper });
+
+    const tile = await feedTile();
+    expect(within(tile).getByText("60 cc")).toBeTruthy();
+    expect(within(tile).getByText("2 feeds · 100 g")).toBeTruthy();
+  });
+
+  it("counts breastfeeding-only days, which record no amount", async () => {
+    mockFeedings([
+      { ...todayFeeding(1, null, null, 8), type: "breast_left" },
+      { ...todayFeeding(2, null, null, 12), type: "breast_right" },
+    ]);
+
+    render(<Dashboard />, { wrapper: Wrapper });
+
+    const tile = await feedTile();
+    expect(within(tile).getByText("feeds")).toBeTruthy();
+    expect(within(tile).getByText("2")).toBeTruthy();
+    expect(within(tile).getByText("today")).toBeTruthy();
+  });
+
+  it("ignores feedings from earlier days", async () => {
+    mockFeedings([todayFeeding(1, 30, "cc", 11), { ...baseFeeding, id: 2, amount: 999, amount_unit: "cc" }]);
+
+    render(<Dashboard />, { wrapper: Wrapper });
+
+    const tile = await feedTile();
+    expect(within(tile).getByText("30 cc")).toBeTruthy();
+    expect(within(tile).getByText("1 feed")).toBeTruthy();
   });
 });
 
