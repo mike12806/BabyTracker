@@ -87,11 +87,37 @@ export default function ChartsPage() {
   const days = daysForRange(range);
 
   // Compute averages for the selected range
-  const avgFeedings = days > 0 ? (feedings.filter((f) => {
-    const d = new Date();
-    d.setDate(d.getDate() - days);
-    return new Date(f.start_time) >= d;
-  }).length / days).toFixed(1) : "0";
+  const feedCutoff = new Date();
+  feedCutoff.setDate(feedCutoff.getDate() - days);
+  const filteredFeedings = feedings.filter((f) => new Date(f.start_time) >= feedCutoff);
+
+  // Prefer the amount fed per day; fall back to feedings per day when no
+  // amounts have been recorded (e.g. breastfeeding only).
+  const feedUnitCounts = new Map<string, number>();
+  for (const f of filteredFeedings) {
+    if (f.amount == null || !f.amount_unit) continue;
+    feedUnitCounts.set(f.amount_unit, (feedUnitCounts.get(f.amount_unit) ?? 0) + 1);
+  }
+  let feedUnit: string | null = null;
+  let feedUnitCount = 0;
+  for (const [unit, count] of feedUnitCounts) {
+    if (count > feedUnitCount) {
+      feedUnit = unit;
+      feedUnitCount = count;
+    }
+  }
+  // Amounts recorded without a unit are counted against the dominant unit.
+  const totalFeedAmount = filteredFeedings.reduce(
+    (sum, f) =>
+      f.amount != null && (!f.amount_unit || f.amount_unit === feedUnit) ? sum + f.amount : sum,
+    0,
+  );
+  const hasFeedAmounts = filteredFeedings.some((f) => f.amount != null);
+  const avgFeedings =
+    days > 0
+      ? (hasFeedAmounts ? totalFeedAmount / days : filteredFeedings.length / days).toFixed(1)
+      : "0";
+  const avgFeedingsLabel = hasFeedAmounts ? `${feedUnit ?? "oz"}/day` : "/day";
 
   const avgDiapers = days > 0 ? (diapers.filter((d) => {
     const cutoff = new Date();
@@ -138,7 +164,7 @@ export default function ChartsPage() {
       title: "Feeding",
       subtitle: "Breast, bottle & solids",
       avg: avgFeedings,
-      avgLabel: "/day",
+      avgLabel: avgFeedingsLabel,
       icon: <RestaurantIcon sx={{ fontSize: 18 }} />,
       chart: <FeedingChart feedings={feedings} days={days} />,
     },
