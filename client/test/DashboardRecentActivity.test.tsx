@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import { ThemeProvider, createTheme } from "@mui/material/styles";
@@ -304,6 +304,9 @@ describe("Dashboard – recent activity feed", () => {
 
     await screen.findByText(/Diaper · Wet/);
     expect(recentActivityTitles()).toEqual(["Diaper · Wet", "Bottle Formula · 5 cc"]);
-    expect(screen.getByText(/Yesterday/)).toBeTruthy();
+    // Scoped to the row: past 11:30 PM the Feeding tile's own relative time
+    // also reads "Yesterday", and an unscoped query then matches both.
+    const feedingRow = screen.getByRole("button", { name: /^Edit Bottle Formula/ });
+    expect(within(feedingRow).getByText(/Yesterday/)).toBeTruthy();
   });
 });
