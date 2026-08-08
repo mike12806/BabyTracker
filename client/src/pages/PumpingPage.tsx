@@ -41,6 +41,7 @@ import NoChildPlaceholder from "../components/NoChildPlaceholder";
 import type { Pumping } from "../types/models";
 import { isoToLocal } from "../utils/dateTime";
 import { PUMPING_SIDES, sideLabel } from "../utils/pumping";
+import { amountTotals, formatAmountTotal } from "../utils/feedingAmount";
 import { buildCategoryColors } from "../theme/categoryColors";
 import { useEditEntryParam } from "../hooks/useEditEntryParam";
 
@@ -232,11 +233,9 @@ export default function PumpingPage() {
   }, [sortedEntries]);
 
   const todayCount = todayEntries.length;
-  const todayTotalOz = useMemo(() => {
-    return todayEntries
-      .filter((p) => p.amount != null && (p.amount_unit === "oz" || !p.amount_unit))
-      .reduce((sum, p) => sum + (p.amount ?? 0), 0);
-  }, [todayEntries]);
+  // Same totalling as the dashboard's "pumped" stat: sessions logged in
+  // different units still add up, converted to millilitres when they differ.
+  const todayAmounts = useMemo(() => amountTotals(todayEntries), [todayEntries]);
   const lastPump = sortedEntries.length > 0 ? relativeTime(sortedEntries[0].start_time) : "—";
 
   if (!selectedChild) {
@@ -283,7 +282,12 @@ export default function PumpingPage() {
             {/* Summary stat strip */}
             <Box sx={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 0.75, mb: 1 }}>
               <StatCard accentColor={c.solid} label="Today" value={todayCount} sublabel="sessions" />
-              <StatCard accentColor={c.solid} label="Volume" value={todayTotalOz > 0 ? `${todayTotalOz}` : "—"} sublabel="oz today" />
+              <StatCard
+                accentColor={c.solid}
+                label="Volume"
+                value={todayAmounts.length > 0 ? formatAmountTotal(todayAmounts[0]) : "—"}
+                sublabel="today"
+              />
               <StatCard accentColor={c.solid} label="Last" value={lastPump} sublabel="session" />
             </Box>
 

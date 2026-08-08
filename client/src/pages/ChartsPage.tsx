@@ -17,6 +17,7 @@ import { api } from "../api/client";
 import { useChildren } from "../hooks/useChildren";
 import { useDataRefresh } from "../hooks/useDataRefresh";
 import NoChildPlaceholder from "../components/NoChildPlaceholder";
+import { amountTotals, unitLabel } from "../utils/feedingAmount";
 import {
   FeedingChart,
   DiaperChart,
@@ -92,32 +93,15 @@ export default function ChartsPage() {
   const filteredFeedings = feedings.filter((f) => new Date(f.start_time) >= feedCutoff);
 
   // Prefer the amount fed per day; fall back to feedings per day when no
-  // amounts have been recorded (e.g. breastfeeding only).
-  const feedUnitCounts = new Map<string, number>();
-  for (const f of filteredFeedings) {
-    if (f.amount == null || !f.amount_unit) continue;
-    feedUnitCounts.set(f.amount_unit, (feedUnitCounts.get(f.amount_unit) ?? 0) + 1);
-  }
-  let feedUnit: string | null = null;
-  let feedUnitCount = 0;
-  for (const [unit, count] of feedUnitCounts) {
-    if (count > feedUnitCount) {
-      feedUnit = unit;
-      feedUnitCount = count;
-    }
-  }
-  // Amounts recorded without a unit are counted against the dominant unit.
-  const totalFeedAmount = filteredFeedings.reduce(
-    (sum, f) =>
-      f.amount != null && (!f.amount_unit || f.amount_unit === feedUnit) ? sum + f.amount : sum,
-    0,
-  );
-  const hasFeedAmounts = filteredFeedings.some((f) => f.amount != null);
+  // amounts have been recorded (e.g. breastfeeding only). Volumes logged in
+  // different units are converted rather than dropped, so the average covers
+  // every bottle in the range.
+  const feedTotal = amountTotals(filteredFeedings)[0] ?? null;
   const avgFeedings =
     days > 0
-      ? (hasFeedAmounts ? totalFeedAmount / days : filteredFeedings.length / days).toFixed(1)
+      ? (feedTotal ? feedTotal.value / days : filteredFeedings.length / days).toFixed(1)
       : "0";
-  const avgFeedingsLabel = hasFeedAmounts ? `${feedUnit ?? "oz"}/day` : "/day";
+  const avgFeedingsLabel = feedTotal?.unit ? `${unitLabel(feedTotal.unit)}/day` : "/day";
 
   const avgDiapers = days > 0 ? (diapers.filter((d) => {
     const cutoff = new Date();
@@ -142,9 +126,11 @@ export default function ChartsPage() {
     cutoff.setDate(cutoff.getDate() - days);
     return new Date(p.start_time) >= cutoff;
   });
-  const totalPumpOz = filteredPumpings.reduce((sum, p) => sum + (p.amount ?? 0), 0);
-  const avgPump = days > 0 ? (totalPumpOz / days).toFixed(1) : "0";
-  const pumpUnit = pumpings.find((p) => p.amount_unit)?.amount_unit || "oz";
+  // Sessions in different units are converted before they are added up —
+  // summing the raw numbers would treat an ounce as a millilitre.
+  const pumpTotal = amountTotals(filteredPumpings)[0] ?? null;
+  const avgPump = days > 0 && pumpTotal ? (pumpTotal.value / days).toFixed(1) : "0";
+  const pumpUnit = unitLabel(pumpTotal?.unit ?? "oz");
 
   interface SectionDef {
     key: string;

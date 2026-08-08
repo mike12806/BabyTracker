@@ -33,6 +33,38 @@ function fmtDuration(mins: number | null): string {
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 
+/** Volume units, expressed as the millilitres in one of them. */
+const ML_PER_UNIT: Record<string, number> = { ml: 1, cc: 1, oz: 29.5735 };
+
+/**
+ * Total volumes that may have been logged in different units, mirroring the
+ * app's own totals: the shared unit when every entry used the same one,
+ * millilitres once they differ. Entries saved without a unit are taken to be
+ * in the unit the rest of them used. Returns null when nothing was measured.
+ */
+function volumeTotal(
+  entries: { amount: number | null; amount_unit: string | null }[],
+): { value: number; unit: string } | null {
+  const measured = entries.filter((e): e is { amount: number; amount_unit: string | null } =>
+    e.amount != null,
+  );
+  if (measured.length === 0) return null;
+
+  const units = new Set<string>();
+  for (const e of measured) {
+    if (e.amount_unit && e.amount_unit in ML_PER_UNIT) units.add(e.amount_unit);
+  }
+  if (units.size === 0) return null;
+
+  const unit = units.size === 1 ? [...units][0] : "ml";
+  let total = 0;
+  for (const e of measured) {
+    const from = e.amount_unit && e.amount_unit in ML_PER_UNIT ? e.amount_unit : unit;
+    total += (e.amount * ML_PER_UNIT[from]) / ML_PER_UNIT[unit];
+  }
+  return { value: Math.round(total * 10) / 10, unit: unit === "ml" ? "mL" : unit };
+}
+
 function childAge(birthDate: string): string {
   const birth = new Date(birthDate);
   const totalDays = Math.floor((Date.now() - birth.getTime()) / 86400000);
@@ -328,9 +360,8 @@ function buildChildSection(
 
   // Pumping
   if (pumping.length > 0) {
-    const totalAmount = pumping.reduce((sum, p) => sum + (p.amount ?? 0), 0);
-    const unit = pumping.find(p => p.amount_unit)?.amount_unit ?? "";
-    const totalStr = totalAmount > 0 ? ` · ${totalAmount.toFixed(1)} ${esc(unit)} total` : "";
+    const total = volumeTotal(pumping);
+    const totalStr = total && total.value > 0 ? ` · ${total.value.toFixed(1)} ${esc(total.unit)} total` : "";
     rows.push(sectionHeader("🍶", `Pumping (${pumping.length} session${pumping.length !== 1 ? "s" : ""}${totalStr})`));
     for (const p of pumping) {
       const sideLabel = PUMPING_SIDE_LABELS[p.side ?? ""];

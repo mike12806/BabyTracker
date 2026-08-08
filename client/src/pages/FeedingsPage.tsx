@@ -40,6 +40,7 @@ import NoChildPlaceholder from "../components/NoChildPlaceholder";
 
 import type { Feeding } from "../types/models";
 import { isoToLocal } from "../utils/dateTime";
+import { amountTotals, formatAmountTotal } from "../utils/feedingAmount";
 import { buildCategoryColors } from "../theme/categoryColors";
 import { useEditEntryParam } from "../hooks/useEditEntryParam";
 
@@ -247,11 +248,10 @@ export default function FeedingsPage() {
   }, [feedings]);
 
   const todayCount = todayFeedings.length;
-  const todayTotalOz = useMemo(() => {
-    return todayFeedings
-      .filter((f) => f.amount != null && f.amount_unit === "oz")
-      .reduce((sum, f) => sum + (f.amount ?? 0), 0);
-  }, [todayFeedings]);
+  // Totalled the same way the dashboard does it, so the two screens always
+  // agree: every volume counts, converted to millilitres once a day mixes
+  // units, with any gram total carried alongside rather than folded in.
+  const todayAmounts = useMemo(() => amountTotals(todayFeedings), [todayFeedings]);
   const lastFeedingTime = feedings.length > 0 ? relativeTime(feedings[0].start_time) : "—";
 
   return (
@@ -340,7 +340,16 @@ export default function FeedingsPage() {
             {/* Summary stat strip */}
             <Box sx={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 0.75, mb: 1 }}>
               <StatCard accentColor={c.solid} label="Today" value={todayCount} sublabel="feedings" />
-              <StatCard accentColor={c.solid} label="Volume" value={todayTotalOz > 0 ? `${todayTotalOz}` : "—"} sublabel="oz today" />
+              <StatCard
+                accentColor={c.solid}
+                label="Volume"
+                value={todayAmounts.length > 0 ? formatAmountTotal(todayAmounts[0]) : "—"}
+                sublabel={
+                  todayAmounts.length > 1
+                    ? `+ ${formatAmountTotal(todayAmounts[1])} today`
+                    : "today"
+                }
+              />
               <StatCard accentColor={c.solid} label="Last" value={lastFeedingTime} sublabel="feeding" />
             </Box>
 
