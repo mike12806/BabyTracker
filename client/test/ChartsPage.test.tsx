@@ -135,8 +135,8 @@ describe("ChartsPage – Feeding summary", () => {
     expect(card.getByText("cc/day")).toBeTruthy();
   });
 
-  it("ignores feedings recorded in a different unit than the dominant one", async () => {
-    // oz is the dominant unit (2 entries); the 100 g solid is excluded.
+  it("excludes solids measured in grams from the volume average", async () => {
+    // Grams are a mass, so the 100 g solid cannot join the ounce total.
     mockFeedings([
       feeding({ id: 1, amount: 4, amount_unit: "oz", start_time: hoursAgo(2) }),
       feeding({ id: 2, amount: 3, amount_unit: "oz", start_time: hoursAgo(26) }),
@@ -160,7 +160,21 @@ describe("ChartsPage – Feeding summary", () => {
 
     const card = within(await feedingCard());
     expect(card.getByText("10.0")).toBeTruthy();
-    expect(card.getByText("ml/day")).toBeTruthy();
+    expect(card.getByText("mL/day")).toBeTruthy();
+  });
+
+  it("converts to millilitres when the range mixes volume units", async () => {
+    // 4 oz = 118.294 mL, + 70 cc = 188.294 -> 188 mL over 7 days = 26.9/day.
+    mockFeedings([
+      feeding({ id: 1, amount: 4, amount_unit: "oz", start_time: hoursAgo(2) }),
+      feeding({ id: 2, amount: 70, amount_unit: "cc", start_time: hoursAgo(30) }),
+    ]);
+
+    render(<ChartsPage />, { wrapper: Wrapper });
+
+    const card = within(await feedingCard());
+    expect(card.getByText("26.9")).toBeTruthy();
+    expect(card.getByText("mL/day")).toBeTruthy();
   });
 
   it("falls back to feedings per day when no amounts are recorded", async () => {

@@ -321,39 +321,51 @@ interface PumpingChartProps {
 
 export function PumpingChart({ pumpings, days = 14 }: PumpingChartProps) {
   const theme = useTheme();
-  const data = useMemo(() => {
+  const { data, unit } = useMemo(() => {
     const dateKeys = lastNDays(days);
     const map: Record<string, number> = {};
     for (const d of dateKeys) map[d] = 0;
 
-    for (const p of pumpings) {
-      const key = toDateKey(p.start_time);
-      if (!map[key] && map[key] !== 0) continue;
-      if (p.amount) map[key] += p.amount;
+    const inRange = pumpings.filter((p) => map[toDateKey(p.start_time)] != null);
+    // One axis, one unit: the shared unit when every session used the same
+    // one, millilitres once they differ. Amounts saved without a unit are
+    // taken to be in the charted one.
+    const chartUnit = commonVolumeUnit(inRange);
+
+    for (const p of inRange) {
+      if (!p.amount) continue;
+      const amount =
+        p.amount_unit == null || chartUnit == null
+          ? p.amount
+          : convertVolume(p.amount, p.amount_unit, chartUnit);
+      if (amount == null) continue;
+      map[toDateKey(p.start_time)] += amount;
     }
 
-    return dateKeys.map((d) => ({
-      date: formatDateLabel(d),
-      Amount: Math.round(map[d] * 10) / 10,
-    }));
+    return {
+      unit: chartUnit ?? "oz",
+      data: dateKeys.map((d) => ({
+        date: formatDateLabel(d),
+        Amount: Math.round(map[d] * 10) / 10,
+      })),
+    };
   }, [pumpings, days]);
 
-  // Determine the unit from the most recent entry that has one
-  const unit = pumpings.find((p) => p.amount_unit)?.amount_unit || "oz";
+  const unitText = unitLabel(unit);
 
   return (
     <ResponsiveContainer width="100%" height={CHART_HEIGHT}>
       <BarChart data={data} margin={CHART_MARGIN}>
         <CartesianGrid strokeDasharray="3 3" stroke={theme.palette.divider} />
         <XAxis dataKey="date" tick={TICK_STYLE} tickMargin={6} />
-        <YAxis tick={TICK_STYLE} unit={unit} width={36} />
+        <YAxis tick={TICK_STYLE} unit={unitText} width={36} />
         <Tooltip
           contentStyle={{
             backgroundColor: theme.palette.background.paper,
             border: `1px solid ${theme.palette.divider}`,
             borderRadius: 8,
           }}
-          formatter={(value) => `${value} ${unit}`}
+          formatter={(value) => `${value} ${unitText}`}
         />
         <Bar dataKey="Amount" fill="#ec407a" radius={[4, 4, 0, 0]} />
       </BarChart>
