@@ -29,6 +29,7 @@ import MoreHorizIcon from "@mui/icons-material/MoreHoriz";
 import { api } from "../api/client";
 import { useChildren } from "../hooks/useChildren";
 import { useNotification } from "../hooks/useNotification";
+import { useDataRefresh } from "../hooks/useDataRefresh";
 import { FAB_BOTTOM_OFFSET } from "../components/Layout";
 import NoChildPlaceholder from "../components/NoChildPlaceholder";
 import { buildCategoryColors } from "../theme/categoryColors";
@@ -145,6 +146,7 @@ export default function TimersPage() {
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const { selectedChild } = useChildren();
   const { notify } = useNotification();
+  const { refreshKey } = useDataRefresh();
   const isDark = theme.palette.mode === "dark";
   const cat = useMemo(() => buildCategoryColors(isDark), [isDark]);
 
@@ -162,9 +164,12 @@ export default function TimersPage() {
     }
   };
 
+  // Refetches on mount, when the child changes, and whenever `refreshKey` is
+  // bumped — returning to the app, or logging an entry from the bottom-nav
+  // FAB, refreshes this list instead of leaving the pre-existing one on screen.
   useEffect(() => {
     load();
-  }, [selectedChild]);
+  }, [selectedChild, refreshKey]);
 
   const handleStart = async () => {
     if (!selectedChild) return;

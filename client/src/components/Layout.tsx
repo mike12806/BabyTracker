@@ -1,9 +1,11 @@
 import { useState } from "react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import {
+  Alert,
   AppBar,
   Avatar,
   Box,
+  Button,
   CssBaseline,
   Divider,
   Drawer,
@@ -48,8 +50,11 @@ import BarChartRoundedIcon from "@mui/icons-material/BarChartRounded";
 import MoreHorizRoundedIcon from "@mui/icons-material/MoreHorizRounded";
 import { useAuth } from "../hooks/useAuth";
 import { useChildren } from "../hooks/useChildren";
+import { useDataFreshness } from "../hooks/useDataFreshness";
+import { useDataRefresh } from "../hooks/useDataRefresh";
 import { useThemeMode } from "../hooks/useTheme";
 import { useVolumeUnit } from "../hooks/useVolumeUnit";
+import { formatRelativeTime } from "../utils/dateTime";
 import { unitLabel, VOLUME_UNITS, type VolumeUnit } from "../utils/feedingAmount";
 import { API_BASE } from "../api/client";
 import QuickLogDialog, { type QuickLogCategory } from "./QuickLogDialog";
@@ -95,6 +100,8 @@ export default function Layout() {
   const { children, selectedChild, selectChild } = useChildren();
   const { preference, setPreference } = useThemeMode();
   const { unit: volumeUnit, setUnit: setVolumeUnit } = useVolumeUnit();
+  const { staleSince } = useDataFreshness();
+  const { refreshData } = useDataRefresh();
   const muiTheme = useTheme();
   const isMobile = useMediaQuery(muiTheme.breakpoints.down("md"));
   const isDark = muiTheme.palette.mode === "dark";
@@ -390,6 +397,26 @@ export default function Layout() {
           overflow: "hidden",
         }}
       >
+        {/* The offline cache keeps the app readable with no signal, but these
+            screens are read as current state — how long since the last feed,
+            whether anyone has changed her — so anything served from it has to
+            say so rather than look live. */}
+        {staleSince !== null && (
+          <Alert
+            severity="warning"
+            variant="outlined"
+            sx={{ mb: 2, alignItems: "center" }}
+            action={
+              <Button color="inherit" size="small" onClick={refreshData}>
+                Retry
+              </Button>
+            }
+          >
+            Offline — showing saved data from{" "}
+            {formatRelativeTime(new Date(staleSince).toISOString())}. New
+            entries from other devices aren't here yet.
+          </Alert>
+        )}
         <Outlet />
       </Box>
 

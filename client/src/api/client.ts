@@ -1,3 +1,5 @@
+import { noteResponse } from "./freshness";
+
 export const API_BASE = import.meta.env.VITE_API_URL || "/api";
 
 function triggerReauth(): void {
@@ -37,8 +39,9 @@ async function sessionIsAlive(): Promise<boolean> {
 }
 
 async function doFetch(path: string, options: RequestInit): Promise<Response> {
+  let res: Response;
   try {
-    return await fetch(`${API_BASE}${path}`, options);
+    res = await fetch(`${API_BASE}${path}`, options);
   } catch {
     // fetch() throws for two very different reasons: Cloudflare Access
     // redirecting an unauthenticated request to its login domain (surfaced as
@@ -52,6 +55,15 @@ async function doFetch(path: string, options: RequestInit): Promise<Response> {
     triggerReauth();
     throw new Error("Unauthorized");
   }
+
+  // Deliberately outside the try above: that catch means "the network failed",
+  // and anything thrown in here would be misread as a dropped connection and
+  // bounce the user through re-auth. A reply the service worker pulled from
+  // its offline cache is indistinguishable from a live one at this point —
+  // `noteResponse` tells them apart so the UI can flag what it's showing
+  // rather than presenting hours-old entries as current.
+  noteResponse(res);
+  return res;
 }
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
