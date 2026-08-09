@@ -28,6 +28,7 @@ import migration0008 from "../migrations/0008_split_bottle_feeding_type.sql?raw"
 import migration0009 from "../migrations/0009_add_pumping_side.sql?raw";
 import migration0010 from "../migrations/0010_add_cc_feeding_unit.sql?raw";
 import migration0011 from "../migrations/0011_add_volume_unit_setting.sql?raw";
+import migration0012 from "../migrations/0012_add_clinic_weight_readings.sql?raw";
 
 type AppEnv = { Bindings: Env; Variables: { userId: number; userEmail: string; userName: string } };
 
@@ -85,6 +86,22 @@ export function createTestApp() {
   return app;
 }
 
+/** Run a multi-statement SQL script against D1, which only accepts one statement at a time. */
+export async function execScript(db: D1Database, script: string) {
+  const statements = script
+    .split(";")
+    .map((s) => s.trim())
+    .filter((s) => {
+      // Skip empty strings and comment-only fragments
+      const withoutComments = s.replace(/--[^\n]*/g, "").trim();
+      return withoutComments.length > 0;
+    });
+
+  for (const sql of statements) {
+    await db.prepare(sql).run();
+  }
+}
+
 /** Run the migration SQL against a D1 database for test setup. Drops and recreates all tables. */
 export async function applyMigrations(db: D1Database) {
   // Drop all tables first to ensure clean state between tests
@@ -107,22 +124,9 @@ export async function applyMigrations(db: D1Database) {
   `;
 
   // Execute the real migration files in order to keep test schema in sync
-  const migrations = [migration0001, migration0002, migration0003, migration0004, migration0005, migration0006, migration0007, migration0008, migration0009, migration0010, migration0011];
+  const migrations = [migration0001, migration0002, migration0003, migration0004, migration0005, migration0006, migration0007, migration0008, migration0009, migration0010, migration0011, migration0012];
 
-  // D1 batch doesn't support multi-statement, so split and execute individually
-  const allSQL = dropSQL + migrations.join("\n");
-  const statements = allSQL
-    .split(";")
-    .map((s) => s.trim())
-    .filter((s) => {
-      // Skip empty strings and comment-only fragments
-      const withoutComments = s.replace(/--[^\n]*/g, "").trim();
-      return withoutComments.length > 0;
-    });
-
-  for (const sql of statements) {
-    await db.prepare(sql).run();
-  }
+  await execScript(db, dropSQL + migrations.join("\n"));
 }
 
 /** Helper to make requests to the test app */
