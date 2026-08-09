@@ -27,6 +27,7 @@ import migration0007 from "../migrations/0007_add_todos.sql?raw";
 import migration0008 from "../migrations/0008_split_bottle_feeding_type.sql?raw";
 import migration0009 from "../migrations/0009_add_pumping_side.sql?raw";
 import migration0010 from "../migrations/0010_add_cc_feeding_unit.sql?raw";
+import migration0011 from "../migrations/0011_add_volume_unit_setting.sql?raw";
 
 type AppEnv = { Bindings: Env; Variables: { userId: number; userEmail: string; userName: string } };
 
@@ -106,7 +107,7 @@ export async function applyMigrations(db: D1Database) {
   `;
 
   // Execute the real migration files in order to keep test schema in sync
-  const migrations = [migration0001, migration0002, migration0003, migration0004, migration0005, migration0006, migration0007, migration0008, migration0009, migration0010];
+  const migrations = [migration0001, migration0002, migration0003, migration0004, migration0005, migration0006, migration0007, migration0008, migration0009, migration0010, migration0011];
 
   // D1 batch doesn't support multi-statement, so split and execute individually
   const allSQL = dropSQL + migrations.join("\n");

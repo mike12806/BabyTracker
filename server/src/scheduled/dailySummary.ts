@@ -36,33 +36,58 @@ function fmtDuration(mins: number | null): string {
 /** Volume units, expressed as the millilitres in one of them. */
 const ML_PER_UNIT: Record<string, number> = { ml: 1, cc: 1, oz: 29.5735 };
 
+/** The unit volumes are displayed in — the reader's own setting. */
+export type VolumeUnit = "ml" | "oz" | "cc";
+
+export const DEFAULT_VOLUME_UNIT: VolumeUnit = "ml";
+
+interface AmountRow {
+  amount: number | null;
+  amount_unit: string | null;
+}
+
+/** Millilitres are the one unit written with a capital L. */
+function unitLabel(unit: string): string {
+  return unit === "ml" ? "mL" : unit;
+}
+
+/** Whole millilitres and cc, tenths of an ounce — the same rounding the app uses. */
+function roundForUnit(value: number, unit: string): number {
+  return unit === "oz" ? Math.round(value * 10) / 10 : Math.round(value);
+}
+
 /**
- * Total volumes that may have been logged in different units, mirroring the
- * app's own totals: the shared unit when every entry used the same one,
- * millilitres once they differ. Entries saved without a unit are taken to be
- * in the unit the rest of them used. Returns null when nothing was measured.
+ * One entry's amount, restated in the reader's unit. Grams are a mass and stay
+ * as logged; an amount with no unit is read as already being in the display
+ * unit. Null when the entry has no amount.
  */
-function volumeTotal(
-  entries: { amount: number | null; amount_unit: string | null }[],
-): { value: number; unit: string } | null {
-  const measured = entries.filter((e): e is { amount: number; amount_unit: string | null } =>
-    e.amount != null,
-  );
-  if (measured.length === 0) return null;
-
-  const units = new Set<string>();
-  for (const e of measured) {
-    if (e.amount_unit && e.amount_unit in ML_PER_UNIT) units.add(e.amount_unit);
+function formatAmount(entry: AmountRow, display: VolumeUnit): string | null {
+  if (entry.amount == null) return null;
+  const from = entry.amount_unit;
+  if (from != null && !(from in ML_PER_UNIT)) {
+    return `${Math.round(entry.amount * 10) / 10} ${from}`;
   }
-  if (units.size === 0) return null;
+  const ml = entry.amount * (from == null ? ML_PER_UNIT[display] : ML_PER_UNIT[from]);
+  return `${roundForUnit(ml / ML_PER_UNIT[display], display)} ${unitLabel(display)}`;
+}
 
-  const unit = units.size === 1 ? [...units][0] : "ml";
+/**
+ * Total the volumes across `entries` in the reader's unit, mirroring the app's
+ * own totals so an email and a screen never disagree. Grams are a mass and are
+ * left out. Returns null when nothing was measured by volume.
+ */
+function volumeTotal(entries: AmountRow[], display: VolumeUnit): { value: number; unit: string } | null {
   let total = 0;
-  for (const e of measured) {
-    const from = e.amount_unit && e.amount_unit in ML_PER_UNIT ? e.amount_unit : unit;
-    total += (e.amount * ML_PER_UNIT[from]) / ML_PER_UNIT[unit];
+  let count = 0;
+  for (const e of entries) {
+    if (e.amount == null) continue;
+    if (e.amount_unit != null && !(e.amount_unit in ML_PER_UNIT)) continue;
+    const from = e.amount_unit ?? display;
+    total += (e.amount * ML_PER_UNIT[from]) / ML_PER_UNIT[display];
+    count++;
   }
-  return { value: Math.round(total * 10) / 10, unit: unit === "ml" ? "mL" : unit };
+  if (count === 0) return null;
+  return { value: roundForUnit(total, display), unit: unitLabel(display) };
 }
 
 function childAge(birthDate: string): string {
@@ -78,7 +103,7 @@ function childAge(birthDate: string): string {
 
 // ── DB row types ──────────────────────────────────────────────────────────────
 
-interface UserRow { id: number; email: string; name: string }
+interface UserRow { id: number; email: string; name: string; volume_unit: string | null }
 interface ChildRow { id: number; first_name: string; last_name: string; birth_date: string }
 interface FeedingRow { type: string; start_time: string; end_time: string | null; amount: number | null; amount_unit: string | null }
 interface DiaperRow { time: string; type: string; color: string | null }
@@ -157,6 +182,7 @@ async function fetchActivityHistory(
   userId: number,
   windowStart: string,
   windowEnd: string,
+  unit: VolumeUnit,
 ): Promise<HistoryEntryRow[]> {
   const [feedings, diapers, sleepSessions, tummyTimes, pumping, temperatures, notes, medications] =
     await Promise.all([
@@ -202,15 +228,15 @@ async function fetchActivityHistory(
       `).bind(userId, windowStart, windowEnd).all<HistoryEntryRow>(),
       env.DB.prepare(`
         SELECT 'Pumping' AS activity_type, p.start_time AS event_time,
-          CASE WHEN p.amount IS NOT NULL THEN 'pumped ' || p.amount || ' ' || COALESCE(p.amount_unit, '') ELSE 'pumping' END
-            || CASE p.side WHEN 'left' THEN ' · left breast' WHEN 'right' THEN ' · right breast' WHEN 'both' THEN ' · both breasts' ELSE '' END AS detail,
+          CASE p.side WHEN 'left' THEN ' · left breast' WHEN 'right' THEN ' · right breast' WHEN 'both' THEN ' · both breasts' ELSE '' END AS detail,
+          p.amount AS amount, p.amount_unit AS amount_unit,
           ${childNameExpr} AS child_name, ${loggedByExpr} AS logged_by
         FROM pumping p
         JOIN children c ON c.id = p.child_id
         LEFT JOIN users u ON u.id = p.created_by_user_id
         JOIN user_children uc ON uc.child_id = p.child_id
         WHERE uc.user_id = ? AND p.created_at >= ? AND p.created_at < ?
-      `).bind(userId, windowStart, windowEnd).all<HistoryEntryRow>(),
+      `).bind(userId, windowStart, windowEnd).all<HistoryEntryRow & AmountRow>(),
       env.DB.prepare(`
         SELECT 'Temperature' AS activity_type, t.time AS event_time,
           t.reading || '°' || t.reading_unit AS detail,
@@ -243,12 +269,19 @@ async function fetchActivityHistory(
       `).bind(userId, windowStart, windowEnd).all<HistoryEntryRow>(),
     ]);
 
+  // The amount is formatted here rather than in SQL so it lands in the
+  // reader's unit like every other volume in the email.
+  const pumpingEntries: HistoryEntryRow[] = pumping.results.map((p) => ({
+    ...p,
+    detail: `${p.amount != null ? `pumped ${formatAmount(p, unit)}` : "pumping"}${p.detail}`,
+  }));
+
   const all: HistoryEntryRow[] = [
     ...feedings.results,
     ...diapers.results,
     ...sleepSessions.results,
     ...tummyTimes.results,
-    ...pumping.results,
+    ...pumpingEntries,
     ...temperatures.results,
     ...notes.results,
     ...medications.results,
@@ -280,6 +313,7 @@ function buildChildSection(
   pumping: PumpingRow[],
   temperatures: TemperatureRow[],
   notes: NoteRow[],
+  unit: VolumeUnit,
 ): string {
   const name = esc([child.first_name, child.last_name].filter(Boolean).join(" "));
   const age = esc(childAge(child.birth_date));
@@ -303,9 +337,12 @@ function buildChildSection(
       .map(([t, c]) => `${c}× ${t.replace(/_/g, " ")}`)
       .join(", ");
     const totalStr = totalMins != null && totalMins > 0 ? fmtDuration(totalMins) : "—";
-    rows.push(row(`<span style="color:#888">${esc(typeStr)} · Total nursing/feed time: ${esc(totalStr)}</span>`));
+    const fed = volumeTotal(feedings, unit);
+    const fedStr = fed ? ` · Total fed: ${esc(`${fed.value} ${fed.unit}`)}` : "";
+    rows.push(row(`<span style="color:#888">${esc(typeStr)} · Total nursing/feed time: ${esc(totalStr)}${fedStr}</span>`));
     for (const f of feedings) {
-      const amount = f.amount != null ? ` · ${f.amount} ${esc(f.amount_unit ?? "")}` : "";
+      const formatted = formatAmount(f, unit);
+      const amount = formatted ? ` · ${esc(formatted)}` : "";
       rows.push(row(`${esc(formatTime(f.start_time))} &mdash; ${esc(f.type.replace(/_/g, " "))} · ${esc(fmtDuration(durationMins(f.start_time, f.end_time)))}${amount}`));
     }
   } else {
@@ -360,13 +397,14 @@ function buildChildSection(
 
   // Pumping
   if (pumping.length > 0) {
-    const total = volumeTotal(pumping);
-    const totalStr = total && total.value > 0 ? ` · ${total.value.toFixed(1)} ${esc(total.unit)} total` : "";
+    const total = volumeTotal(pumping, unit);
+    const totalStr = total && total.value > 0 ? ` · ${total.value} ${esc(total.unit)} total` : "";
     rows.push(sectionHeader("🍶", `Pumping (${pumping.length} session${pumping.length !== 1 ? "s" : ""}${totalStr})`));
     for (const p of pumping) {
       const sideLabel = PUMPING_SIDE_LABELS[p.side ?? ""];
       const side = sideLabel ? ` · ${sideLabel}` : "";
-      const amount = p.amount != null ? ` · ${p.amount} ${esc(p.amount_unit ?? "")}` : "";
+      const formatted = formatAmount(p, unit);
+      const amount = formatted ? ` · ${esc(formatted)}` : "";
       rows.push(row(`${esc(formatTime(p.start_time))} &mdash; ${esc(fmtDuration(durationMins(p.start_time, p.end_time)))}${side}${amount}`));
     }
   }
@@ -683,11 +721,18 @@ export async function sendDailySummary(env: Env): Promise<void> {
   const { windowStart, windowEnd, reportDateLabel } = computeDailyWindow(now);
 
   // Fetch all users — every user receives the daily summary
-  const { results: users } = await env.DB.prepare(
-    "SELECT id, email, name FROM users"
-  ).all<UserRow>();
+  // Each reader gets their own unit — the same one the app shows them.
+  const { results: users } = await env.DB.prepare(`
+    SELECT u.id, u.email, u.name, s.volume_unit
+    FROM users u
+    LEFT JOIN user_settings s ON s.user_id = u.id
+  `).all<UserRow>();
 
   for (const user of users) {
+    const unit: VolumeUnit =
+      user.volume_unit === "oz" || user.volume_unit === "cc" || user.volume_unit === "ml"
+        ? user.volume_unit
+        : DEFAULT_VOLUME_UNIT;
     try {
       const { results: children } = await env.DB.prepare(`
         SELECT c.id, c.first_name, c.last_name, c.birth_date
@@ -732,10 +777,11 @@ export async function sendDailySummary(env: Env): Promise<void> {
           data.pumping,
           data.temperatures,
           data.notes,
+          unit,
         )
       );
 
-      const historyEntries = await fetchActivityHistory(env, user.id, windowStart, windowEnd);
+      const historyEntries = await fetchActivityHistory(env, user.id, windowStart, windowEnd, unit);
       const historySection = buildHistorySection(historyEntries);
 
       const html = buildEmailHtml(user.name, reportDateLabel, childSections, historySection);

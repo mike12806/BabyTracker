@@ -17,7 +17,7 @@ settings.get("/", async (c) => {
     .run();
 
   const row = await c.env.DB.prepare(
-    "SELECT user_id, default_child_id, theme_mode, email_reports FROM user_settings WHERE user_id = ?"
+    "SELECT user_id, default_child_id, theme_mode, email_reports, volume_unit FROM user_settings WHERE user_id = ?"
   )
     .bind(userId)
     .first();
@@ -32,6 +32,7 @@ settings.put("/", async (c) => {
     default_child_id?: number | null;
     theme_mode?: "system" | "light" | "dark";
     email_reports?: boolean;
+    volume_unit?: "ml" | "oz" | "cc";
   }>();
 
   // Validate default_child_id belongs to this user if provided
@@ -52,6 +53,12 @@ settings.put("/", async (c) => {
     return c.json({ error: "Invalid theme_mode" }, 400);
   }
 
+  // Validate volume_unit — the column has the same CHECK, but a 400 beats a
+  // constraint failure surfacing as a 500.
+  if (body.volume_unit && !["ml", "oz", "cc"].includes(body.volume_unit)) {
+    return c.json({ error: "Invalid volume_unit" }, 400);
+  }
+
   // Upsert settings — build update clauses dynamically to distinguish "not provided" from "set to null"
   const setClauses: string[] = [];
   const setValues: (string | number | null)[] = [];
@@ -67,6 +74,10 @@ settings.put("/", async (c) => {
   if ("email_reports" in body) {
     setClauses.push("email_reports = ?");
     setValues.push(body.email_reports ? 1 : 0);
+  }
+  if ("volume_unit" in body) {
+    setClauses.push("volume_unit = ?");
+    setValues.push(body.volume_unit!);
   }
 
   // Ensure the row exists (creates with column defaults on first visit)
@@ -86,7 +97,7 @@ settings.put("/", async (c) => {
   }
 
   const row = await c.env.DB.prepare(
-    "SELECT user_id, default_child_id, theme_mode, email_reports FROM user_settings WHERE user_id = ?"
+    "SELECT user_id, default_child_id, theme_mode, email_reports, volume_unit FROM user_settings WHERE user_id = ?"
   )
     .bind(userId)
     .first();

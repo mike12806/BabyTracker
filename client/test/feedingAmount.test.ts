@@ -1,11 +1,16 @@
 import { describe, it, expect } from "vitest";
 import {
   amountTotals,
-  commonVolumeUnit,
+  asVolumeUnit,
   convertVolume,
+  displayAmount,
   formatAmountTotal,
+  formatEntryAmount,
   isVolumeUnit,
+  pumpingLogUnit,
+  roundForUnit,
   unitLabel,
+  volumeTotal,
   type AmountEntry,
 } from "../src/utils/feedingAmount";
 
@@ -15,52 +20,116 @@ function entry(amount: number | null, amount_unit: string | null): AmountEntry {
 
 describe("amountTotals", () => {
   it("returns nothing when no entry has an amount", () => {
-    expect(amountTotals([])).toEqual([]);
-    expect(amountTotals([entry(null, null), entry(null, "oz")])).toEqual([]);
+    expect(amountTotals([], "ml")).toEqual([]);
+    expect(amountTotals([entry(null, null), entry(null, "oz")], "ml")).toEqual([]);
   });
 
-  it("keeps the recorded unit when every entry shares one", () => {
-    expect(amountTotals([entry(30, "cc"), entry(20, "cc"), entry(30, "cc")])).toEqual([
-      { value: 80, unit: "cc" },
+  it("totals in the display unit, not the recorded one", () => {
+    expect(amountTotals([entry(30, "cc"), entry(20, "cc"), entry(30, "cc")], "ml")).toEqual([
+      { value: 80, unit: "ml" },
     ]);
-    expect(amountTotals([entry(4, "oz"), entry(3.5, "oz")])).toEqual([{ value: 7.5, unit: "oz" }]);
+    // 7.5 oz = 221.8 mL
+    expect(amountTotals([entry(4, "oz"), entry(3.5, "oz")], "ml")).toEqual([
+      { value: 222, unit: "ml" },
+    ]);
   });
 
-  it("normalizes to millilitres when the units differ", () => {
+  it("converts a day that mixes units into the one on display", () => {
     // 4 oz = 118.294 mL, + 30 mL + 20 cc = 168.294 -> 168
-    expect(amountTotals([entry(4, "oz"), entry(30, "ml"), entry(20, "cc")])).toEqual([
+    expect(amountTotals([entry(4, "oz"), entry(30, "ml"), entry(20, "cc")], "ml")).toEqual([
       { value: 168, unit: "ml" },
     ]);
+    // The same day read in ounces: 168.294 / 29.5735 = 5.69 -> 5.7
+    expect(amountTotals([entry(4, "oz"), entry(30, "ml"), entry(20, "cc")], "oz")).toEqual([
+      { value: 5.7, unit: "oz" },
+    ]);
   });
 
-  it("normalizes ml and cc together even though they are the same size", () => {
-    expect(amountTotals([entry(30, "cc"), entry(20, "ml")])).toEqual([{ value: 50, unit: "ml" }]);
+  it("treats cc and ml as the same size", () => {
+    expect(amountTotals([entry(30, "cc"), entry(20, "ml")], "cc")).toEqual([
+      { value: 50, unit: "cc" },
+    ]);
   });
 
   it("reports grams separately from the volume, since they cannot be converted", () => {
-    expect(amountTotals([entry(60, "cc"), entry(100, "g"), entry(4, "oz")])).toEqual([
+    expect(amountTotals([entry(60, "cc"), entry(100, "g"), entry(4, "oz")], "ml")).toEqual([
       { value: 178, unit: "ml" },
       { value: 100, unit: "g" },
     ]);
   });
 
   it("returns only a gram total when nothing was measured by volume", () => {
-    expect(amountTotals([entry(80, "g"), entry(45, "g")])).toEqual([{ value: 125, unit: "g" }]);
-  });
-
-  it("counts unit-less amounts against the dominant unit", () => {
-    // The two cc entries make cc dominant, so the bare 25 is treated as cc.
-    expect(amountTotals([entry(30, "cc"), entry(20, "cc"), entry(25, null)])).toEqual([
-      { value: 75, unit: "cc" },
+    expect(amountTotals([entry(80, "g"), entry(45, "g")], "ml")).toEqual([
+      { value: 125, unit: "g" },
     ]);
   });
 
-  it("totals unit-less amounts on their own when no unit was ever recorded", () => {
-    expect(amountTotals([entry(30, null), entry(20, null)])).toEqual([{ value: 50, unit: null }]);
+  it("reads an amount saved without a unit as already being on display", () => {
+    expect(amountTotals([entry(30, "cc"), entry(20, "cc"), entry(25, null)], "ml")).toEqual([
+      { value: 75, unit: "ml" },
+    ]);
+    expect(amountTotals([entry(30, null), entry(20, null)], "oz")).toEqual([
+      { value: 50, unit: "oz" },
+    ]);
   });
 
   it("rounds away floating point noise", () => {
-    expect(amountTotals([entry(0.1, "oz"), entry(0.2, "oz")])).toEqual([{ value: 0.3, unit: "oz" }]);
+    expect(amountTotals([entry(0.1, "oz"), entry(0.2, "oz")], "oz")).toEqual([
+      { value: 0.3, unit: "oz" },
+    ]);
+  });
+});
+
+describe("volumeTotal", () => {
+  it("gives the volume alone, in the display unit", () => {
+    expect(volumeTotal([entry(45, "cc"), entry(1.5, "oz")], "ml")).toBe(89);
+  });
+
+  it("skips a mass rather than folding it into a volume", () => {
+    expect(volumeTotal([entry(45, "cc"), entry(100, "g")], "ml")).toBe(45);
+    expect(volumeTotal([entry(100, "g")], "ml")).toBeNull();
+  });
+
+  it("is null when nothing was measured", () => {
+    expect(volumeTotal([], "ml")).toBeNull();
+  });
+});
+
+describe("displayAmount / formatEntryAmount", () => {
+  it("restates a single entry in the display unit", () => {
+    expect(displayAmount(entry(1.5, "oz"), "ml")).toEqual({ value: 44, unit: "ml" });
+    expect(displayAmount(entry(55, "cc"), "ml")).toEqual({ value: 55, unit: "ml" });
+    expect(displayAmount(entry(59.147, "ml"), "oz")).toEqual({ value: 2, unit: "oz" });
+  });
+
+  it("leaves a mass as it was logged", () => {
+    expect(displayAmount(entry(100, "g"), "ml")).toEqual({ value: 100, unit: "g" });
+  });
+
+  it("reads an amount with no unit as already being on display", () => {
+    expect(displayAmount(entry(45, null), "cc")).toEqual({ value: 45, unit: "cc" });
+  });
+
+  it("is null when the entry has no amount", () => {
+    expect(displayAmount(entry(null, "oz"), "ml")).toBeNull();
+    expect(formatEntryAmount(entry(null, "oz"), "ml")).toBeNull();
+  });
+
+  it("prints the converted amount", () => {
+    expect(formatEntryAmount(entry(1.5, "oz"), "ml")).toBe("44 mL");
+    expect(formatEntryAmount(entry(55, "cc"), "oz")).toBe("1.9 oz");
+    expect(formatEntryAmount(entry(100, "g"), "ml")).toBe("100 g");
+  });
+});
+
+describe("roundForUnit", () => {
+  it("counts millilitres and cc whole", () => {
+    expect(roundForUnit(44.36, "ml")).toBe(44);
+    expect(roundForUnit(44.36, "cc")).toBe(44);
+  });
+
+  it("keeps tenths of an ounce", () => {
+    expect(roundForUnit(1.4802, "oz")).toBe(1.5);
   });
 });
 
@@ -73,10 +142,6 @@ describe("formatAmountTotal", () => {
     expect(formatAmountTotal({ value: 80, unit: "cc" })).toBe("80 cc");
     expect(formatAmountTotal({ value: 7.5, unit: "oz" })).toBe("7.5 oz");
     expect(formatAmountTotal({ value: 100, unit: "g" })).toBe("100 g");
-  });
-
-  it("prints a bare number when there is no unit", () => {
-    expect(formatAmountTotal({ value: 50, unit: null })).toBe("50");
   });
 });
 
@@ -103,6 +168,23 @@ describe("isVolumeUnit", () => {
   });
 });
 
+describe("asVolumeUnit", () => {
+  it("passes through a volume unit and falls back to millilitres otherwise", () => {
+    expect(asVolumeUnit("oz")).toBe("oz");
+    expect(asVolumeUnit("g")).toBe("ml");
+    expect(asVolumeUnit(null)).toBe("ml");
+    expect(asVolumeUnit("nonsense")).toBe("ml");
+  });
+});
+
+describe("pumpingLogUnit", () => {
+  it("logs cc as millilitres, which pumping accepts and is the same volume", () => {
+    expect(pumpingLogUnit("cc")).toBe("ml");
+    expect(pumpingLogUnit("ml")).toBe("ml");
+    expect(pumpingLogUnit("oz")).toBe("oz");
+  });
+});
+
 describe("convertVolume", () => {
   it("converts between volume units", () => {
     expect(convertVolume(4, "oz", "ml")).toBeCloseTo(118.294, 3);
@@ -117,31 +199,5 @@ describe("convertVolume", () => {
   it("refuses anything that is not a volume", () => {
     expect(convertVolume(100, "g", "ml")).toBeNull();
     expect(convertVolume(100, "ml", "g")).toBeNull();
-  });
-});
-
-describe("commonVolumeUnit", () => {
-  function entries(...units: (string | null)[]): AmountEntry[] {
-    return units.map((amount_unit) => ({ amount: 1, amount_unit }));
-  }
-
-  it("returns the shared unit when there is only one", () => {
-    expect(commonVolumeUnit(entries("cc", "cc"))).toBe("cc");
-    expect(commonVolumeUnit(entries("oz"))).toBe("oz");
-  });
-
-  it("falls back to millilitres once units differ", () => {
-    expect(commonVolumeUnit(entries("oz", "cc"))).toBe("ml");
-    expect(commonVolumeUnit(entries("ml", "cc"))).toBe("ml");
-  });
-
-  it("ignores grams, unit-less entries and entries with no amount", () => {
-    expect(commonVolumeUnit(entries("cc", "g", null))).toBe("cc");
-    expect(commonVolumeUnit([{ amount: null, amount_unit: "oz" }])).toBeNull();
-  });
-
-  it("returns null when nothing was measured by volume", () => {
-    expect(commonVolumeUnit(entries("g", "g"))).toBeNull();
-    expect(commonVolumeUnit([])).toBeNull();
   });
 });

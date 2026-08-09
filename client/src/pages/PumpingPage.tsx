@@ -41,7 +41,8 @@ import NoChildPlaceholder from "../components/NoChildPlaceholder";
 import type { Pumping } from "../types/models";
 import { isoToLocal } from "../utils/dateTime";
 import { PUMPING_SIDES, sideLabel } from "../utils/pumping";
-import { amountTotals, formatAmountTotal } from "../utils/feedingAmount";
+import { amountTotals, formatAmountTotal, formatEntryAmount, pumpingLogUnit } from "../utils/feedingAmount";
+import { useVolumeUnit } from "../hooks/useVolumeUnit";
 import { buildCategoryColors } from "../theme/categoryColors";
 import { useEditEntryParam } from "../hooks/useEditEntryParam";
 
@@ -112,10 +113,13 @@ export default function PumpingPage() {
   const cat = useMemo(() => buildCategoryColors(isDark), [isDark]);
   const c = cat.pump;
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+  const { unit } = useVolumeUnit();
+  // Sessions are stored in ml or oz only, so a cc display logs millilitres.
+  const logUnit = pumpingLogUnit(unit);
   const [entries, setEntries] = useState<Pumping[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState<Pumping | null>(null);
-  const [form, setForm] = useState({ start_time: "", end_time: "", side: "both", amount: "", amount_unit: "oz", notes: "" });
+  const [form, setForm] = useState({ start_time: "", end_time: "", side: "both", amount: "", amount_unit: logUnit as string, notes: "" });
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
   const [menuEntry, setMenuEntry] = useState<Pumping | null>(null);
 
@@ -140,7 +144,7 @@ export default function PumpingPage() {
       end_time: entry.end_time ? isoToLocal(entry.end_time) : "",
       side: entry.side ?? "both",
       amount: entry.amount != null ? String(entry.amount) : "",
-      amount_unit: entry.amount_unit || "oz",
+      amount_unit: entry.amount_unit || logUnit,
       notes: entry.notes || "",
     });
     setDialogOpen(true);
@@ -152,7 +156,7 @@ export default function PumpingPage() {
 
   const openAdd = () => {
     setEditingEntry(null);
-    setForm({ start_time: "", end_time: "", side: "both", amount: "", amount_unit: "oz", notes: "" });
+    setForm({ start_time: "", end_time: "", side: "both", amount: "", amount_unit: logUnit, notes: "" });
     setDialogOpen(true);
   };
 
@@ -174,7 +178,7 @@ export default function PumpingPage() {
       }
       setDialogOpen(false);
       setEditingEntry(null);
-      setForm({ start_time: "", end_time: "", side: "both", amount: "", amount_unit: "oz", notes: "" });
+      setForm({ start_time: "", end_time: "", side: "both", amount: "", amount_unit: logUnit, notes: "" });
       await load();
     } catch (err) {
       notify(err instanceof Error ? err.message : "Failed to save pumping session.", "error");
@@ -233,9 +237,9 @@ export default function PumpingPage() {
   }, [sortedEntries]);
 
   const todayCount = todayEntries.length;
-  // Same totalling as the dashboard's "pumped" stat: sessions logged in
-  // different units still add up, converted to millilitres when they differ.
-  const todayAmounts = useMemo(() => amountTotals(todayEntries), [todayEntries]);
+  // Same totalling as the dashboard's "pumped" stat: every session counts,
+  // converted into the unit the app displays in.
+  const todayAmounts = useMemo(() => amountTotals(todayEntries, unit), [todayEntries, unit]);
   const lastPump = sortedEntries.length > 0 ? relativeTime(sortedEntries[0].start_time) : "—";
 
   if (!selectedChild) {
@@ -303,10 +307,7 @@ export default function PumpingPage() {
                 {items.map((p) => {
                   const duration = humanDuration(p.start_time, p.end_time);
                   const side = sideLabel(p.side);
-                  const summary =
-                    p.amount != null
-                      ? `${p.amount} ${p.amount_unit ?? "oz"}`
-                      : duration ?? "In progress";
+                  const summary = formatEntryAmount(p, unit) ?? duration ?? "In progress";
                   const primary = side ? `${side} · ${summary}` : summary;
                   const meta = duration && p.amount != null ? duration : (p.notes || "—");
                   return (
@@ -375,7 +376,7 @@ export default function PumpingPage() {
                       <TableCell>{p.end_time ? new Date(p.end_time).toLocaleString() : "In progress"}</TableCell>
                       <TableCell>{humanDuration(p.start_time, p.end_time) ?? "—"}</TableCell>
                       <TableCell>{sideLabel(p.side) ?? "—"}</TableCell>
-                      <TableCell>{p.amount ? `${p.amount} ${p.amount_unit}` : "—"}</TableCell>
+                      <TableCell>{formatEntryAmount(p, unit) ?? "—"}</TableCell>
                       <TableCell>{p.notes || "—"}</TableCell>
                       <TableCell>
                         <IconButton size="small" onClick={() => handleEdit(p)} aria-label="Edit">

@@ -6,6 +6,7 @@ import Dashboard from "../src/pages/Dashboard";
 import FeedingsPage from "../src/pages/FeedingsPage";
 import PumpingPage from "../src/pages/PumpingPage";
 import type { Child, Feeding, Pumping } from "../src/types/models";
+import type { VolumeUnit } from "../src/utils/feedingAmount";
 
 vi.mock("../src/api/client", () => ({
   api: {
@@ -44,6 +45,8 @@ vi.mock("recharts", () => {
 
 import { useChildren } from "../src/hooks/useChildren";
 import { DataRefreshProvider } from "../src/hooks/useDataRefresh";
+import { VolumeUnitProvider } from "../src/hooks/useVolumeUnit";
+import { resetUserSettingsCache } from "../src/api/userSettings";
 import { api } from "../src/api/client";
 
 const mockUseChildren = vi.mocked(useChildren);
@@ -54,10 +57,17 @@ function Wrapper({ children }: { children: React.ReactNode }) {
   return (
     <MemoryRouter>
       <ThemeProvider theme={theme}>
-        <DataRefreshProvider>{children}</DataRefreshProvider>
+        <DataRefreshProvider>
+          <VolumeUnitProvider>{children}</VolumeUnitProvider>
+        </DataRefreshProvider>
       </ThemeProvider>
     </MemoryRouter>
   );
+}
+
+/** Serve the settings row that decides which unit everything is shown in. */
+function displayUnit(unit: VolumeUnit) {
+  localStorage.setItem("volume-unit", unit);
 }
 
 const child: Child = {
@@ -152,6 +162,8 @@ async function statCardValue(label: string): Promise<string> {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  localStorage.clear();
+  resetUserSettingsCache();
   mockUseChildren.mockReturnValue({
     children: [child],
     selectedChild: child,
@@ -179,12 +191,29 @@ describe("today's volume total", () => {
     expect(feedingsTotal).toBe(dashboardTotal);
   });
 
-  it("keeps the recorded unit on the feedings page when the day uses only one", async () => {
-    mockData([feeding(1, 45, "cc"), feeding(2, 55, "cc")]);
+  it("shows the total and every row it came from in the one display unit", async () => {
+    mockData(mixedFeedings);
 
     render(<FeedingsPage />, { wrapper: Wrapper });
 
-    expect(await statCardValue("Volume")).toBe("100 cc");
+    // The day was logged mostly in cc with one bottle in ounces; nothing on
+    // screen says cc or oz.
+    expect(await statCardValue("Volume")).toBe("270 mL");
+    expect(screen.getAllByText("45 mL").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("44 mL").length).toBeGreaterThan(0);
+    expect(screen.queryByText(/\bcc\b/)).toBeNull();
+    expect(screen.queryByText(/\boz\b/)).toBeNull();
+  });
+
+  it("restates the same day in ounces when that is the chosen unit", async () => {
+    displayUnit("oz");
+    mockData(mixedFeedings);
+
+    render(<FeedingsPage />, { wrapper: Wrapper });
+
+    // 270.36 mL / 29.5735 = 9.14 -> 9.1 oz, and the 45 cc bottles read as 1.5.
+    expect(await statCardValue("Volume")).toBe("9.1 oz");
+    expect(screen.getAllByText("1.5 oz").length).toBeGreaterThan(0);
   });
 
   it("carries a gram total alongside the volume rather than dropping it", async () => {
@@ -193,7 +222,7 @@ describe("today's volume total", () => {
     render(<FeedingsPage />, { wrapper: Wrapper });
 
     const card = await statCard("Volume");
-    expect(await statCardValue("Volume")).toBe("45 cc");
+    expect(await statCardValue("Volume")).toBe("45 mL");
     expect(within(card).getByText("+ 100 g today")).toBeTruthy();
   });
 

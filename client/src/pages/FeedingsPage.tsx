@@ -40,7 +40,8 @@ import NoChildPlaceholder from "../components/NoChildPlaceholder";
 
 import type { Feeding } from "../types/models";
 import { isoToLocal } from "../utils/dateTime";
-import { amountTotals, formatAmountTotal } from "../utils/feedingAmount";
+import { amountTotals, formatAmountTotal, formatEntryAmount, type VolumeUnit } from "../utils/feedingAmount";
+import { useVolumeUnit } from "../hooks/useVolumeUnit";
 import { buildCategoryColors } from "../theme/categoryColors";
 import { useEditEntryParam } from "../hooks/useEditEntryParam";
 
@@ -91,8 +92,9 @@ function formatDuration(startIso: string, endIso: string): string {
   return min === 0 ? `${hr}h` : `${hr}h ${min}m`;
 }
 
-function summaryFor(f: Feeding): string {
-  if (f.amount != null) return `${f.amount} ${f.amount_unit ?? ""}`.trim();
+function summaryFor(f: Feeding, unit: VolumeUnit): string {
+  const amount = formatEntryAmount(f, unit);
+  if (amount) return amount;
   if (f.end_time) return formatDuration(f.start_time, f.end_time);
   return "—";
 }
@@ -126,17 +128,20 @@ export default function FeedingsPage() {
   const { selectedChild } = useChildren();
   const { refreshKey } = useDataRefresh();
   const { notify } = useNotification();
+  const { unit } = useVolumeUnit();
   const [feedings, setFeedings] = useState<Feeding[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState<Feeding | null>(null);
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
   const [menuEntry, setMenuEntry] = useState<Feeding | null>(null);
+  // New entries default to the unit the app is displaying in, so what you
+  // type back is what you just read.
   const [form, setForm] = useState({
     type: "bottle_formula",
     start_time: "",
     end_time: "",
     amount: "",
-    amount_unit: "oz",
+    amount_unit: unit as string,
     notes: "",
   });
 
@@ -156,7 +161,7 @@ export default function FeedingsPage() {
 
   const openAddDialog = () => {
     setEditingEntry(null);
-    setForm({ type: "bottle_formula", start_time: "", end_time: "", amount: "", amount_unit: "oz", notes: "" });
+    setForm({ type: "bottle_formula", start_time: "", end_time: "", amount: "", amount_unit: unit, notes: "" });
     setDialogOpen(true);
   };
 
@@ -167,7 +172,7 @@ export default function FeedingsPage() {
       start_time: isoToLocal(entry.start_time),
       end_time: entry.end_time ? isoToLocal(entry.end_time) : "",
       amount: entry.amount != null ? String(entry.amount) : "",
-      amount_unit: entry.amount_unit || "oz",
+      amount_unit: entry.amount_unit || unit,
       notes: entry.notes || "",
     });
     setDialogOpen(true);
@@ -196,7 +201,7 @@ export default function FeedingsPage() {
       }
       setDialogOpen(false);
       setEditingEntry(null);
-      setForm({ type: "bottle_formula", start_time: "", end_time: "", amount: "", amount_unit: "oz", notes: "" });
+      setForm({ type: "bottle_formula", start_time: "", end_time: "", amount: "", amount_unit: unit, notes: "" });
       await load();
     } catch (err) {
       notify(err instanceof Error ? err.message : "Failed to save feeding.", "error");
@@ -249,9 +254,9 @@ export default function FeedingsPage() {
 
   const todayCount = todayFeedings.length;
   // Totalled the same way the dashboard does it, so the two screens always
-  // agree: every volume counts, converted to millilitres once a day mixes
-  // units, with any gram total carried alongside rather than folded in.
-  const todayAmounts = useMemo(() => amountTotals(todayFeedings), [todayFeedings]);
+  // agree: every volume counts, converted into the display unit, with any
+  // gram total carried alongside rather than folded into a volume.
+  const todayAmounts = useMemo(() => amountTotals(todayFeedings, unit), [todayFeedings, unit]);
   const lastFeedingTime = feedings.length > 0 ? relativeTime(feedings[0].start_time) : "—";
 
   return (
@@ -290,7 +295,7 @@ export default function FeedingsPage() {
                       <TableCell>{f.type.replace(/_/g, " ")}</TableCell>
                       <TableCell>{new Date(f.start_time).toLocaleString()}</TableCell>
                       <TableCell>{f.end_time ? new Date(f.end_time).toLocaleString() : "—"}</TableCell>
-                      <TableCell>{f.amount ? `${f.amount} ${f.amount_unit}` : "—"}</TableCell>
+                      <TableCell>{formatEntryAmount(f, unit) ?? "—"}</TableCell>
                       <TableCell>{f.notes || "—"}</TableCell>
                       <TableCell>
                         <IconButton size="small" onClick={() => handleEdit(f)}>
@@ -383,7 +388,7 @@ export default function FeedingsPage() {
                     </Box>
                     <Box sx={{ flex: 1, minWidth: 0 }}>
                       <Typography sx={{ fontSize: 12.5, fontWeight: 600, letterSpacing: "-0.005em", lineHeight: 1.2 }} noWrap>{feedingTypeLabel(f.type)}</Typography>
-                      <Typography sx={{ fontSize: 10.5, color: "text.secondary", mt: 0, lineHeight: 1.2 }}>{summaryFor(f)}</Typography>
+                      <Typography sx={{ fontSize: 10.5, color: "text.secondary", mt: 0, lineHeight: 1.2 }}>{summaryFor(f, unit)}</Typography>
                     </Box>
                     <Typography sx={{ fontSize: 11, color: "text.secondary", fontWeight: 500, fontVariantNumeric: "tabular-nums", flexShrink: 0, mr: 3.25 }}>
                       {formatTimeShort(f.start_time)}
