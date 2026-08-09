@@ -4,7 +4,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import { ThemeProvider, createTheme } from "@mui/material/styles";
 import Dashboard from "../src/pages/Dashboard";
-import type { Child, Feeding, Pumping } from "../src/types/models";
+import type { Child, Feeding, Pumping, Todo } from "../src/types/models";
 
 vi.mock("../src/api/client", () => ({
   api: {
@@ -346,6 +346,85 @@ describe("Dashboard – Today so far pumping total", () => {
     const tile = within(await pumpTile());
     expect(tile.getByText("1")).toBeTruthy();
     expect(tile.getByText("1 session")).toBeTruthy();
+  });
+});
+
+describe("Dashboard – to-do snapshot", () => {
+  const baseTodo: Todo = {
+    id: 7,
+    child_id: 1,
+    title: "Book hip ultrasound",
+    notes: null,
+    due_date: null,
+    priority: "medium",
+    completed: 0,
+    completed_at: null,
+    created_at: "2024-12-01T08:00:00Z",
+    updated_at: "2024-12-01T08:00:00Z",
+  };
+
+  function mockTodos(todos: Todo[]) {
+    mockApi.get.mockImplementation((url: string) => {
+      if (url.includes("/todos")) return Promise.resolve(todos);
+      return Promise.resolve([]);
+    });
+  }
+
+  it("gives each task a labelled checkbox", async () => {
+    mockTodos([baseTodo]);
+
+    render(<Dashboard />, { wrapper: Wrapper });
+
+    expect(await screen.findByRole("checkbox", { name: /book hip ultrasound/i })).toBeTruthy();
+  });
+
+  it("completes the task and refreshes the dashboard when the checkbox is ticked", async () => {
+    const user = userEvent.setup();
+    mockTodos([baseTodo]);
+    mockApi.put.mockResolvedValue({});
+
+    render(<Dashboard />, { wrapper: Wrapper });
+
+    await user.click(await screen.findByRole("checkbox", { name: /book hip ultrasound/i }));
+
+    expect(mockApi.put).toHaveBeenCalledWith("/todos/7", { completed: true });
+    await waitFor(() => expect(fetchCountFor("/todos")).toBe(2));
+  });
+
+  it("keeps the ticked task on screen, struck through, until the refresh lands", async () => {
+    const user = userEvent.setup();
+    mockTodos([baseTodo]);
+    mockApi.put.mockResolvedValue({});
+
+    render(<Dashboard />, { wrapper: Wrapper });
+
+    const checkbox = await screen.findByRole("checkbox", { name: /book hip ultrasound/i });
+    await user.click(checkbox);
+
+    expect(checkbox).toBeChecked();
+    expect(screen.getByText("Book hip ultrasound")).toHaveStyle({ textDecoration: "line-through" });
+  });
+
+  it("leaves the task active and reports the failure when the update fails", async () => {
+    const user = userEvent.setup();
+    mockTodos([baseTodo]);
+    mockApi.put.mockRejectedValue(new Error("Network down"));
+
+    render(<Dashboard />, { wrapper: Wrapper });
+
+    const checkbox = await screen.findByRole("checkbox", { name: /book hip ultrasound/i });
+    await user.click(checkbox);
+
+    await waitFor(() => expect(checkbox).not.toBeChecked());
+    expect(screen.getByText("Book hip ultrasound")).toHaveStyle({ textDecoration: "none" });
+  });
+
+  it("makes the task row itself tappable to reach the full to-do list", async () => {
+    mockTodos([baseTodo]);
+
+    render(<Dashboard />, { wrapper: Wrapper });
+
+    expect(await screen.findByRole("button", { name: /book hip ultrasound/i })).toBeTruthy();
   });
 });
 
