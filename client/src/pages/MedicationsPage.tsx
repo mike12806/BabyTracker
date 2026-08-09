@@ -31,6 +31,7 @@ import MoreVertIcon from "@mui/icons-material/MoreVert";
 import { api } from "../api/client";
 import { useChildren } from "../hooks/useChildren";
 import { useNotification } from "../hooks/useNotification";
+import { useDataRefresh } from "../hooks/useDataRefresh";
 import NowButton from "../components/NowButton";
 import { FAB_BOTTOM_OFFSET } from "../components/Layout";
 import StatCard from "../components/StatCard";
@@ -98,6 +99,7 @@ export default function MedicationsPage() {
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const { selectedChild } = useChildren();
   const { notify } = useNotification();
+  const { refreshKey } = useDataRefresh();
   const [entries, setEntries] = useState<Medication[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState<Medication | null>(null);
@@ -115,9 +117,12 @@ export default function MedicationsPage() {
     }
   };
 
+  // Refetches on mount, when the child changes, and whenever `refreshKey` is
+  // bumped — returning to the app, or logging an entry from the bottom-nav
+  // FAB, refreshes this list instead of leaving the pre-existing one on screen.
   useEffect(() => {
     load();
-  }, [selectedChild]);
+  }, [selectedChild, refreshKey]);
 
   const openAdd = () => {
     setEditingEntry(null);

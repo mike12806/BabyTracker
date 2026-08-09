@@ -46,12 +46,23 @@ export default defineConfig({
             handler: "NetworkFirst",
             options: {
               cacheName: "api-cache",
-              networkTimeoutSeconds: 5,
+              // Deliberately no `networkTimeoutSeconds`. It used to be 5s,
+              // which meant a merely slow connection — the normal case on a
+              // phone in a nursery — silently abandoned a request that was
+              // about to succeed and answered from cache instead, with
+              // nothing on screen to say the feed times were minutes stale.
+              // Without it the cache is only consulted when the network
+              // genuinely fails, so a live network always wins.
               expiration: {
                 maxEntries: 60,
-                maxAgeSeconds: 60 * 5,
+                // Only reachable while offline now, and a day-old reading
+                // labelled as stale beats an empty screen. `useDataFreshness`
+                // puts the banner up whenever one of these is served.
+                maxAgeSeconds: 60 * 60 * 24,
               },
-              cacheableResponse: { statuses: [0, 200] },
+              // 200 only: an opaque (status 0) response here would be the
+              // Cloudflare Access login redirect, which is not data.
+              cacheableResponse: { statuses: [200] },
             },
           },
           {

@@ -33,6 +33,7 @@ import ThermostatIcon from "@mui/icons-material/Thermostat";
 import { api } from "../api/client";
 import { useChildren } from "../hooks/useChildren";
 import { useNotification } from "../hooks/useNotification";
+import { useDataRefresh } from "../hooks/useDataRefresh";
 import NowButton from "../components/NowButton";
 import { FAB_BOTTOM_OFFSET } from "../components/Layout";
 import StatCard from "../components/StatCard";
@@ -107,6 +108,7 @@ function dateSectionLabel(iso: string): string {
 export default function TemperaturePage() {
   const { selectedChild } = useChildren();
   const { notify } = useNotification();
+  const { refreshKey } = useDataRefresh();
   const theme = useTheme();
   const isDark = theme.palette.mode === "dark";
   const cat = useMemo(() => buildCategoryColors(isDark), [isDark]);
@@ -129,9 +131,12 @@ export default function TemperaturePage() {
     }
   };
 
+  // Refetches on mount, when the child changes, and whenever `refreshKey` is
+  // bumped — returning to the app, or logging an entry from the bottom-nav
+  // FAB, refreshes this list instead of leaving the pre-existing one on screen.
   useEffect(() => {
     load();
-  }, [selectedChild]);
+  }, [selectedChild, refreshKey]);
 
   const openAdd = () => {
     setEditingEntry(null);

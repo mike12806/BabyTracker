@@ -46,6 +46,37 @@ activity.get("/", async (c) => {
   const fromDate = dateFrom && !isNaN(Date.parse(dateFrom)) ? dateFrom : "0000-01-01T00:00:00.000Z";
   const toDate = dateTo && !isNaN(Date.parse(dateTo)) ? dateTo : "9999-12-31T23:59:59.999Z";
 
+  // The merged page ends at `offset + limit`, and the merge is of lists that
+  // are each already in descending order — so an entry past the Nth row of its
+  // own table can never place inside the first N of the merge. Each query
+  // therefore needs no more than this many rows, however much history exists.
+  // Without it every one of these read its table in full and the sort below
+  // ran over the lot, which grew unboundedly with the child's history.
+  const need = offset + limit;
+
+  // The pager still needs a true count of everything in range, which the capped
+  // queries above can no longer give. Table and column names come from this
+  // fixed list — never from the request — so they are safe to interpolate;
+  // every value is still bound.
+  const countSources: Array<[table: string, timeColumn: string]> = [
+    ["feedings", "start_time"],
+    ["diaper_changes", "time"],
+    ["sleep", "start_time"],
+    ["tummy_time", "start_time"],
+    ["pumping", "start_time"],
+    ["temperature", "time"],
+    ["notes", "time"],
+    ["medications", "time"],
+  ];
+  // Started before the awaits below so both sets of queries are in flight together.
+  const countQueries = countSources.map(([table, timeColumn]) =>
+    c.env.DB.prepare(
+      `SELECT COUNT(*) AS n FROM ${table} WHERE child_id = ? AND ${timeColumn} >= ? AND ${timeColumn} <= ?`
+    )
+      .bind(childId, fromDate, toDate)
+      .first<{ n: number }>()
+  );
+
   const [feedings, diapers, sleepSessions, tummyTimes, pumping, temperatures, notes, medications] =
     await Promise.all([
       c.env.DB.prepare(`
@@ -56,7 +87,8 @@ activity.get("/", async (c) => {
         JOIN children c ON c.id = f.child_id
         LEFT JOIN users u ON u.id = f.created_by_user_id
         WHERE f.child_id = ? AND f.start_time >= ? AND f.start_time <= ?
-      `).bind(childId, fromDate, toDate).all<ActivityEntry>(),
+        ORDER BY f.start_time DESC LIMIT ?
+      `).bind(childId, fromDate, toDate, need).all<ActivityEntry>(),
       c.env.DB.prepare(`
         SELECT 'Diaper Change' AS activity_type, d.id AS id, d.time AS event_time,
           d.type || CASE WHEN d.color IS NOT NULL AND d.color != '' THEN ' (' || d.color || ')' ELSE '' END AS detail,
@@ -65,7 +97,8 @@ activity.get("/", async (c) => {
         JOIN children c ON c.id = d.child_id
         LEFT JOIN users u ON u.id = d.created_by_user_id
         WHERE d.child_id = ? AND d.time >= ? AND d.time <= ?
-      `).bind(childId, fromDate, toDate).all<ActivityEntry>(),
+        ORDER BY d.time DESC LIMIT ?
+      `).bind(childId, fromDate, toDate, need).all<ActivityEntry>(),
       c.env.DB.prepare(`
         SELECT 'Sleep' AS activity_type, s.id AS id, s.start_time AS event_time,
           CASE WHEN s.is_nap = 1 THEN 'nap' ELSE 'night sleep' END AS detail,
@@ -74,7 +107,8 @@ activity.get("/", async (c) => {
         JOIN children c ON c.id = s.child_id
         LEFT JOIN users u ON u.id = s.created_by_user_id
         WHERE s.child_id = ? AND s.start_time >= ? AND s.start_time <= ?
-      `).bind(childId, fromDate, toDate).all<ActivityEntry>(),
+        ORDER BY s.start_time DESC LIMIT ?
+      `).bind(childId, fromDate, toDate, need).all<ActivityEntry>(),
       c.env.DB.prepare(`
         SELECT 'Tummy Time' AS activity_type, t.id AS id, t.start_time AS event_time,
           CASE WHEN t.milestone IS NOT NULL AND t.milestone != '' THEN 'tummy time - ' || t.milestone ELSE 'tummy time' END AS detail,
@@ -83,7 +117,8 @@ activity.get("/", async (c) => {
         JOIN children c ON c.id = t.child_id
         LEFT JOIN users u ON u.id = t.created_by_user_id
         WHERE t.child_id = ? AND t.start_time >= ? AND t.start_time <= ?
-      `).bind(childId, fromDate, toDate).all<ActivityEntry>(),
+        ORDER BY t.start_time DESC LIMIT ?
+      `).bind(childId, fromDate, toDate, need).all<ActivityEntry>(),
       c.env.DB.prepare(`
         SELECT 'Pumping' AS activity_type, p.id AS id, p.start_time AS event_time,
           CASE WHEN p.amount IS NOT NULL THEN 'pumped ' || p.amount || ' ' || COALESCE(p.amount_unit, '') ELSE 'pumping' END
@@ -93,7 +128,8 @@ activity.get("/", async (c) => {
         JOIN children c ON c.id = p.child_id
         LEFT JOIN users u ON u.id = p.created_by_user_id
         WHERE p.child_id = ? AND p.start_time >= ? AND p.start_time <= ?
-      `).bind(childId, fromDate, toDate).all<ActivityEntry>(),
+        ORDER BY p.start_time DESC LIMIT ?
+      `).bind(childId, fromDate, toDate, need).all<ActivityEntry>(),
       c.env.DB.prepare(`
         SELECT 'Temperature' AS activity_type, t.id AS id, t.time AS event_time,
           t.reading || '°' || t.reading_unit AS detail,
@@ -102,7 +138,8 @@ activity.get("/", async (c) => {
         JOIN children c ON c.id = t.child_id
         LEFT JOIN users u ON u.id = t.created_by_user_id
         WHERE t.child_id = ? AND t.time >= ? AND t.time <= ?
-      `).bind(childId, fromDate, toDate).all<ActivityEntry>(),
+        ORDER BY t.time DESC LIMIT ?
+      `).bind(childId, fromDate, toDate, need).all<ActivityEntry>(),
       c.env.DB.prepare(`
         SELECT 'Note' AS activity_type, n.id AS id, n.time AS event_time,
           COALESCE(n.title, SUBSTR(n.content, 1, 60)) AS detail,
@@ -111,7 +148,8 @@ activity.get("/", async (c) => {
         JOIN children c ON c.id = n.child_id
         LEFT JOIN users u ON u.id = n.created_by_user_id
         WHERE n.child_id = ? AND n.time >= ? AND n.time <= ?
-      `).bind(childId, fromDate, toDate).all<ActivityEntry>(),
+        ORDER BY n.time DESC LIMIT ?
+      `).bind(childId, fromDate, toDate, need).all<ActivityEntry>(),
       c.env.DB.prepare(`
         SELECT 'Medication' AS activity_type, m.id AS id, m.time AS event_time,
           m.name || CASE WHEN m.dosage IS NOT NULL THEN ' ' || m.dosage || COALESCE(' ' || m.dosage_unit, '') ELSE '' END AS detail,
@@ -120,7 +158,8 @@ activity.get("/", async (c) => {
         JOIN children c ON c.id = m.child_id
         LEFT JOIN users u ON u.id = m.created_by_user_id
         WHERE m.child_id = ? AND m.time >= ? AND m.time <= ?
-      `).bind(childId, fromDate, toDate).all<ActivityEntry>(),
+        ORDER BY m.time DESC LIMIT ?
+      `).bind(childId, fromDate, toDate, need).all<ActivityEntry>(),
     ]);
 
   const all: ActivityEntry[] = [
@@ -134,10 +173,15 @@ activity.get("/", async (c) => {
     ...medications.results,
   ];
 
-  // Sort descending (most recent first) then paginate
+  // Sort descending (most recent first) then paginate. `all` now holds at most
+  // `need` rows per source rather than the whole history, but the page it
+  // yields is identical: nothing dropped by the per-query limit could have
+  // sorted above a row that survived it.
   all.sort((a, b) => b.event_time.localeCompare(a.event_time));
-  const total = all.length;
   const page = all.slice(offset, offset + limit);
+
+  const counts = await Promise.all(countQueries);
+  const total = counts.reduce((sum, row) => sum + (row?.n ?? 0), 0);
 
   return c.json({ total, offset, limit, results: page });
 });

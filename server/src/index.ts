@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import type { Env } from "./types/env.js";
 import { authMiddleware } from "./middleware/auth.js";
+import { cacheControlMiddleware } from "./middleware/cacheControl.js";
 import { sendDailySummary } from "./scheduled/dailySummary.js";
 import { auth } from "./routes/auth.js";
 import { children } from "./routes/children.js";
@@ -24,6 +25,9 @@ const app = new Hono<AppEnv>();
 
 // All API routes require Cloudflare Access authentication
 app.use("/api/*", authMiddleware);
+
+// No intermediary may hand back a stale copy of a reply — see the middleware.
+app.use("/api/*", cacheControlMiddleware);
 
 // Auth routes (user identity from CF Access JWT)
 app.route("/api/auth", auth);

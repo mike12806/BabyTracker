@@ -2,6 +2,7 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import type { Env } from "../src/types/env.js";
+import { cacheControlMiddleware } from "../src/middleware/cacheControl.js";
 import { auth } from "../src/routes/auth.js";
 import { children } from "../src/routes/children.js";
 import { feedings } from "../src/routes/feedings.js";
@@ -67,6 +68,7 @@ export function createTestApp() {
   const app = new Hono<AppEnv>();
 
   app.use("/api/*", testAuthMiddleware);
+  app.use("/api/*", cacheControlMiddleware);
 
   app.route("/api/auth", auth);
   app.route("/api/children", children);
