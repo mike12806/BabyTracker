@@ -25,7 +25,7 @@ import TemperaturePage from "../src/pages/TemperaturePage";
 import TimersPage from "../src/pages/TimersPage";
 import MedicationsPage from "../src/pages/MedicationsPage";
 import TodosPage from "../src/pages/TodosPage";
-import { DataRefreshProvider } from "../src/hooks/useDataRefresh";
+import { DataRefreshProvider, FOREGROUND_POLL_MS } from "../src/hooks/useDataRefresh";
 import { NotificationProvider } from "../src/hooks/useNotification";
 import { useChildren } from "../src/hooks/useChildren";
 import { api } from "../src/api/client";
@@ -132,7 +132,7 @@ describe("an app left open in front of the user", () => {
     await waitFor(() => expect(fetchCount("/todos")).toBe(1));
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(60_000);
+      await vi.advanceTimersByTimeAsync(FOREGROUND_POLL_MS);
     });
 
     await waitFor(() => expect(fetchCount("/todos")).toBe(2));
@@ -144,7 +144,7 @@ describe("an app left open in front of the user", () => {
     await waitFor(() => expect(fetchCount("/todos")).toBe(1));
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(60_000);
+      await vi.advanceTimersByTimeAsync(FOREGROUND_POLL_MS);
     });
 
     // Coming back fires `visibilitychange` and refetches then; burning requests
@@ -162,7 +162,7 @@ describe("an app left open in front of the user", () => {
     input.focus();
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(60_000);
+      await vi.advanceTimersByTimeAsync(FOREGROUND_POLL_MS);
     });
 
     expect(fetchCount("/todos")).toBe(1);
