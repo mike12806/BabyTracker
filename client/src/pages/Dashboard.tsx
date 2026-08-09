@@ -38,6 +38,7 @@ import NoChildPlaceholder from "../components/NoChildPlaceholder";
 import QuickLogDialog, { type QuickLogCategory } from "../components/QuickLogDialog";
 import { buildCategoryColors, type CategoryKey } from "../theme/categoryColors";
 import { editEntryPath } from "../utils/activityLinks";
+import { formatRelativeTime } from "../utils/dateTime";
 import { sideLabel } from "../utils/pumping";
 import { amountTotals, formatAmountTotal, formatEntryAmount } from "../utils/feedingAmount";
 import { useVolumeUnit } from "../hooks/useVolumeUnit";
@@ -53,21 +54,6 @@ import type {
   Medication,
   Todo,
 } from "../types/models";
-
-function formatRelativeTime(iso: string): string {
-  const ms = Date.now() - new Date(iso).getTime();
-  if (ms < 0) return "just now";
-  const mins = Math.round(ms / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  const remMins = mins % 60;
-  if (hrs < 24) return remMins > 0 ? `${hrs}h ${remMins}m ago` : `${hrs}h ago`;
-  const days = Math.floor(hrs / 24);
-  if (days === 1) return "Yesterday";
-  if (days < 7) return `${days}d ago`;
-  return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
-}
 
 function formatDuration(start: string, end: string | null): string {
   const endMs = end ? new Date(end).getTime() : Date.now();
