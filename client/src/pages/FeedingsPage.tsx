@@ -39,7 +39,7 @@ import StatCard from "../components/StatCard";
 import NoChildPlaceholder from "../components/NoChildPlaceholder";
 
 import type { Feeding } from "../types/models";
-import { isoToLocal } from "../utils/dateTime";
+import { formatRelativeTime, isoToLocal } from "../utils/dateTime";
 import { amountTotals, formatAmountTotal, formatEntryAmount, type VolumeUnit } from "../utils/feedingAmount";
 import { useVolumeUnit } from "../hooks/useVolumeUnit";
 import { buildCategoryColors } from "../theme/categoryColors";
@@ -63,23 +63,6 @@ function isBreastFeeding(type: string): boolean {
 
 function feedingTypeLabel(type: Feeding["type"]): string {
   return FEEDING_TYPES.find((t) => t.value === type)?.label ?? type.replace(/_/g, " ");
-}
-
-function relativeTime(iso: string): string {
-  const now = new Date();
-  const then = new Date(iso);
-  const diffMs = now.getTime() - then.getTime();
-  const diffMin = Math.floor(diffMs / 60000);
-  if (diffMin < 1) return "Just now";
-  if (diffMin < 60) return `${diffMin}m ago`;
-  const diffHr = Math.floor(diffMin / 60);
-  if (diffHr < 24) return `${diffHr}h ago`;
-  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const startOfThen = new Date(then.getFullYear(), then.getMonth(), then.getDate());
-  const dayDiff = Math.round((startOfToday.getTime() - startOfThen.getTime()) / 86400000);
-  if (dayDiff === 1) return "Yesterday";
-  if (dayDiff < 7) return `${dayDiff}d ago`;
-  return then.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
 function formatDuration(startIso: string, endIso: string): string {
@@ -257,7 +240,7 @@ export default function FeedingsPage() {
   // agree: every volume counts, converted into the display unit, with any
   // gram total carried alongside rather than folded into a volume.
   const todayAmounts = useMemo(() => amountTotals(todayFeedings, unit), [todayFeedings, unit]);
-  const lastFeedingTime = feedings.length > 0 ? relativeTime(feedings[0].start_time) : "—";
+  const lastFeedingTime = feedings.length > 0 ? formatRelativeTime(feedings[0].start_time) : "—";
 
   return (
     <Box>
