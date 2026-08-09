@@ -26,6 +26,27 @@
 - Prefer controlled components for forms
 - Use `useQuery`/`useMutation` patterns (e.g., TanStack Query) for server state management
 
+## Data Freshness
+
+The app is installed as a PWA and left running for days, so anything on screen
+is read as the current state of a baby — how long since the last feed, whether
+she's been changed. Stale data is a correctness bug here, not a cosmetic one.
+
+- Every page that loads entries must key its fetch effect on `refreshKey` from
+  `useDataRefresh`, alongside `selectedChild`. A `useEffect` with only
+  `[selectedChild]` never refetches after mount and will go stale.
+- `DataRefreshProvider` bumps `refreshKey` when the app is reopened
+  (`visibilitychange`, `focus`, bfcache `pageshow`), on a foreground poll, and
+  whenever an entry is saved. It holds refreshes back while a form is open —
+  see `isUserBusy` — so nothing rebuilds under a half-filled dialog.
+- The service worker's `/api/` cache is an offline fallback only: it must never
+  pre-empt a working network. Don't reintroduce `networkTimeoutSeconds`.
+- Anything served from that cache is flagged to the user by the banner in
+  `Layout`, driven by `useDataFreshness` — the app never presents cached
+  entries as if they were live.
+- API responses are `Cache-Control: no-store` so no HTTP cache in between can
+  answer on the server's behalf.
+
 ## Auth
 
 - Cloudflare Access handles login — no login page or auth UI needed in the app

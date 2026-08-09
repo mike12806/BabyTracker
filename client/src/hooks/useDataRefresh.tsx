@@ -16,6 +16,16 @@ const DataRefreshContext = createContext<DataRefreshContextType>({
 /** Ignore a re-focus refresh this soon after the previous one (ms). */
 const FOCUS_REFRESH_THROTTLE_MS = 2000;
 
+/**
+ * How often to refetch while the app is open and in front of the user (ms).
+ *
+ * Visibility events only fire when you leave and come back, so an app left
+ * open — the tablet propped on the changing table, a desktop tab that stays
+ * on the dashboard all afternoon — would otherwise show whatever was true
+ * when it was opened, with nothing on screen hinting the numbers have moved.
+ */
+const FOREGROUND_POLL_MS = 60_000;
+
 export function DataRefreshProvider({ children }: { children: ReactNode }) {
   const [refreshKey, setRefreshKey] = useState(0);
 
@@ -59,13 +69,35 @@ export function DataRefreshProvider({ children }: { children: ReactNode }) {
       }, 0);
     };
 
+    // Restoring from the back/forward cache hands back the page exactly as it
+    // was — React state, rendered lists and all — without remounting anything,
+    // so a bfcache restore has to be treated as a return to the app.
+    const onPageShow = (event: PageTransitionEvent) => {
+      if (event.persisted) onVisible();
+    };
+
+    // Same guards as a re-focus refresh: skip while hidden (coming back fires
+    // `visibilitychange`, which refetches anyway) and while a form is open.
+    const onPoll = () => {
+      if (document.visibilityState !== "visible") return;
+      if (isUserBusy()) {
+        refreshHeld.current = true;
+        return;
+      }
+      runRefresh();
+    };
+
     document.addEventListener("visibilitychange", onVisible);
     window.addEventListener("focus", onVisible);
+    window.addEventListener("pageshow", onPageShow);
     document.addEventListener("focusout", onFocusOut);
+    const pollTimer = setInterval(onPoll, FOREGROUND_POLL_MS);
     return () => {
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("focus", onVisible);
+      window.removeEventListener("pageshow", onPageShow);
       document.removeEventListener("focusout", onFocusOut);
+      clearInterval(pollTimer);
     };
   }, [refreshData]);
 

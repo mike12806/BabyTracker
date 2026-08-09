@@ -33,6 +33,7 @@ import CloseIcon from "@mui/icons-material/Close";
 import { api } from "../api/client";
 import { useChildren } from "../hooks/useChildren";
 import { useNotification } from "../hooks/useNotification";
+import { useDataRefresh } from "../hooks/useDataRefresh";
 import NowButton from "../components/NowButton";
 import { FAB_BOTTOM_OFFSET } from "../components/Layout";
 import NoChildPlaceholder from "../components/NoChildPlaceholder";
@@ -288,6 +289,7 @@ function EntryCard({ entry, onEdit, onDelete, gutterColor }: EntryCardProps) {
 export default function GrowthPage() {
   const { selectedChild } = useChildren();
   const { notify } = useNotification();
+  const { refreshKey } = useDataRefresh();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const isCompact = useMediaQuery(theme.breakpoints.down("md"));
@@ -309,9 +311,12 @@ export default function GrowthPage() {
     }
   };
 
+  // Refetches on mount, when the child changes, and whenever `refreshKey` is
+  // bumped — returning to the app, or logging an entry from the bottom-nav
+  // FAB, refreshes this list instead of leaving the pre-existing one on screen.
   useEffect(() => {
     load();
-  }, [selectedChild]);
+  }, [selectedChild, refreshKey]);
 
   const trends = useMemo(() => {
     const sorted = [...entries].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());

@@ -62,8 +62,11 @@ export default function App() {
       <BrowserRouter>
         <AuthProvider>
           <AuthGate>
-            <ChildProvider>
-              <DataRefreshProvider>
+            {/* DataRefreshProvider wraps ChildProvider so the child list and the
+                selected child's own details refetch on the same signal as
+                everything else. */}
+            <DataRefreshProvider>
+              <ChildProvider>
                 <NotificationProvider>
                   <VolumeUnitProvider>
                     <Suspense fallback={<PageFallback />}>
@@ -89,8 +92,8 @@ export default function App() {
                     </Suspense>
                   </VolumeUnitProvider>
                 </NotificationProvider>
-              </DataRefreshProvider>
-            </ChildProvider>
+              </ChildProvider>
+            </DataRefreshProvider>
           </AuthGate>
         </AuthProvider>
       </BrowserRouter>
