@@ -23,8 +23,14 @@ const FOCUS_REFRESH_THROTTLE_MS = 2000;
  * open — the tablet propped on the changing table, a desktop tab that stays
  * on the dashboard all afternoon — would otherwise show whatever was true
  * when it was opened, with nothing on screen hinting the numbers have moved.
+ *
+ * Five minutes, not one, because of what a tick costs rather than what it
+ * buys: a Dashboard refresh is 12 requests, five of them `limit=500`, so a
+ * device left open all day reads millions of D1 rows purely to poll. A baby
+ * feeds every couple of hours, so sub-minute freshness was never worth that.
+ * Reopening the app still refetches immediately, which is the common case.
  */
-const FOREGROUND_POLL_MS = 60_000;
+export const FOREGROUND_POLL_MS = 5 * 60_000;
 
 export function DataRefreshProvider({ children }: { children: ReactNode }) {
   const [refreshKey, setRefreshKey] = useState(0);
