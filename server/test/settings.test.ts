@@ -18,6 +18,23 @@ describe("Settings API", () => {
     expect(data.default_child_id).toBeNull();
     expect(data.theme_mode).toBe("system");
     expect(data.email_reports).toBe(1);
+    // Volumes are shown in millilitres until the user picks otherwise.
+    expect(data.volume_unit).toBe("ml");
+  });
+
+  it("PUT /api/settings updates volume_unit", async () => {
+    const res = await api.put("/api/settings", { volume_unit: "oz" });
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as Record<string, unknown>;
+    expect(data.volume_unit).toBe("oz");
+
+    const after = (await (await api.get("/api/settings")).json()) as Record<string, unknown>;
+    expect(after.volume_unit).toBe("oz");
+  });
+
+  it("PUT /api/settings rejects a unit that is not a volume", async () => {
+    const res = await api.put("/api/settings", { volume_unit: "g" });
+    expect(res.status).toBe(400);
   });
 
   it("PUT /api/settings updates theme_mode", async () => {
@@ -108,6 +125,23 @@ describe("Settings API", () => {
     expect(res.status).toBe(200);
     const data = (await res.json()) as Record<string, unknown>;
     expect(data.email_reports).toBe(1);
+    // Volumes are shown in millilitres until the user picks otherwise.
+    expect(data.volume_unit).toBe("ml");
+  });
+
+  it("PUT /api/settings updates volume_unit", async () => {
+    const res = await api.put("/api/settings", { volume_unit: "oz" });
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as Record<string, unknown>;
+    expect(data.volume_unit).toBe("oz");
+
+    const after = (await (await api.get("/api/settings")).json()) as Record<string, unknown>;
+    expect(after.volume_unit).toBe("oz");
+  });
+
+  it("PUT /api/settings rejects a unit that is not a volume", async () => {
+    const res = await api.put("/api/settings", { volume_unit: "g" });
+    expect(res.status).toBe(400);
   });
 
   it("GET /api/settings reflects updated email_reports", async () => {

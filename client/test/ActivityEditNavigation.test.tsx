@@ -137,7 +137,7 @@ describe("tapping an activity entry", () => {
     renderApp("/");
 
     const row = await screen.findByRole("button", {
-      name: /Edit Bottle Formula · 4 oz at/i,
+      name: /Edit Bottle Formula · 118 mL at/i,
     });
     await userEvent.click(row);
 

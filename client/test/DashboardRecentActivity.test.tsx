@@ -200,8 +200,8 @@ describe("Dashboard – recent activity feed", () => {
     await screen.findByText(/Diaper · Wet/);
     expect(recentActivityTitles()).toEqual([
       "Diaper · Wet",
-      "Bottle Formula · 5 cc",
-      "Pump · Both · 3 oz",
+      "Bottle Formula · 5 mL",
+      "Pump · Both · 89 mL",
       "Nap",
       "Tummy time",
     ]);
@@ -220,7 +220,7 @@ describe("Dashboard – recent activity feed", () => {
 
     await screen.findByText(/Temp · 98.6°F/);
     expect(recentActivityTitles()).toEqual([
-      "Bottle Formula · 5 cc",
+      "Bottle Formula · 5 mL",
       "Temp · 98.6°F",
       "Note · Slept through the night",
       "Tylenol · 2.5 ml",
@@ -263,8 +263,8 @@ describe("Dashboard – recent activity feed", () => {
 
     render(<Dashboard />, { wrapper: Wrapper });
 
-    await screen.findByText("Bottle Formula · 5 cc");
-    expect(recentActivityTitles()).toEqual(["Bottle Formula · 5 cc"]);
+    await screen.findByText("Bottle Formula · 5 mL");
+    expect(recentActivityTitles()).toEqual(["Bottle Formula · 5 mL"]);
   });
 
   it("does not let a run of feedings crowd out other activity", async () => {
@@ -303,7 +303,7 @@ describe("Dashboard – recent activity feed", () => {
     render(<Dashboard />, { wrapper: Wrapper });
 
     await screen.findByText(/Diaper · Wet/);
-    expect(recentActivityTitles()).toEqual(["Diaper · Wet", "Bottle Formula · 5 cc"]);
+    expect(recentActivityTitles()).toEqual(["Diaper · Wet", "Bottle Formula · 5 mL"]);
     // Scoped to the row: past 11:30 PM the Feeding tile's own relative time
     // also reads "Yesterday", and an unscoped query then matches both.
     const feedingRow = screen.getByRole("button", { name: /^Edit Bottle Formula/ });

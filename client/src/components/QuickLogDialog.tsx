@@ -20,6 +20,8 @@ import { useDataRefresh } from "../hooks/useDataRefresh";
 import { useNotification } from "../hooks/useNotification";
 import { clearDraft, loadDraft, saveDraft } from "../utils/formDraft";
 import { PUMPING_SIDES } from "../utils/pumping";
+import { pumpingLogUnit } from "../utils/feedingAmount";
+import { useVolumeUnit } from "../hooks/useVolumeUnit";
 import NowButton from "./NowButton";
 
 export type QuickLogCategory = "feed" | "diaper" | "sleep" | "pump" | "tummy" | "note";
@@ -96,14 +98,14 @@ function isUnchanged(form: FormState, opened: FormState): boolean {
   return (Object.keys(opened) as (keyof FormState)[]).every((k) => form[k] === opened[k]);
 }
 
-function emptyForm(): FormState {
+function emptyForm(amountUnit: string): FormState {
   return {
     time: nowLocal(),
     end_time: "",
     notes: "",
     feedingType: "bottle_formula",
     amount: "",
-    amountUnit: "oz",
+    amountUnit,
     pumpSide: "both",
     diaperType: "wet",
     color: "",
@@ -119,7 +121,11 @@ export default function QuickLogDialog({ category, onClose, onLogged }: QuickLog
   const { selectedChild } = useChildren();
   const { notify } = useNotification();
   const { refreshData } = useDataRefresh();
-  const [form, setForm] = useState<FormState>(emptyForm);
+  const { unit } = useVolumeUnit();
+  // New entries are logged in the unit the app displays in. Pumping sessions
+  // are only stored as ml or oz, so a cc display logs millilitres.
+  const defaultUnit = category === "pump" ? pumpingLogUnit(unit) : unit;
+  const [form, setForm] = useState<FormState>(() => emptyForm(defaultUnit));
   const [saving, setSaving] = useState(false);
   const childId = selectedChild?.id ?? null;
 
@@ -129,7 +135,7 @@ export default function QuickLogDialog({ category, onClose, onLogged }: QuickLog
 
   useEffect(() => {
     if (!category) return;
-    const fresh = emptyForm();
+    const fresh = emptyForm(defaultUnit);
     openedWith.current = fresh;
 
     const draft = loadDraft<FormState>(category, childId);
@@ -139,7 +145,7 @@ export default function QuickLogDialog({ category, onClose, onLogged }: QuickLog
       return;
     }
     setForm(fresh);
-  }, [category, childId]);
+  }, [category, childId, defaultUnit]);
 
   // Persist on every edit: whatever interrupts the page (an expired Access
   // session navigating to re-auth, iOS evicting the PWA) gives no warning.

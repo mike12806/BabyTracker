@@ -15,6 +15,8 @@ import {
   MenuItem,
   Select,
   SwipeableDrawer,
+  ToggleButton,
+  ToggleButtonGroup,
   Toolbar,
   Typography,
   useMediaQuery,
@@ -47,6 +49,8 @@ import MoreHorizRoundedIcon from "@mui/icons-material/MoreHorizRounded";
 import { useAuth } from "../hooks/useAuth";
 import { useChildren } from "../hooks/useChildren";
 import { useThemeMode } from "../hooks/useTheme";
+import { useVolumeUnit } from "../hooks/useVolumeUnit";
+import { unitLabel, VOLUME_UNITS, type VolumeUnit } from "../utils/feedingAmount";
 import { API_BASE } from "../api/client";
 import QuickLogDialog, { type QuickLogCategory } from "./QuickLogDialog";
 
@@ -90,6 +94,7 @@ export default function Layout() {
   const { user } = useAuth();
   const { children, selectedChild, selectChild } = useChildren();
   const { preference, setPreference } = useThemeMode();
+  const { unit: volumeUnit, setUnit: setVolumeUnit } = useVolumeUnit();
   const muiTheme = useTheme();
   const isMobile = useMediaQuery(muiTheme.breakpoints.down("md"));
   const isDark = muiTheme.palette.mode === "dark";
@@ -212,6 +217,34 @@ export default function Layout() {
           </ListItemButton>
         ))}
       </List>
+      <Divider />
+      {/* Every bottle, pumping session, total and chart is shown in this unit,
+          whichever unit each entry happened to be logged in. */}
+      <Box sx={{ px: 2, py: 1.5 }}>
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          sx={{ fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase", display: "block", mb: 0.75 }}
+        >
+          Volume units
+        </Typography>
+        <ToggleButtonGroup
+          exclusive
+          size="small"
+          fullWidth
+          value={volumeUnit}
+          onChange={(_, next: VolumeUnit | null) => {
+            if (next) setVolumeUnit(next);
+          }}
+          aria-label="Volume units"
+        >
+          {VOLUME_UNITS.map((u) => (
+            <ToggleButton key={u} value={u} sx={{ py: 0.4, fontSize: 13, textTransform: "none" }}>
+              {unitLabel(u)}
+            </ToggleButton>
+          ))}
+        </ToggleButtonGroup>
+      </Box>
       {user && (
         <>
           <Divider />

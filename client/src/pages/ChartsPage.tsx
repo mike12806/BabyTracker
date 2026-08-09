@@ -17,12 +17,15 @@ import { api } from "../api/client";
 import { useChildren } from "../hooks/useChildren";
 import { useDataRefresh } from "../hooks/useDataRefresh";
 import NoChildPlaceholder from "../components/NoChildPlaceholder";
-import { amountTotals, unitLabel } from "../utils/feedingAmount";
+import { unitLabel, volumeTotal } from "../utils/feedingAmount";
+import { useVolumeUnit } from "../hooks/useVolumeUnit";
 import {
   FeedingChart,
   DiaperChart,
   SleepChart,
   PumpingChart,
+  lastNDays,
+  toDateKey,
 } from "../components/Charts";
 import { buildCategoryColors, type CategoryKey } from "../theme/categoryColors";
 import type {
@@ -55,6 +58,7 @@ function rangeSubtitle(range: RangeKey): string {
 export default function ChartsPage() {
   const { selectedChild } = useChildren();
   const { refreshKey } = useDataRefresh();
+  const { unit } = useVolumeUnit();
   const theme = useTheme();
   const dark = theme.palette.mode === "dark";
   const colors = useMemo(() => buildCategoryColors(dark), [dark]);
@@ -87,50 +91,41 @@ export default function ChartsPage() {
 
   const days = daysForRange(range);
 
-  // Compute averages for the selected range
-  const feedCutoff = new Date();
-  feedCutoff.setDate(feedCutoff.getDate() - days);
-  const filteredFeedings = feedings.filter((f) => new Date(f.start_time) >= feedCutoff);
+  // The charts bucket entries by local calendar day over the last N days. The
+  // averages printed above them cover exactly those days, so a headline never
+  // summarises a window the chart below it does not draw.
+  const chartedDays = new Set(lastNDays(days));
+  const onChart = <T,>(items: T[], timeOf: (item: T) => string): T[] =>
+    items.filter((i) => chartedDays.has(toDateKey(timeOf(i))));
+
+  const filteredFeedings = onChart(feedings, (f) => f.start_time);
 
   // Prefer the amount fed per day; fall back to feedings per day when no
   // amounts have been recorded (e.g. breastfeeding only). Volumes logged in
-  // different units are converted rather than dropped, so the average covers
-  // every bottle in the range.
-  const feedTotal = amountTotals(filteredFeedings)[0] ?? null;
+  // different units are converted into the display unit rather than dropped,
+  // so the average is in the same unit as the chart's axis.
+  const feedVolume = volumeTotal(filteredFeedings, unit);
   const avgFeedings =
     days > 0
-      ? (feedTotal ? feedTotal.value / days : filteredFeedings.length / days).toFixed(1)
+      ? (feedVolume != null ? feedVolume / days : filteredFeedings.length / days).toFixed(1)
       : "0";
-  const avgFeedingsLabel = feedTotal?.unit ? `${unitLabel(feedTotal.unit)}/day` : "/day";
+  const avgFeedingsLabel = feedVolume != null ? `${unitLabel(unit)}/day` : "/day";
 
-  const avgDiapers = days > 0 ? (diapers.filter((d) => {
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - days);
-    return new Date(d.time) >= cutoff;
-  }).length / days).toFixed(1) : "0";
+  const avgDiapers = days > 0 ? (onChart(diapers, (d) => d.time).length / days).toFixed(1) : "0";
 
-  const filteredSleeps = sleeps.filter((s) => {
-    if (!s.end_time) return false;
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - days);
-    return new Date(s.start_time) >= cutoff;
-  });
+  const filteredSleeps = onChart(sleeps.filter((s) => s.end_time), (s) => s.start_time);
   const totalSleepHrs = filteredSleeps.reduce((sum, s) => {
     if (!s.end_time) return sum;
     return sum + (new Date(s.end_time).getTime() - new Date(s.start_time).getTime()) / 3600000;
   }, 0);
   const avgSleep = days > 0 ? (totalSleepHrs / days).toFixed(1) : "0";
 
-  const filteredPumpings = pumpings.filter((p) => {
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - days);
-    return new Date(p.start_time) >= cutoff;
-  });
+  const filteredPumpings = onChart(pumpings, (p) => p.start_time);
   // Sessions in different units are converted before they are added up —
   // summing the raw numbers would treat an ounce as a millilitre.
-  const pumpTotal = amountTotals(filteredPumpings)[0] ?? null;
-  const avgPump = days > 0 && pumpTotal ? (pumpTotal.value / days).toFixed(1) : "0";
-  const pumpUnit = unitLabel(pumpTotal?.unit ?? "oz");
+  const pumpVolume = volumeTotal(filteredPumpings, unit);
+  const avgPump = days > 0 && pumpVolume != null ? (pumpVolume / days).toFixed(1) : "0";
+  const pumpUnit = unitLabel(unit);
 
   interface SectionDef {
     key: string;

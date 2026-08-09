@@ -46,6 +46,8 @@ vi.mock("recharts", () => {
 
 import { useChildren } from "../src/hooks/useChildren";
 import { DataRefreshProvider } from "../src/hooks/useDataRefresh";
+import { VolumeUnitProvider } from "../src/hooks/useVolumeUnit";
+import { resetUserSettingsCache } from "../src/api/userSettings";
 import { api } from "../src/api/client";
 
 const mockUseChildren = vi.mocked(useChildren);
@@ -56,7 +58,9 @@ function Wrapper({ children }: { children: React.ReactNode }) {
   return (
     <MemoryRouter>
       <ThemeProvider theme={theme}>
-        <DataRefreshProvider>{children}</DataRefreshProvider>
+        <DataRefreshProvider>
+          <VolumeUnitProvider>{children}</VolumeUnitProvider>
+        </DataRefreshProvider>
       </ThemeProvider>
     </MemoryRouter>
   );
@@ -108,6 +112,8 @@ function mockFeedings(feedings: Feeding[]) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  localStorage.clear();
+  resetUserSettingsCache();
   mockUseChildren.mockReturnValue({
     children: [baseChild],
     selectedChild: baseChild,
@@ -121,8 +127,9 @@ beforeEach(() => {
 });
 
 describe("ChartsPage – Feeding summary", () => {
-  it("shows the average amount fed per day with its unit", async () => {
-    // 7 day range: 70 + 35 cc over 7 days = 15.0 cc/day
+  it("shows the average amount fed per day in the display unit", async () => {
+    // 7 day range: 70 + 35 cc over 7 days = 15.0 mL/day, the unit the chart
+    // below the headline is drawn in.
     mockFeedings([
       feeding({ id: 1, amount: 70, amount_unit: "cc", start_time: hoursAgo(2) }),
       feeding({ id: 2, amount: 35, amount_unit: "cc", start_time: hoursAgo(30) }),
@@ -132,11 +139,27 @@ describe("ChartsPage – Feeding summary", () => {
 
     const card = within(await feedingCard());
     expect(card.getByText("15.0")).toBeTruthy();
-    expect(card.getByText("cc/day")).toBeTruthy();
+    expect(card.getByText("mL/day")).toBeTruthy();
+  });
+
+  it("averages in ounces when that is the chosen unit", async () => {
+    localStorage.setItem("volume-unit", "oz");
+    // 105 cc = 3.6 oz over 7 days = 0.5 oz/day
+    mockFeedings([
+      feeding({ id: 1, amount: 70, amount_unit: "cc", start_time: hoursAgo(2) }),
+      feeding({ id: 2, amount: 35, amount_unit: "cc", start_time: hoursAgo(30) }),
+    ]);
+
+    render(<ChartsPage />, { wrapper: Wrapper });
+
+    const card = within(await feedingCard());
+    expect(card.getByText("0.5")).toBeTruthy();
+    expect(card.getByText("oz/day")).toBeTruthy();
   });
 
   it("excludes solids measured in grams from the volume average", async () => {
-    // Grams are a mass, so the 100 g solid cannot join the ounce total.
+    // Grams are a mass, so the 100 g solid cannot join the volume total:
+    // 7 oz = 207 mL over 7 days = 29.6 mL/day.
     mockFeedings([
       feeding({ id: 1, amount: 4, amount_unit: "oz", start_time: hoursAgo(2) }),
       feeding({ id: 2, amount: 3, amount_unit: "oz", start_time: hoursAgo(26) }),
@@ -146,8 +169,8 @@ describe("ChartsPage – Feeding summary", () => {
     render(<ChartsPage />, { wrapper: Wrapper });
 
     const card = within(await feedingCard());
-    expect(card.getByText("1.0")).toBeTruthy();
-    expect(card.getByText("oz/day")).toBeTruthy();
+    expect(card.getByText("29.6")).toBeTruthy();
+    expect(card.getByText("mL/day")).toBeTruthy();
   });
 
   it("excludes feedings outside the selected range", async () => {

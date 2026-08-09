@@ -121,7 +121,7 @@ describe("Dashboard – Recent Feedings amount display", () => {
     expect(screen.queryByText(/ml/)).toBeNull();
   });
 
-  it("shows amount and unit alongside duration when feeding has an amount", async () => {
+  it("shows the amount in the display unit alongside duration", async () => {
     const feedingWithAmount: Feeding = {
       ...baseFeeding,
       amount: 4,
@@ -134,11 +134,12 @@ describe("Dashboard – Recent Feedings amount display", () => {
 
     render(<Dashboard />, { wrapper: Wrapper });
 
-    expect(await screen.findByText(/4 oz/)).toBeTruthy();
+    // Logged in ounces, shown in the unit the app displays: 4 oz = 118 mL.
+    expect(await screen.findByText(/118 mL/)).toBeTruthy();
     expect(screen.getByText(/18m/)).toBeTruthy();
   });
 
-  it("shows amount in ml alongside duration", async () => {
+  it("shows an amount already in the display unit unchanged", async () => {
     const feedingWithMl: Feeding = {
       ...baseFeeding,
       amount: 120,
@@ -151,7 +152,7 @@ describe("Dashboard – Recent Feedings amount display", () => {
 
     render(<Dashboard />, { wrapper: Wrapper });
 
-    expect(await screen.findByText(/120 ml/)).toBeTruthy();
+    expect(await screen.findByText(/120 mL/)).toBeTruthy();
     expect(screen.getByText(/18m/)).toBeTruthy();
   });
 
@@ -175,7 +176,7 @@ describe("Dashboard – Recent Feedings amount display", () => {
     expect(screen.queryByText(/ml/)).toBeNull();
   });
 
-  it("shows amount without unit when amount_unit is null", async () => {
+  it("reads an amount saved without a unit as the display unit", async () => {
     const feedingNoUnit: Feeding = {
       ...baseFeeding,
       amount: 5,
@@ -188,10 +189,9 @@ describe("Dashboard – Recent Feedings amount display", () => {
 
     render(<Dashboard />, { wrapper: Wrapper });
 
-    expect(await screen.findByText("Bottle Formula · 5")).toBeTruthy();
+    expect(await screen.findByText("Bottle Formula · 5 mL")).toBeTruthy();
     expect(screen.getByText(/18m/)).toBeTruthy();
     expect(screen.queryByText(/5 oz/)).toBeNull();
-    expect(screen.queryByText(/5 ml/)).toBeNull();
   });
 });
 
@@ -219,7 +219,7 @@ describe("Dashboard – Today so far feeding total", () => {
     return heading.parentElement!.parentElement as HTMLElement;
   }
 
-  it("totals the amount fed today in the unit it was recorded in", async () => {
+  it("totals the amount fed today in the display unit", async () => {
     mockFeedings([
       todayFeeding(1, 30, "cc", 11),
       todayFeeding(2, 20, "cc", 14),
@@ -230,7 +230,7 @@ describe("Dashboard – Today so far feeding total", () => {
 
     const tile = await feedTile();
     expect(within(tile).getByText("fed")).toBeTruthy();
-    expect(within(tile).getByText("80 cc")).toBeTruthy();
+    expect(within(tile).getByText("80 mL")).toBeTruthy();
     expect(within(tile).getByText("3 feeds")).toBeTruthy();
   });
 
@@ -255,7 +255,7 @@ describe("Dashboard – Today so far feeding total", () => {
     render(<Dashboard />, { wrapper: Wrapper });
 
     const tile = await feedTile();
-    expect(within(tile).getByText("60 cc")).toBeTruthy();
+    expect(within(tile).getByText("60 mL")).toBeTruthy();
     expect(within(tile).getByText("2 feeds · 100 g")).toBeTruthy();
   });
 
@@ -279,7 +279,7 @@ describe("Dashboard – Today so far feeding total", () => {
     render(<Dashboard />, { wrapper: Wrapper });
 
     const tile = await feedTile();
-    expect(within(tile).getByText("30 cc")).toBeTruthy();
+    expect(within(tile).getByText("30 mL")).toBeTruthy();
     expect(within(tile).getByText("1 feed")).toBeTruthy();
   });
 });

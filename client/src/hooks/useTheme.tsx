@@ -2,7 +2,7 @@ import { createContext, useContext, useState, useMemo, useCallback, useEffect } 
 import { ThemeProvider as MuiThemeProvider } from "@mui/material/styles";
 import { buildTheme } from "../theme/theme";
 import { api } from "../api/client";
-import type { UserSettings } from "../types/models";
+import { loadUserSettings } from "../api/userSettings";
 
 type Mode = "light" | "dark";
 type ThemePreference = "system" | "light" | "dark";
@@ -64,20 +64,18 @@ export function AppThemeProvider({ children }: { children: React.ReactNode }) {
     return () => mq.removeEventListener("change", handler);
   }, [preference]);
 
-  // Load preference from server settings on mount
+  // Load preference from server settings on mount. The row is shared with the
+  // other preference providers, so this costs no extra request.
   useEffect(() => {
-    api
-      .get<UserSettings>("/settings")
-      .then((s) => {
-        if (s?.theme_mode) {
-          setPreferenceState(s.theme_mode);
-          setMode(resolveMode(s.theme_mode));
-          try {
-            localStorage.setItem("theme-preference", s.theme_mode);
-          } catch { /* noop */ }
-        }
-      })
-      .catch(() => {});
+    loadUserSettings().then((s) => {
+      if (s?.theme_mode) {
+        setPreferenceState(s.theme_mode);
+        setMode(resolveMode(s.theme_mode));
+        try {
+          localStorage.setItem("theme-preference", s.theme_mode);
+        } catch { /* noop */ }
+      }
+    });
   }, []);
 
   const setPreference = useCallback((pref: ThemePreference) => {

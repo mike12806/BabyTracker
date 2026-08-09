@@ -6,6 +6,7 @@ import { AuthProvider, useAuth } from "./hooks/useAuth";
 import { ChildProvider } from "./hooks/useChildren";
 import { DataRefreshProvider } from "./hooks/useDataRefresh";
 import { NotificationProvider } from "./hooks/useNotification";
+import { VolumeUnitProvider } from "./hooks/useVolumeUnit";
 import Layout from "./components/Layout";
 import { Box, CircularProgress } from "@mui/material";
 
@@ -64,27 +65,29 @@ export default function App() {
             <ChildProvider>
               <DataRefreshProvider>
                 <NotificationProvider>
-                  <Suspense fallback={<PageFallback />}>
-                    <Routes>
-                      <Route element={<Layout />}>
-                        <Route path="/" element={<Dashboard />} />
-                        <Route path="/children" element={<ChildrenPage />} />
-                        <Route path="/feedings" element={<FeedingsPage />} />
-                        <Route path="/diapers" element={<DiapersPage />} />
-                        <Route path="/sleep" element={<SleepPage />} />
-                        <Route path="/tummy-time" element={<TummyTimePage />} />
-                        <Route path="/pumping" element={<PumpingPage />} />
-                        <Route path="/growth" element={<GrowthPage />} />
-                        <Route path="/temperature" element={<TemperaturePage />} />
-                        <Route path="/notes" element={<NotesPage />} />
-                        <Route path="/timers" element={<TimersPage />} />
-                        <Route path="/medications" element={<MedicationsPage />} />
-                        <Route path="/activity" element={<ActivityPage />} />
-                        <Route path="/todos" element={<TodosPage />} />
-                        <Route path="/charts" element={<ChartsPage />} />
-                      </Route>
-                    </Routes>
-                  </Suspense>
+                  <VolumeUnitProvider>
+                    <Suspense fallback={<PageFallback />}>
+                      <Routes>
+                        <Route element={<Layout />}>
+                          <Route path="/" element={<Dashboard />} />
+                          <Route path="/children" element={<ChildrenPage />} />
+                          <Route path="/feedings" element={<FeedingsPage />} />
+                          <Route path="/diapers" element={<DiapersPage />} />
+                          <Route path="/sleep" element={<SleepPage />} />
+                          <Route path="/tummy-time" element={<TummyTimePage />} />
+                          <Route path="/pumping" element={<PumpingPage />} />
+                          <Route path="/growth" element={<GrowthPage />} />
+                          <Route path="/temperature" element={<TemperaturePage />} />
+                          <Route path="/notes" element={<NotesPage />} />
+                          <Route path="/timers" element={<TimersPage />} />
+                          <Route path="/medications" element={<MedicationsPage />} />
+                          <Route path="/activity" element={<ActivityPage />} />
+                          <Route path="/todos" element={<TodosPage />} />
+                          <Route path="/charts" element={<ChartsPage />} />
+                        </Route>
+                      </Routes>
+                    </Suspense>
+                  </VolumeUnitProvider>
                 </NotificationProvider>
               </DataRefreshProvider>
             </ChildProvider>

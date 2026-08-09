@@ -92,6 +92,24 @@ describe("sendDailySummary", () => {
     await applyMigrations(env.DB);
   });
 
+  /** Run the job over the fixed 2024-01-14 ET window and return the email body. */
+  async function captureSummaryHtml(): Promise<string> {
+    let html = "";
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+      const b = JSON.parse(init!.body as string) as {
+        Content: { Simple: { Body: { Html: { Data: string } } } };
+      };
+      html = b.Content.Simple.Body.Html.Data;
+      return new Response(null, { status: 200 });
+    });
+
+    vi.setSystemTime(new Date("2024-01-15T05:00:00.000Z"));
+
+    const testEnv = { ...env, AWS_SES_ACCESS_KEY: "key", AWS_SES_SECRET_KEY: "secret", AWS_SES_REGION: "us-east-1", REPORT_FROM_EMAIL: "from@example.com" };
+    await sendDailySummary(testEnv as typeof env);
+    return html;
+  }
+
   afterEach(() => {
     vi.restoreAllMocks();
   });
@@ -230,6 +248,61 @@ describe("sendDailySummary", () => {
     expect(capturedHtml).toContain("Change History");
     expect(capturedHtml).toContain("Test Parent");
     expect(capturedHtml).toContain("Diaper Change");
+  });
+
+  it("writes every volume in the reader's unit, whatever unit it was logged in", async () => {
+    await env.DB.prepare(
+      "INSERT INTO users (id, email, name) VALUES (1, 'parent@example.com', 'Test Parent')"
+    ).run();
+    await env.DB.prepare(
+      "INSERT INTO children (id, first_name, last_name, birth_date) VALUES (1, 'Baby', 'Test', '2024-01-01')"
+    ).run();
+    await env.DB.prepare(
+      "INSERT INTO user_children (user_id, child_id) VALUES (1, 1)"
+    ).run();
+    // A day logged the way the app allows: two bottles in cc and one in oz.
+    await env.DB.prepare(
+      "INSERT INTO feedings (child_id, type, start_time, amount, amount_unit) VALUES (1, 'bottle_formula', '2024-01-14T12:00:00.000Z', 45, 'cc')"
+    ).run();
+    await env.DB.prepare(
+      "INSERT INTO feedings (child_id, type, start_time, amount, amount_unit) VALUES (1, 'bottle_formula', '2024-01-14T15:00:00.000Z', 1.5, 'oz')"
+    ).run();
+    await env.DB.prepare(
+      "INSERT INTO pumping (child_id, start_time, side, amount, amount_unit) VALUES (1, '2024-01-14T16:00:00.000Z', 'both', 4, 'oz')"
+    ).run();
+
+    const capturedHtml = await captureSummaryHtml();
+
+    // 45 cc + 1.5 oz (44 mL) = 89 mL, and each row reads in millilitres too.
+    expect(capturedHtml).toContain("Total fed: 89 mL");
+    expect(capturedHtml).toContain("45 mL");
+    expect(capturedHtml).toContain("44 mL");
+    expect(capturedHtml).toContain("118 mL total");
+    expect(capturedHtml).not.toContain("1.5 oz");
+    expect(capturedHtml).not.toContain("45 cc");
+  });
+
+  it("writes volumes in ounces for a reader who picked ounces", async () => {
+    await env.DB.prepare(
+      "INSERT INTO users (id, email, name) VALUES (1, 'parent@example.com', 'Test Parent')"
+    ).run();
+    await env.DB.prepare(
+      "INSERT INTO user_settings (user_id, volume_unit) VALUES (1, 'oz')"
+    ).run();
+    await env.DB.prepare(
+      "INSERT INTO children (id, first_name, last_name, birth_date) VALUES (1, 'Baby', 'Test', '2024-01-01')"
+    ).run();
+    await env.DB.prepare(
+      "INSERT INTO user_children (user_id, child_id) VALUES (1, 1)"
+    ).run();
+    await env.DB.prepare(
+      "INSERT INTO feedings (child_id, type, start_time, amount, amount_unit) VALUES (1, 'bottle_formula', '2024-01-14T12:00:00.000Z', 59.147, 'ml')"
+    ).run();
+
+    const capturedHtml = await captureSummaryHtml();
+
+    expect(capturedHtml).toContain("Total fed: 2 oz");
+    expect(capturedHtml).not.toContain("59.147 ml");
   });
 
   it("continues to remaining users when one fails", async () => {

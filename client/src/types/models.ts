@@ -154,4 +154,6 @@ export interface UserSettings {
   user_id: number;
   default_child_id: number | null;
   theme_mode: "system" | "light" | "dark";
+  /** The unit every volume is displayed in, whatever unit it was logged with. */
+  volume_unit: "ml" | "oz" | "cc";
 }

@@ -180,8 +180,9 @@ describe("FeedingChart", () => {
     expect(total).toBe(0);
   });
 
-  // The amount line rides a single right-hand axis, so every day it plots has
-  // to be in one unit no matter what units the entries were logged in.
+  // The amount line rides a single right-hand axis in the unit the app
+  // displays in — millilitres unless the reader picked otherwise — whatever
+  // units the entries themselves were logged in.
   describe("amount line", () => {
     const withAmount = (
       dateStr: string,
@@ -199,7 +200,7 @@ describe("FeedingChart", () => {
       return data.map((d: { Amount?: number }) => d.Amount);
     }
 
-    it("sums a day's amounts when every entry shares a unit", () => {
+    it("sums a day's amounts when every entry shares the display unit", () => {
       const amounts = amountsFor([
         withAmount(today, 8, 30, "cc"),
         withAmount(today, 12, 20, "cc"),
@@ -209,24 +210,24 @@ describe("FeedingChart", () => {
       expect(amounts[amounts.length - 2]).toBe(45);
     });
 
-    it("converts every day to mL once the range mixes units", () => {
-      // Today: 4 oz = 118.294 -> 118.3. Yesterday: 30 cc stays 30 mL.
+    it("converts every day into the display unit", () => {
+      // Today: 4 oz = 118.294 -> 118 mL. Yesterday: 30 cc stays 30 mL.
       const amounts = amountsFor([
         withAmount(today, 8, 4, "oz"),
         withAmount(yesterday, 9, 30, "cc"),
       ]);
-      expect(amounts[amounts.length - 1]).toBe(118.3);
+      expect(amounts[amounts.length - 1]).toBe(118);
       expect(amounts[amounts.length - 2]).toBe(30);
     });
 
     it("converts within a single day that mixes units", () => {
-      // 4 oz + 30 ml + 20 cc = 168.294 -> 168.3
+      // 4 oz + 30 ml + 20 cc = 168.294 -> 168 mL
       const amounts = amountsFor([
         withAmount(today, 8, 4, "oz"),
         withAmount(today, 12, 30, "ml"),
         withAmount(today, 16, 20, "cc"),
       ]);
-      expect(amounts[amounts.length - 1]).toBe(168.3);
+      expect(amounts[amounts.length - 1]).toBe(168);
     });
 
     it("keeps grams off the volume axis", () => {
@@ -388,7 +389,7 @@ describe("PumpingChart", () => {
     expect(container.querySelector("[data-testid='chart']")).toBeTruthy();
   });
 
-  it("sums amounts per day", () => {
+  it("sums amounts per day in the display unit", () => {
     const pumpings = [
       makePump(today, 7, 5),
       makePump(today, 13, 4),
@@ -398,7 +399,8 @@ describe("PumpingChart", () => {
     const chart = container.querySelector("[data-testid='chart']");
     const data = JSON.parse(chart!.getAttribute("data-chart-data")!);
     const todayData = data[data.length - 1];
-    expect(todayData.Amount).toBe(12);
+    // 12 oz logged, shown as 355 mL.
+    expect(todayData.Amount).toBe(355);
   });
 
   it("skips entries with null amount", () => {

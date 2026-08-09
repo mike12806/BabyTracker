@@ -39,7 +39,8 @@ import QuickLogDialog, { type QuickLogCategory } from "../components/QuickLogDia
 import { buildCategoryColors, type CategoryKey } from "../theme/categoryColors";
 import { editEntryPath } from "../utils/activityLinks";
 import { sideLabel } from "../utils/pumping";
-import { amountTotals, formatAmountTotal } from "../utils/feedingAmount";
+import { amountTotals, formatAmountTotal, formatEntryAmount } from "../utils/feedingAmount";
+import { useVolumeUnit } from "../hooks/useVolumeUnit";
 import type {
   Feeding,
   DiaperChange,
@@ -157,6 +158,7 @@ export default function Dashboard() {
   const { selectedChild } = useChildren();
   const { refreshKey, refreshData } = useDataRefresh();
   const { notify } = useNotification();
+  const { unit } = useVolumeUnit();
   const navigate = useNavigate();
   const theme = useTheme();
   const isDark = theme.palette.mode === "dark";
@@ -238,9 +240,9 @@ export default function Dashboard() {
   const todayStartIso = todayStart.toISOString();
   const todayFeedings = feedings.filter((f) => f.start_time >= todayStartIso);
   const todayDiapers = diapers.filter((d) => d.time >= todayStartIso);
-  const todayFeedAmounts = amountTotals(todayFeedings);
+  const todayFeedAmounts = amountTotals(todayFeedings, unit);
   const todayPumpings = pumpings.filter((p) => p.start_time >= todayStartIso);
-  const todayPumpAmounts = amountTotals(todayPumpings);
+  const todayPumpAmounts = amountTotals(todayPumpings, unit);
   const todayPumpCount = todayPumpings.length;
   const lastFeeding = feedings[0] ?? null;
   const lastDiaper = diapers[0] ?? null;
@@ -274,7 +276,7 @@ export default function Dashboard() {
     {
       cat: "feed", label: "Feeding",
       last: lastFeeding ? formatRelativeTime(lastFeeding.start_time) : "No data",
-      detail: lastFeeding ? `${lastFeeding.amount ? `${lastFeeding.amount}${lastFeeding.amount_unit ? ` ${lastFeeding.amount_unit}` : ""}` : ""} ${prettifyType(lastFeeding.type)}`.trim() : "",
+      detail: lastFeeding ? `${formatEntryAmount(lastFeeding, unit) ?? ""} ${prettifyType(lastFeeding.type)}`.trim() : "",
       onClick: () => setQuickLogCategory("feed"),
     },
     {
@@ -293,7 +295,7 @@ export default function Dashboard() {
     {
       cat: "pump", label: "Pump",
       last: lastPump ? formatRelativeTime(lastPump.start_time) : "No data",
-      detail: lastPump && lastPump.amount ? `${lastPump.amount}${lastPump.amount_unit ? ` ${lastPump.amount_unit}` : ""}` : "",
+      detail: lastPump ? formatEntryAmount(lastPump, unit) ?? "" : "",
       onClick: () => setQuickLogCategory("pump"),
     },
     {
@@ -351,10 +353,10 @@ export default function Dashboard() {
     return meta ? `${meta} · ${day}` : day;
   };
   const allEvents: typeof recentActivity = [];
-  feedings.slice(0, 10).forEach((f) => allEvents.push({ id: f.id, cat: "feed", title: `${prettifyType(f.type)}${f.amount ? ` · ${f.amount}${f.amount_unit ? ` ${f.amount_unit}` : ""}` : ""}`, ts: f.start_time, time: clockTime(f.start_time), meta: withDay(formatDuration(f.start_time, f.end_time), f.start_time) }));
+  feedings.slice(0, 10).forEach((f) => allEvents.push({ id: f.id, cat: "feed", title: `${prettifyType(f.type)}${formatEntryAmount(f, unit) ? ` · ${formatEntryAmount(f, unit)}` : ""}`, ts: f.start_time, time: clockTime(f.start_time), meta: withDay(formatDuration(f.start_time, f.end_time), f.start_time) }));
   diapers.slice(0, 10).forEach((d) => allEvents.push({ id: d.id, cat: "diaper", title: `Diaper · ${prettifyType(d.type)}`, ts: d.time, time: clockTime(d.time), meta: withDay(d.color || "", d.time) }));
   sleeps.slice(0, 10).forEach((s) => allEvents.push({ id: s.id, cat: "sleep", title: s.is_nap ? "Nap" : "Sleep", ts: s.start_time, time: clockTime(s.start_time), meta: s.end_time ? withDay(formatDuration(s.start_time, s.end_time), s.start_time) : `Active · ${formatDuration(s.start_time, null)}`, live: !s.end_time }));
-  pumpings.slice(0, 10).forEach((p) => allEvents.push({ id: p.id, cat: "pump", title: `Pump${sideLabel(p.side) ? ` · ${sideLabel(p.side)}` : ""}${p.amount ? ` · ${p.amount}${p.amount_unit ? ` ${p.amount_unit}` : ""}` : ""}`, ts: p.start_time, time: clockTime(p.start_time), meta: withDay(formatDuration(p.start_time, p.end_time), p.start_time) }));
+  pumpings.slice(0, 10).forEach((p) => allEvents.push({ id: p.id, cat: "pump", title: `Pump${sideLabel(p.side) ? ` · ${sideLabel(p.side)}` : ""}${formatEntryAmount(p, unit) ? ` · ${formatEntryAmount(p, unit)}` : ""}`, ts: p.start_time, time: clockTime(p.start_time), meta: withDay(formatDuration(p.start_time, p.end_time), p.start_time) }));
   tummyTimes.slice(0, 10).forEach((tt) => allEvents.push({ id: tt.id, cat: "tummy", title: "Tummy time", ts: tt.start_time, time: clockTime(tt.start_time), meta: withDay(formatDuration(tt.start_time, tt.end_time), tt.start_time) }));
   // Point-in-time entries: no duration to show, so the subtitle carries their
   // own detail (mirroring the wording the full activity feed uses).
