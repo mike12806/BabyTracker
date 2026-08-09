@@ -79,6 +79,10 @@ function prettifyType(type: string): string {
   return type.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+// How long a just-completed to-do stays visible (checked and struck through)
+// before the refreshed data drops it out of the snapshot.
+const TODO_COMPLETE_HOLD_MS = 450;
+
 function formatTodoDueDate(dateStr: string): string {
   const due = new Date(dateStr + "T00:00:00");
   const today = new Date();
@@ -163,12 +167,21 @@ export default function Dashboard() {
   const [todos, setTodos] = useState<Todo[]>([]);
 
   const [quickLogCategory, setQuickLogCategory] = useState<QuickLogCategory | null>(null);
+  // Ids ticked off from this page but not yet gone from `todos`. The snapshot only
+  // lists active tasks, so without this the row would vanish the instant the
+  // refetch lands and the tap would read as "nothing happened".
+  const [completingTodos, setCompletingTodos] = useState<number[]>([]);
 
   const handleTodoToggle = async (todo: Todo) => {
+    const completed = !todo.completed;
+    if (completed) setCompletingTodos((prev) => [...prev, todo.id]);
     try {
-      await api.put(`/todos/${todo.id}`, { completed: !todo.completed });
+      await api.put(`/todos/${todo.id}`, { completed });
+      // Hold the checked + struck-through row on screen long enough to be seen.
+      if (completed) await new Promise((resolve) => setTimeout(resolve, TODO_COMPLETE_HOLD_MS));
       refreshData();
     } catch (err) {
+      setCompletingTodos((prev) => prev.filter((id) => id !== todo.id));
       notify(err instanceof Error ? err.message : "Failed to update todo.", "error");
     }
   };
@@ -218,6 +231,15 @@ export default function Dashboard() {
       cancelled = true;
     };
   }, [selectedChild, refreshKey]);
+
+  // Drop the pending markers once the refetched todos confirm the completion.
+  useEffect(() => {
+    setCompletingTodos((prev) => {
+      if (prev.length === 0) return prev;
+      const stillActive = prev.filter((id) => todos.some((t) => t.id === id && !t.completed));
+      return stillActive.length === prev.length ? prev : stillActive;
+    });
+  }, [todos]);
 
   if (!selectedChild) return <NoChildPlaceholder />;
 
@@ -712,45 +734,66 @@ export default function Dashboard() {
           snapshotTodos.map((t, i) => {
             const overdue = isTodoOverdue(t);
             const pc = cat[prioCatKey(t.priority)];
+            const completing = completingTodos.includes(t.id);
             return (
               <Box
                 key={t.id}
                 sx={{
-                  display: "flex", alignItems: "center", gap: 1,
-                  py: "6px",
+                  display: "flex", alignItems: "center",
                   borderBottom: i === snapshotTodos.length - 1 ? "none" : 1,
                   borderColor: "divider",
+                  opacity: completing ? 0.5 : 1,
+                  transition: "opacity 160ms ease",
                 }}
               >
+                {/* 8px of padding around the 20px control keeps the tap target
+                    finger-sized; the negative margin holds the original alignment. */}
                 <Checkbox
-                  checked={!!t.completed}
+                  checked={!!t.completed || completing}
                   onChange={() => handleTodoToggle(t)}
                   size="small"
+                  slotProps={{ input: { "aria-label": `Mark "${t.title}" complete` } }}
                   sx={{
-                    p: 0, width: 18, height: 18,
+                    p: 1, ml: "-8px", mr: "-2px",
                     color: "text.disabled",
                     "&.Mui-checked": { color: cat.todo.solid },
                   }}
                 />
-                <Box sx={{ flex: 1, minWidth: 0 }}>
-                  <Typography sx={{ fontSize: 12.5, fontWeight: 500, letterSpacing: "-0.005em", lineHeight: 1.2 }} noWrap>
-                    {t.title}
-                  </Typography>
-                  {t.due_date && (
-                    <Typography sx={{ fontSize: 10.5, color: overdue ? cat.temp.solid : "text.secondary", fontWeight: overdue ? 600 : 500, mt: 0, lineHeight: 1.2 }}>
-                      {formatTodoDueDate(t.due_date)}
-                    </Typography>
-                  )}
-                </Box>
-                <Box
+                <ButtonBase
+                  onClick={() => navigate("/todos")}
                   sx={{
-                    fontSize: 9.5, fontWeight: 700, px: "6px", py: "2px",
-                    borderRadius: 99, textTransform: "uppercase", letterSpacing: "0.04em",
-                    bgcolor: pc.soft, color: pc.ink, flexShrink: 0,
+                    flex: 1, minWidth: 0,
+                    display: "flex", alignItems: "center", gap: 1,
+                    py: "6px", px: "4px", borderRadius: 1,
+                    textAlign: "left",
                   }}
                 >
-                  {t.priority}
-                </Box>
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Typography
+                      sx={{
+                        fontSize: 12.5, fontWeight: 500, letterSpacing: "-0.005em", lineHeight: 1.2,
+                        textDecoration: completing ? "line-through" : "none",
+                      }}
+                      noWrap
+                    >
+                      {t.title}
+                    </Typography>
+                    {t.due_date && (
+                      <Typography sx={{ fontSize: 10.5, color: overdue ? cat.temp.solid : "text.secondary", fontWeight: overdue ? 600 : 500, mt: 0, lineHeight: 1.2 }}>
+                        {formatTodoDueDate(t.due_date)}
+                      </Typography>
+                    )}
+                  </Box>
+                  <Box
+                    sx={{
+                      fontSize: 9.5, fontWeight: 700, px: "6px", py: "2px",
+                      borderRadius: 99, textTransform: "uppercase", letterSpacing: "0.04em",
+                      bgcolor: pc.soft, color: pc.ink, flexShrink: 0,
+                    }}
+                  >
+                    {t.priority}
+                  </Box>
+                </ButtonBase>
               </Box>
             );
           })
