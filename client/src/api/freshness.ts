@@ -1,18 +1,20 @@
 /**
- * Tracks whether the data on screen actually came from the server.
+ * Tracks whether the data on screen is current, or a leftover the app hasn't
+ * managed to refresh.
  *
- * The service worker answers `/api/` GETs network-first and falls back to its
- * cache when the network fails, which is what keeps the installed app usable
- * on a bad signal. The cost is that a cached reply is indistinguishable from a
- * live one: the app renders "last feeding 20m ago" with the same confidence
- * whether that was read from D1 a second ago or from cache at breakfast. This
- * module spots the cached replies so the UI can say so.
+ * The service worker keeps no copy of API data at all (see `sw.ts`), so in
+ * steady state every rendered entry came from the server this session. What
+ * can still go stale is the screen itself: a refresh that *fails* leaves the
+ * previous data visible, and this module is how the UI knows to say so —
+ * `markOffline` on a failed request raises the flag, the next successful
+ * reply clears it, and `Layout` shows the banner in between.
  *
- * The service worker labels those replies outright (`FROM_CACHE_HEADER`), so
- * that is what this reads first. The clock reasoning below it is the fallback
- * for the cases the label doesn't cover: a browser running no service worker,
- * and the first load after an upgrade, where the previous worker is still the
- * one answering and doesn't set it.
+ * The header check and clock reasoning in `noteResponse` survive for the
+ * cases where a cached reply can still reach the app: the first load after
+ * upgrading from a build that did cache (its worker answers that one load and
+ * may stamp `FROM_CACHE_HEADER`), and any intermediary that ignores
+ * `Cache-Control: no-store`. Belt and braces — in the priority order here,
+ * calling stale data stale is worth a false alarm.
  */
 
 import { FROM_CACHE_HEADER } from "../serviceWorkerContract";
@@ -47,14 +49,13 @@ function setStaleSince(value: number | null): void {
 /**
  * Record a successful response and update the staleness flag.
  *
- * Mutations are worth passing in too: the service worker only ever caches
- * GETs, so a POST that comes back at all proves the network is reachable.
+ * Mutations are worth passing in too: a POST that comes back at all proves
+ * the server is reachable, which is exactly what clears the banner.
  */
 export function noteResponse(res: Response): void {
   // `navigator.onLine === false` is only ever reported when the device truly
-  // has no connection, so a request that still succeeded was served from
-  // cache. This is the one signal that works on a cold start with no fresh
-  // response to calibrate against — an app opened offline.
+  // has no connection, so a request that still "succeeded" then can't have
+  // come from the server.
   const offline = typeof navigator !== "undefined" && navigator.onLine === false;
 
   // Headers are optional-chained rather than assumed: this sits on the path of
@@ -63,11 +64,9 @@ export function noteResponse(res: Response): void {
   const header = res.headers?.get("date");
   const servedAt = header ? Date.parse(header) : NaN;
 
-  // Where the label is present there is nothing to work out: everything below
-  // is an attempt to infer what it states outright. Kept ahead of the clock
-  // reasoning so a cache hit can never be talked into looking live — that is
-  // what made a cold start on a phone whose radio hadn't reconnected show
-  // half-hour-old entries as current.
+  // A reply labelled as a cache hit states outright what everything below
+  // infers. Only reachable during the one load served by a previous build's
+  // worker, but for that load it is authoritative.
   if (res.headers?.get(FROM_CACHE_HEADER) === "1") {
     const generatedAt = Number.isNaN(servedAt) ? Date.now() : servedAt - (clockSkewMs ?? 0);
     setStaleSince(Math.min(generatedAt, staleSince ?? generatedAt));
@@ -97,55 +96,13 @@ export function noteResponse(res: Response): void {
 }
 
 /**
- * Calibrate the skew from a reply that cannot have come from the cache, and
- * report whether anything already noted this session was misjudged because of
- * it.
+ * Record that the server could not be reached, so whatever is on screen is
+ * only as current as the last refresh that worked.
  *
- * The estimate above is only sound once it has seen a live reply. On a cold
- * start it has not: the first reply of the session sets the skew outright, so
- * if that reply came from the offline cache — an installed PWA launched before
- * the phone's radio is back is the everyday case — the skew absorbs its whole
- * age and `noteResponse` pronounces half-hour-old entries fresh. There is no
- * way to tell a cached reply from a live one after the fact, so this takes the
- * one measurement that is unambiguous by construction: the caller fetches a
- * URL the cache cannot hold (see `probeLiveness`).
- *
- * Returns true when the corrected skew is enough higher than what earlier
- * replies were judged against that those replies must have been cache hits
- * reported as live — the caller's cue to refetch.
- */
-export function noteLiveResponse(res: Response): boolean {
-  // Defensive: the probe's URL is unique per call so no cache can hold it, but
-  // if one somehow answered we must not calibrate against it — that is the
-  // exact mistake this function exists to correct.
-  if (res.headers?.get(FROM_CACHE_HEADER) === "1") {
-    markOffline();
-    return false;
-  }
-
-  const header = res.headers?.get("date");
-  const servedAt = header ? Date.parse(header) : NaN;
-  if (Number.isNaN(servedAt)) {
-    setStaleSince(null);
-    return false;
-  }
-
-  const sample = servedAt - Date.now();
-  const previous = clockSkewMs;
-  const corrected = previous === null || sample > previous ? sample : previous;
-  clockSkewMs = corrected;
-
-  const misjudged = previous !== null && corrected - previous >= STALE_AFTER_MS;
-  // This reply is live, so whatever it says is current by definition.
-  setStaleSince(null);
-  return misjudged;
-}
-
-/**
- * Record that the API could not be reached, so the app is running on whatever
- * the service worker had. Used when the liveness probe itself fails, which is
- * the one case `noteResponse` never sees — a request that throws never reaches
- * it.
+ * This is the main way staleness starts now: with no offline cache, a dead
+ * network means requests throw, and a request that throws never reaches
+ * `noteResponse`. The first stamp wins — the screen has been stale since the
+ * first failure, not the latest one.
  */
 export function markOffline(): void {
   setStaleSince(staleSince ?? Date.now());

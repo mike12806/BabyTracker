@@ -32,6 +32,24 @@ The app is installed as a PWA and left running for days, so anything on screen
 is read as the current state of a baby — how long since the last feed, whether
 she's been changed. Stale data is a correctness bug here, not a cosmetic one.
 
+Priorities, in this order: **never show stale data, then cost, then
+performance.** Decisions below follow from that ordering; don't trade upward.
+
+- **API data is never cached. Anywhere.** The service worker (`src/sw.ts`,
+  hand-written via `injectManifest`) has no route for `/api/*`; requests pass
+  through and fail honestly when the network is down. The server sends
+  `Cache-Control: no-store` so no HTTP cache answers either. Every scheme that
+  kept an offline copy needed a second mechanism to label it, and each had
+  windows where old data slipped through as current — keeping no copy is the
+  only version with nothing to get wrong. Do not add a runtime cache for
+  `/api/*` back, however tempting for offline support: readable-but-wrong lost
+  to unavailable-but-honest by design.
+- When the server is unreachable the app keeps its last-rendered data, raises
+  the banner in `Layout` (driven by `freshness.ts` — `markOffline` on a failed
+  request, cleared by the next success), and retries: `STALE_RETRY_MS` pings
+  `pingServer` and refreshes only when the ping succeeds, so an outage costs
+  one tiny request per cycle instead of a full failed refresh and its error
+  toasts. An `online` event refreshes immediately.
 - Every page that loads entries must key its fetch effect on `refreshKey` from
   `useDataRefresh`, alongside `selectedChild`. A `useEffect` with only
   `[selectedChild]` never refetches after mount and will go stale.
@@ -44,19 +62,13 @@ she's been changed. Stale data is a correctness bug here, not a cosmetic one.
   of millions of D1 rows a month — against the 25 billion rows/month the
   Workers Paid plan includes, and $0.001/million beyond it. Redo that maths
   before shortening it further, and note it would bite hard on the free plan.
-- The service worker is hand-written (`src/sw.ts`, `injectManifest`) rather
-  than generated from config, because it has to stamp `FROM_CACHE_HEADER` on
-  every reply it serves from cache. That label is the app's authoritative
-  answer to "is this live?" — keep it if you touch the worker, and keep the
-  constant in `serviceWorkerContract.ts` shared between the two bundles.
-- The clock reasoning in `freshness.ts` is now only a fallback, for a browser
-  with no service worker and for the first load after an upgrade where the
-  previous worker is still answering. It cannot get a cold start right on its
-  own: the first reply of a session defines the skew estimate, so a cache hit's
-  age vanishes into it. `probeLiveness` covers that with a request the cache
-  cannot hold; don't drop the cache-busting param.
-- Staleness is a state to get out of, not to wait out: `STALE_RETRY_MS` retries
-  while cached data is on screen, and an `online` event refetches immediately.
+- `FROM_CACHE_HEADER` handling in `freshness.ts` (and the clock-skew fallback
+  under it) looks vestigial but is load-bearing during upgrades: a previous
+  build's worker serves the one load it takes to replace it, and that worker
+  can still answer from its old `api-cache`. The new worker deletes that cache
+  on activate. Keep the header check until no installed device predates it.
+- What *is* cached: the precached app shell (versioned per build) and Google
+  Fonts. Neither is data, and neither can be stale in the data sense.
 - The service worker's `/api/` cache is an offline fallback only: it must never
   pre-empt a working network. Don't reintroduce `networkTimeoutSeconds`.
 - Anything served from that cache is flagged to the user by the banner in

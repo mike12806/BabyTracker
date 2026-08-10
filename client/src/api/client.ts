@@ -1,4 +1,5 @@
-import { markOffline, noteLiveResponse, noteResponse } from "./freshness";
+import { markOffline, noteResponse } from "./freshness";
+import { FROM_CACHE_HEADER } from "../serviceWorkerContract";
 
 export const API_BASE = import.meta.env.VITE_API_URL || "/api";
 
@@ -39,29 +40,27 @@ async function sessionIsAlive(): Promise<boolean> {
 }
 
 /**
- * Check at startup whether the replies already on screen actually came from
- * the server, and calibrate the freshness clock against a known-live reply.
+ * One cheap request answering "can the server be reached right now?".
  *
- * The `probe` param is what makes this trustworthy: a URL the service worker
- * has never cached cannot be answered from the cache, so a reply proves the
- * network is up and its `Date` is a true reading of the server clock. Without
- * this the first load of a session has nothing to calibrate against and cached
- * entries are indistinguishable from live ones — see `noteLiveResponse`.
+ * Used by the stale-data retry loop instead of a full refresh: while the
+ * network is down, refreshing means every mounted page refetching, failing,
+ * and toasting an error — a dozen doomed requests and an error popup every
+ * cycle. Pinging first costs one request, and the full refresh only runs once
+ * it will actually succeed.
  *
- * Resolves true when the data already fetched this session turns out to have
- * come from the cache, meaning the caller should refetch.
+ * The cache-busting param keeps it honest across the upgrade from builds
+ * whose worker still holds an `api-cache`: a unique URL can never be answered
+ * from a cache, so an `ok` here is proof of a live server, not a stale copy.
  */
-export async function probeLiveness(): Promise<boolean> {
+export async function pingServer(): Promise<boolean> {
   try {
     const res = await fetch(`${API_BASE}/auth/me?probe=${Date.now()}`, {
       credentials: "include",
     });
-    // A 401 here is an expired Access session, not a stale-data problem; the
-    // app's own requests will hit the same wall and start the re-auth flow.
-    if (!res.ok) return false;
-    return noteLiveResponse(res);
+    // A 401 is an expired Access session, not reachability; the refresh's own
+    // requests will hit the same wall and start the re-auth flow.
+    return res.ok && res.headers?.get(FROM_CACHE_HEADER) !== "1";
   } catch {
-    markOffline();
     return false;
   }
 }
@@ -77,6 +76,10 @@ async function doFetch(path: string, options: RequestInit): Promise<Response> {
     // Re-authing navigates away from whatever is on screen, so only do it once
     // we know the session is actually gone. Retrying the original request
     // isn't an option: a POST that failed on the way back would double-log.
+    // Either way the data on screen just failed to refresh. With no offline
+    // cache, a thrown fetch is the main way staleness begins, and this is the
+    // only place that sees it — flag it before deciding what to do next.
+    markOffline();
     if (await sessionIsAlive()) {
       throw new Error("Network error — check your connection and try again.");
     }
@@ -86,10 +89,10 @@ async function doFetch(path: string, options: RequestInit): Promise<Response> {
 
   // Deliberately outside the try above: that catch means "the network failed",
   // and anything thrown in here would be misread as a dropped connection and
-  // bounce the user through re-auth. A reply the service worker pulled from
-  // its offline cache is indistinguishable from a live one at this point —
-  // `noteResponse` tells them apart so the UI can flag what it's showing
-  // rather than presenting hours-old entries as current.
+  // bounce the user through re-auth. A reply that arrives proves the server is
+  // reachable again — `noteResponse` clears the staleness banner (and still
+  // spots the cached replies a previous build's worker can serve during the
+  // one load it takes to upgrade).
   noteResponse(res);
   return res;
 }

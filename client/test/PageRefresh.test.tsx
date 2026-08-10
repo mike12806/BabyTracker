@@ -6,8 +6,8 @@ import type { ComponentType } from "react";
 import type { Child } from "../src/types/models";
 
 vi.mock("../src/api/client", () => ({
-  // Startup liveness probe — resolves false so no extra refresh is triggered.
-  probeLiveness: vi.fn(async () => false),
+  // Reachability ping used by the stale-retry loop — reachable by default.
+  pingServer: vi.fn(async () => true),
   api: {
     get: vi.fn(),
     post: vi.fn(),
@@ -30,7 +30,7 @@ import TodosPage from "../src/pages/TodosPage";
 import { DataRefreshProvider, FOREGROUND_POLL_MS, STALE_RETRY_MS } from "../src/hooks/useDataRefresh";
 import { NotificationProvider } from "../src/hooks/useNotification";
 import { useChildren } from "../src/hooks/useChildren";
-import { api, probeLiveness } from "../src/api/client";
+import { api, pingServer } from "../src/api/client";
 import { markOffline, resetFreshness } from "../src/api/freshness";
 
 const mockUseChildren = vi.mocked(useChildren);
@@ -198,7 +198,7 @@ describe("an app left open in front of the user", () => {
   });
 });
 
-describe("an app that was opened on a dead connection", () => {
+describe("an app whose refresh failed", () => {
   beforeEach(() => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     resetFreshness();
@@ -209,12 +209,13 @@ describe("an app that was opened on a dead connection", () => {
     resetFreshness();
   });
 
-  it("keeps trying while it is knowingly showing cached data", async () => {
+  it("refreshes as soon as a retry ping finds the server reachable", async () => {
     renderPage(TodosPage);
     await waitFor(() => expect(fetchCount("/todos")).toBe(1));
 
-    // The launch was answered out of the offline cache. Sitting on that until
-    // the next ordinary poll is the "opened it and it was out of date" case.
+    // A refresh failed, so the screen is only as current as the last one that
+    // worked. Sitting on that until the next ordinary poll is exactly the
+    // "opened it and it was out of date" case.
     await act(async () => {
       markOffline();
     });
@@ -226,7 +227,27 @@ describe("an app that was opened on a dead connection", () => {
     await waitFor(() => expect(fetchCount("/todos")).toBe(2));
   });
 
-  it("does not retry on that cadence once data is live again", async () => {
+  it("does not refetch pages while the server stays unreachable", async () => {
+    // The point of pinging first: a full refresh into a dead network is a
+    // dozen doomed requests and an error toast on every mounted page, every
+    // cycle. The ping absorbs the failure silently until it succeeds.
+    vi.mocked(pingServer).mockResolvedValue(false);
+    renderPage(TodosPage);
+    await waitFor(() => expect(fetchCount("/todos")).toBe(1));
+
+    await act(async () => {
+      markOffline();
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(STALE_RETRY_MS * 3);
+    });
+
+    expect(fetchCount("/todos")).toBe(1);
+    expect(vi.mocked(pingServer).mock.calls.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("does not ping on that cadence while data is fresh", async () => {
     renderPage(TodosPage);
     await waitFor(() => expect(fetchCount("/todos")).toBe(1));
 
@@ -235,6 +256,7 @@ describe("an app that was opened on a dead connection", () => {
     });
 
     expect(fetchCount("/todos")).toBe(1);
+    expect(pingServer).not.toHaveBeenCalled();
   });
 
   it("refetches the moment the connection comes back", async () => {
@@ -244,14 +266,6 @@ describe("an app that was opened on a dead connection", () => {
     await act(async () => {
       window.dispatchEvent(new Event("online"));
     });
-
-    await waitFor(() => expect(fetchCount("/todos")).toBe(2));
-  });
-
-  it("refetches when the startup probe reveals the first load came from cache", async () => {
-    vi.mocked(probeLiveness).mockResolvedValueOnce(true);
-
-    renderPage(TodosPage);
 
     await waitFor(() => expect(fetchCount("/todos")).toBe(2));
   });

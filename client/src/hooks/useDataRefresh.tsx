@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
-import { probeLiveness } from "../api/client";
+import { pingServer } from "../api/client";
 import { isUserBusy } from "../utils/interruptions";
 import { useDataFreshness } from "./useDataFreshness";
 
@@ -37,14 +37,15 @@ const FOCUS_REFRESH_THROTTLE_MS = 2000;
 export const FOREGROUND_POLL_MS = 60_000;
 
 /**
- * How often to retry while the app is knowingly showing cached data (ms).
+ * How often to check for the server coming back while the screen is stale (ms).
  *
- * An installed PWA is often launched before the phone's radio has finished
- * reconnecting, so the first load of the session is answered from the service
- * worker's offline cache. Nothing about that is visible to the user beyond the
- * banner, and without this the app would sit on that snapshot until the next
- * ordinary poll — which is exactly the "opened it and it was out of date" case.
- * Only runs while data is stale, so it costs nothing in the normal case.
+ * An installed PWA is often launched or foregrounded before the phone's radio
+ * has finished reconnecting, so the first refresh of a session routinely
+ * fails. Without this the app would sit on the failed state until the next
+ * ordinary poll — which is exactly the "opened it and it was out of date"
+ * case. Each tick is a single `pingServer` request, and the full refresh runs
+ * only once the ping succeeds; only armed while stale, so it costs nothing in
+ * the normal case.
  */
 export const STALE_RETRY_MS = 15_000;
 
@@ -139,25 +140,23 @@ export function DataRefreshProvider({ children }: { children: ReactNode }) {
     };
   }, [runRefresh]);
 
-  // The first load of a session is the one the offline cache can answer without
-  // the app being able to tell — see `probeLiveness`. Runs once, alongside the
-  // page's own fetches rather than in front of them, so it never delays paint.
-  useEffect(() => {
-    let cancelled = false;
-    void probeLiveness().then((servedFromCache) => {
-      if (!cancelled && servedFromCache) refreshData();
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [refreshData]);
-
-  // Showing cached data is a state to get out of, not one to wait out — see
-  // STALE_RETRY_MS. Unmounts itself as soon as a live reply lands.
+  // A stale screen is a state to get out of, not one to wait out. Ping first,
+  // refresh only when it succeeds: refreshing into a dead network means every
+  // mounted page refetching, failing, and toasting an error each cycle,
+  // whereas a failed ping costs one request and no noise. Disarms itself as
+  // soon as a refresh lands and clears the flag.
   useEffect(() => {
     if (!isStale) return;
-    const retryTimer = setInterval(() => attemptRefreshRef.current(), STALE_RETRY_MS);
-    return () => clearInterval(retryTimer);
+    let cancelled = false;
+    const retryTimer = setInterval(() => {
+      void pingServer().then((reachable) => {
+        if (!cancelled && reachable) attemptRefreshRef.current();
+      });
+    }, STALE_RETRY_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(retryTimer);
+    };
   }, [isStale]);
 
   return (

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { api } from "../src/api/client";
+import { api, pingServer } from "../src/api/client";
+import { getStaleSince, resetFreshness } from "../src/api/freshness";
 
 // We need to mock fetch at the global level to test the api client
 const mockFetch = vi.fn();
@@ -9,6 +10,7 @@ describe("API Client", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     sessionStorage.clear();
+    resetFreshness();
     // Replace location so href assignment doesn't trigger a real navigation
     Object.defineProperty(window, "location", {
       writable: true,
@@ -109,6 +111,31 @@ describe("API Client", () => {
     await expect(api.get("/children")).rejects.toThrow(/network error/i);
     // A dropped connection must not navigate away from a half-filled form.
     expect(window.location.href).toBe("");
+  });
+
+  it("marks the screen stale when a request cannot reach the server", async () => {
+    // Nothing caches API data, so a thrown fetch is the moment staleness
+    // begins — and this catch block is the only code that sees it. The banner
+    // and the retry loop both key off this flag.
+    mockFetch
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValueOnce({ ok: true, status: 200, json: () => Promise.resolve({ id: 1 }) });
+    expect(getStaleSince()).toBeNull();
+
+    await expect(api.get("/children")).rejects.toThrow(/network error/i);
+
+    expect(getStaleSince()).not.toBeNull();
+  });
+
+  it("pingServer reports reachability without touching the stale flag", async () => {
+    mockFetch.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    await expect(pingServer()).resolves.toBe(false);
+    // The ping is a question, not a refresh attempt — a failed one must not
+    // move the "stale since" clock the banner displays.
+    expect(getStaleSince()).toBeNull();
+
+    mockFetch.mockResolvedValueOnce({ ok: true, status: 200, headers: new Headers() });
+    await expect(pingServer()).resolves.toBe(true);
   });
 
   it("does not re-send a failed POST while probing the session", async () => {
