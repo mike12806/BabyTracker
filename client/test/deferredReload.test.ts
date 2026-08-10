@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { createDeferredReload, STALE_BACKGROUND_MS, type DeferredReload } from "../src/utils/deferredReload";
+import {
+  createDeferredReload,
+  STALE_BACKGROUND_MS,
+  STARTUP_GRACE_MS,
+  type DeferredReload,
+} from "../src/utils/deferredReload";
 
 function setVisibility(state: "visible" | "hidden"): void {
   Object.defineProperty(document, "visibilityState", { configurable: true, get: () => state });
@@ -29,9 +34,31 @@ afterEach(() => {
 });
 
 describe("deferred service-worker update reload", () => {
-  it("does not reload while the app is on screen", () => {
+  it("reloads at a cold start, where there is nothing to lose", () => {
     const reload = vi.fn();
     pending = createDeferredReload(reload);
+
+    // The app has just opened and the user has not touched anything. Holding
+    // the reload here is what left installed devices several builds behind.
+    pending.request();
+
+    expect(reload).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not reload at a cold start with a form already open", () => {
+    const reload = vi.fn();
+    pending = createDeferredReload(reload);
+    openDialog();
+
+    pending.request();
+
+    expect(reload).not.toHaveBeenCalled();
+  });
+
+  it("does not reload while the app is on screen once past the opening moments", () => {
+    const reload = vi.fn();
+    pending = createDeferredReload(reload);
+    vi.advanceTimersByTime(STARTUP_GRACE_MS);
 
     pending.request();
 
@@ -41,11 +68,27 @@ describe("deferred service-worker update reload", () => {
   it("reloads once the app is backgrounded", () => {
     const reload = vi.fn();
     pending = createDeferredReload(reload);
+    vi.advanceTimersByTime(STARTUP_GRACE_MS);
 
     pending.request();
     setVisibility("hidden");
 
     expect(reload).toHaveBeenCalledTimes(1);
+  });
+
+  it("tries again when a reload asked of a hidden page never ran", () => {
+    const reload = vi.fn();
+    pending = createDeferredReload(reload);
+    vi.advanceTimersByTime(STARTUP_GRACE_MS);
+
+    pending.request();
+    setVisibility("hidden");
+    expect(reload).toHaveBeenCalledTimes(1);
+
+    // Still running, so the page was frozen rather than reloaded — the update
+    // is still pending and must not have been dropped on the floor.
+    setVisibility("visible");
+    expect(reload).toHaveBeenCalledTimes(2);
   });
 
   it("reloads immediately if the update lands while already backgrounded", () => {
@@ -121,11 +164,16 @@ describe("deferred service-worker update reload", () => {
     expect(reload).not.toHaveBeenCalled();
   });
 
-  it("reloads only once", () => {
+  it("stops once a reload has actually committed", () => {
     const reload = vi.fn();
     pending = createDeferredReload(reload);
 
+    // On screen, so this one runs rather than being frozen — which is what
+    // makes it final. (A reload asked of a hidden page is retried instead;
+    // see above.)
     pending.request();
+    expect(reload).toHaveBeenCalledTimes(1);
+
     setVisibility("hidden");
     setVisibility("visible");
     setVisibility("hidden");

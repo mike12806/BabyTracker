@@ -48,6 +48,7 @@ import TimelineRoundedIcon from "@mui/icons-material/TimelineRounded";
 import AddRoundedIcon from "@mui/icons-material/AddRounded";
 import BarChartRoundedIcon from "@mui/icons-material/BarChartRounded";
 import MoreHorizRoundedIcon from "@mui/icons-material/MoreHorizRounded";
+import ErrorBoundary from "./ErrorBoundary";
 import { useAuth } from "../hooks/useAuth";
 import { useChildren } from "../hooks/useChildren";
 import { useDataFreshness } from "../hooks/useDataFreshness";
@@ -424,7 +425,13 @@ export default function Layout() {
             entries from other devices aren't here yet; retrying automatically.
           </Alert>
         )}
-        <Outlet />
+        {/* Keyed on the route so navigating away clears a crashed page rather
+            than pinning the error in place for the rest of the session. The
+            nav around it stays usable, which is the whole point of catching
+            here as well as at the top. */}
+        <ErrorBoundary key={location.pathname} scope="This page failed to load">
+          <Outlet />
+        </ErrorBoundary>
       </Box>
 
       {/* Add log sheet (mobile) */}
