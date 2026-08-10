@@ -1,4 +1,27 @@
 /**
+ * `<input>` types with no draft to lose: a checkbox or radio is a two-state
+ * control the tap itself already committed, unlike a text field mid-edit.
+ * The dashboard and to-do list's checkboxes sit right in the page, not inside
+ * a dialog, and are the single most common tap on those screens. iOS never
+ * blurs a focused element just because the app was backgrounded, so a
+ * checkbox tapped right before backgrounding was staying `document.activeElement`
+ * indefinitely — holding every refresh hostage (including the foreground poll)
+ * until something else on the page happened to steal focus, which for anyone
+ * who only ever checks off to-dos could be never.
+ */
+const NON_EDITABLE_INPUT_TYPES = new Set([
+  "checkbox",
+  "radio",
+  "button",
+  "submit",
+  "reset",
+  "range",
+  "color",
+  "file",
+  "image",
+]);
+
+/**
  * Is the user in the middle of something that must not be interrupted?
  *
  * Reloading the page — or churning every list underneath an open dialog —
@@ -40,5 +63,7 @@ export function isUserBusy(): boolean {
   // datetime input on iOS hands focus to the native picker, which is exactly
   // the moment we must not pull the rug out.
   const tag = active.tagName;
-  return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
+  if (tag === "TEXTAREA" || tag === "SELECT") return true;
+  if (tag !== "INPUT") return false;
+  return !NON_EDITABLE_INPUT_TYPES.has((active as HTMLInputElement).type);
 }
