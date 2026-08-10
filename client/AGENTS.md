@@ -44,10 +44,17 @@ she's been changed. Stale data is a correctness bug here, not a cosmetic one.
   of millions of D1 rows a month — against the 25 billion rows/month the
   Workers Paid plan includes, and $0.001/million beyond it. Redo that maths
   before shortening it further, and note it would bite hard on the free plan.
-- The offline cache can answer the first load of a session before the app has
-  any live reply to calibrate against, so a cold start can't tell cached data
-  from live data on its own. `probeLiveness` settles it with a request the
-  cache cannot hold; don't drop the cache-busting param.
+- The service worker is hand-written (`src/sw.ts`, `injectManifest`) rather
+  than generated from config, because it has to stamp `FROM_CACHE_HEADER` on
+  every reply it serves from cache. That label is the app's authoritative
+  answer to "is this live?" — keep it if you touch the worker, and keep the
+  constant in `serviceWorkerContract.ts` shared between the two bundles.
+- The clock reasoning in `freshness.ts` is now only a fallback, for a browser
+  with no service worker and for the first load after an upgrade where the
+  previous worker is still answering. It cannot get a cold start right on its
+  own: the first reply of a session defines the skew estimate, so a cache hit's
+  age vanishes into it. `probeLiveness` covers that with a request the cache
+  cannot hold; don't drop the cache-busting param.
 - Staleness is a state to get out of, not to wait out: `STALE_RETRY_MS` retries
   while cached data is on screen, and an `online` event refetches immediately.
 - The service worker's `/api/` cache is an offline fallback only: it must never

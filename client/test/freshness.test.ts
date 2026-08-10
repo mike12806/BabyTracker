@@ -6,6 +6,7 @@ import {
   noteResponse,
   resetFreshness,
 } from "../src/api/freshness";
+import { FROM_CACHE_HEADER } from "../src/serviceWorkerContract";
 
 const NOW = new Date(2026, 2, 4, 12, 0, 0);
 
@@ -101,6 +102,60 @@ describe("response freshness", () => {
     noteResponse(response(older));
 
     expect(getStaleSince()).toBe(older.getTime());
+  });
+});
+
+describe("replies the service worker labels as cache hits", () => {
+  /** A reply as the service worker hands one back from its offline cache. */
+  function cachedReply(servedAt: Date | null): Response {
+    const headers = new Headers(servedAt ? { date: servedAt.toUTCString() } : {});
+    headers.set(FROM_CACHE_HEADER, "1");
+    return { headers } as Response;
+  }
+
+  it("is flagged on the very first reply of a session", () => {
+    // The case the clock reasoning cannot get right on its own: nothing has
+    // been seen yet, so there is no estimate to measure this against. The
+    // label settles it regardless.
+    noteResponse(cachedReply(new Date(NOW.getTime() - 30 * 60000)));
+
+    expect(getStaleSince()).toBe(NOW.getTime() - 30 * 60000);
+  });
+
+  it("is flagged even when the device believes it is online", () => {
+    setOnline(true);
+    noteResponse(cachedReply(new Date(NOW.getTime() - 45 * 60000)));
+
+    expect(getStaleSince()).not.toBeNull();
+  });
+
+  it("is flagged even when the reply carries no usable Date", () => {
+    noteResponse(cachedReply(null));
+
+    expect(getStaleSince()).not.toBeNull();
+  });
+
+  it("cannot be talked back into looking live by a later cache hit", () => {
+    noteResponse(response(NOW));
+    expect(getStaleSince()).toBeNull();
+
+    noteResponse(cachedReply(new Date(NOW.getTime() - 10 * 60000)));
+    expect(getStaleSince()).not.toBeNull();
+  });
+
+  it("clears once a genuinely live reply arrives", () => {
+    noteResponse(cachedReply(new Date(NOW.getTime() - 30 * 60000)));
+    expect(getStaleSince()).not.toBeNull();
+
+    noteResponse(response(NOW));
+    expect(getStaleSince()).toBeNull();
+  });
+
+  it("refuses to calibrate the probe against one", () => {
+    // The probe's URL is unique so this should be unreachable, but calibrating
+    // from a cached reply is precisely the bug the probe exists to correct.
+    expect(noteLiveResponse(cachedReply(NOW))).toBe(false);
+    expect(getStaleSince()).not.toBeNull();
   });
 });
 

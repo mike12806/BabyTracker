@@ -266,6 +266,12 @@ export default function Layout() {
             <Typography variant="body2" sx={{ fontWeight: 500 }} noWrap>
               {user.email}
             </Typography>
+            {/* An installed app can lag a deploy by design — the reload waits
+                until it can't cost anyone a half-filled form — so this is how
+                you tell whether a device has actually picked one up. */}
+            <Typography variant="caption" color="text.secondary" noWrap>
+              Build {__BUILD_ID__} · {new Date(__BUILD_TIME__).toLocaleString()}
+            </Typography>
           </Box>
         </>
       )}
@@ -434,7 +440,15 @@ export default function Layout() {
             WebkitBackdropFilter: "blur(6px)",
           }}
         >
+          {/* This sheet is a modal in every sense except the markup, which is
+              what `isUserBusy` reads: without the role a background refresh
+              fires straight through an open sheet and rebuilds the page
+              underneath it. Unlike MUI's Dialog, which sets this itself, a
+              hand-rolled sheet has to say so. */}
           <Box
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="log-sheet-title"
             onClick={(e) => e.stopPropagation()}
             sx={{
               position: "absolute",
@@ -449,7 +463,7 @@ export default function Layout() {
             }}
           >
             <Box sx={{ width: 38, height: 4, bgcolor: "text.secondary", opacity: 0.3, mx: "auto", mb: 2, borderRadius: 99 }} />
-            <Typography sx={{ fontSize: 18, fontWeight: 700, mb: 2, letterSpacing: "-0.01em" }}>
+            <Typography id="log-sheet-title" sx={{ fontSize: 18, fontWeight: 700, mb: 2, letterSpacing: "-0.01em" }}>
               Log
             </Typography>
             <Box sx={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 1 }}>
