@@ -70,6 +70,7 @@ const DIAPER_TYPES = [
   { value: "wet", label: "Wet" },
   { value: "solid", label: "Solid" },
   { value: "both", label: "Both" },
+  { value: "none", label: "None" },
 ];
 
 interface FormState {

@@ -153,7 +153,7 @@ export default function ChartsPage() {
       key: "diaper",
       category: "diaper",
       title: "Diapers",
-      subtitle: "Wet, solid & both",
+      subtitle: "Wet, solid, both & none",
       avg: avgDiapers,
       avgLabel: "/day",
       icon: <BabyChangingStationIcon sx={{ fontSize: 18 }} />,

@@ -59,6 +59,7 @@ function typeLabel(type: DiaperChange["type"]): string {
     case "wet": return "Wet";
     case "solid": return "Solid";
     case "both": return "Both";
+    case "none": return "None";
     default: return type;
   }
 }
@@ -434,6 +435,7 @@ export default function DiapersPage() {
             <MenuItem value="wet">Wet</MenuItem>
             <MenuItem value="solid">Solid</MenuItem>
             <MenuItem value="both">Both</MenuItem>
+            <MenuItem value="none">None</MenuItem>
           </TextField>
           <TextField
             select
