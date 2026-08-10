@@ -8,6 +8,7 @@ import { DataRefreshProvider } from "./hooks/useDataRefresh";
 import { NotificationProvider } from "./hooks/useNotification";
 import { VolumeUnitProvider } from "./hooks/useVolumeUnit";
 import Layout from "./components/Layout";
+import ErrorBoundary from "./components/ErrorBoundary";
 import { Box, CircularProgress } from "@mui/material";
 
 const Dashboard = lazy(() => import("./pages/Dashboard"));
@@ -59,6 +60,10 @@ export default function App() {
   return (
     <AppThemeProvider>
       <CssBaseline />
+      {/* Catch-all. The boundary inside Layout handles a page blowing up and
+          keeps the nav; this one is for everything outside it — the providers,
+          the router, Layout itself — where the alternative is a blank tab. */}
+      <ErrorBoundary>
       <BrowserRouter>
         <AuthProvider>
           <AuthGate>
@@ -97,6 +102,7 @@ export default function App() {
           </AuthGate>
         </AuthProvider>
       </BrowserRouter>
+      </ErrorBoundary>
     </AppThemeProvider>
   );
 }
