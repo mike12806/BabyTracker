@@ -7,6 +7,8 @@ import Dashboard from "../src/pages/Dashboard";
 import type { Child, Feeding, Pumping, Todo } from "../src/types/models";
 
 vi.mock("../src/api/client", () => ({
+  // Startup liveness probe — resolves false so no extra refresh is triggered.
+  probeLiveness: vi.fn(async () => false),
   api: {
     get: vi.fn(),
     post: vi.fn(),

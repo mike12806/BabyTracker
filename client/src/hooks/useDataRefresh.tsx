@@ -1,5 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { probeLiveness } from "../api/client";
 import { isUserBusy } from "../utils/interruptions";
+import { useDataFreshness } from "./useDataFreshness";
 
 interface DataRefreshContextType {
   /** Bumped whenever tracked data changes — use as a `useEffect` dependency to refetch. */
@@ -24,16 +26,32 @@ const FOCUS_REFRESH_THROTTLE_MS = 2000;
  * on the dashboard all afternoon — would otherwise show whatever was true
  * when it was opened, with nothing on screen hinting the numbers have moved.
  *
- * Five minutes, not one, because of what a tick costs rather than what it
- * buys: a Dashboard refresh is 12 requests, five of them `limit=500`, so a
- * device left open all day reads millions of D1 rows purely to poll. A baby
- * feeds every couple of hours, so sub-minute freshness was never worth that.
- * Reopening the app still refetches immediately, which is the common case.
+ * One minute, sized against the Workers Paid plan this runs on. A Dashboard
+ * refresh is 12 requests, five of them `limit=500`, so a device left open all
+ * day polls on the order of 40M D1 rows a month. The paid plan includes 25
+ * billion rows read per month, so that is well under a tenth of a percent of
+ * the allowance — and overage, if it were ever reached, is $0.001 per million
+ * rows. The interval is not the cost lever it would be on the free plan, so it
+ * is set for how current the numbers need to look instead.
  */
-export const FOREGROUND_POLL_MS = 5 * 60_000;
+export const FOREGROUND_POLL_MS = 60_000;
+
+/**
+ * How often to retry while the app is knowingly showing cached data (ms).
+ *
+ * An installed PWA is often launched before the phone's radio has finished
+ * reconnecting, so the first load of the session is answered from the service
+ * worker's offline cache. Nothing about that is visible to the user beyond the
+ * banner, and without this the app would sit on that snapshot until the next
+ * ordinary poll — which is exactly the "opened it and it was out of date" case.
+ * Only runs while data is stale, so it costs nothing in the normal case.
+ */
+export const STALE_RETRY_MS = 15_000;
 
 export function DataRefreshProvider({ children }: { children: ReactNode }) {
   const [refreshKey, setRefreshKey] = useState(0);
+  const { staleSince } = useDataFreshness();
+  const isStale = staleSince !== null;
 
   const refreshData = useCallback(() => setRefreshKey((k) => k + 1), []);
 
@@ -43,27 +61,42 @@ export function DataRefreshProvider({ children }: { children: ReactNode }) {
   // hence the throttle.
   const lastFocusRefresh = useRef(0);
   const refreshHeld = useRef(false);
-  useEffect(() => {
-    const runRefresh = () => {
-      lastFocusRefresh.current = Date.now();
-      refreshHeld.current = false;
-      refreshData();
-    };
 
+  const runRefresh = useCallback(() => {
+    lastFocusRefresh.current = Date.now();
+    refreshHeld.current = false;
+    refreshData();
+  }, [refreshData]);
+
+  /**
+   * Refetch unless something says not to right now.
+   *
+   * On a phone the on-screen keyboard and the native date picker both blur and
+   * re-focus the window, so a refresh can be triggered repeatedly while a form
+   * is open. Refetching then rebuilds every list under the dialog for no
+   * benefit, and a request that fails mid-form can bounce the whole app through
+   * re-auth — taking the half-filled form with it. Hold it instead, and let any
+   * later trigger pick it up once the form is closed.
+   */
+  const attemptRefresh = useCallback(() => {
+    if (document.visibilityState !== "visible") return;
+    if (isUserBusy()) {
+      refreshHeld.current = true;
+      return;
+    }
+    runRefresh();
+  }, [runRefresh]);
+
+  // Kept in a ref so the timer effects below can re-read the latest callback
+  // without tearing down and rebuilding their intervals on every render.
+  const attemptRefreshRef = useRef(attemptRefresh);
+  attemptRefreshRef.current = attemptRefresh;
+
+  useEffect(() => {
     const onVisible = () => {
       if (document.visibilityState !== "visible") return;
       if (Date.now() - lastFocusRefresh.current < FOCUS_REFRESH_THROTTLE_MS) return;
-      // On a phone the on-screen keyboard and the native date picker both blur
-      // and re-focus the window, so this fires repeatedly while a form is open.
-      // Refetching then rebuilds every list under the dialog for no benefit,
-      // and a request that fails mid-form can bounce the whole app through
-      // re-auth — taking the half-filled form with it. Hold it until the form
-      // is closed.
-      if (isUserBusy()) {
-        refreshHeld.current = true;
-        return;
-      }
-      runRefresh();
+      attemptRefreshRef.current();
     };
 
     // Closing the dialog (or just leaving a field) is when a held-back refresh
@@ -82,30 +115,50 @@ export function DataRefreshProvider({ children }: { children: ReactNode }) {
       if (event.persisted) onVisible();
     };
 
-    // Same guards as a re-focus refresh: skip while hidden (coming back fires
-    // `visibilitychange`, which refetches anyway) and while a form is open.
-    const onPoll = () => {
-      if (document.visibilityState !== "visible") return;
-      if (isUserBusy()) {
-        refreshHeld.current = true;
-        return;
-      }
-      runRefresh();
-    };
+    // Connectivity coming back is the one moment we know the cached data on
+    // screen can be replaced with the real thing, so don't wait for a tick.
+    const onOnline = () => attemptRefreshRef.current();
 
     document.addEventListener("visibilitychange", onVisible);
     window.addEventListener("focus", onVisible);
     window.addEventListener("pageshow", onPageShow);
+    window.addEventListener("online", onOnline);
     document.addEventListener("focusout", onFocusOut);
-    const pollTimer = setInterval(onPoll, FOREGROUND_POLL_MS);
+    // Doubles as the backstop for a held refresh: `focusout` is the responsive
+    // release, but it doesn't always fire — a dialog dismissed by tapping the
+    // backdrop with nothing focused inside it fires none — so the tick picks up
+    // whatever it missed.
+    const pollTimer = setInterval(() => attemptRefreshRef.current(), FOREGROUND_POLL_MS);
     return () => {
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("focus", onVisible);
       window.removeEventListener("pageshow", onPageShow);
+      window.removeEventListener("online", onOnline);
       document.removeEventListener("focusout", onFocusOut);
       clearInterval(pollTimer);
     };
+  }, [runRefresh]);
+
+  // The first load of a session is the one the offline cache can answer without
+  // the app being able to tell — see `probeLiveness`. Runs once, alongside the
+  // page's own fetches rather than in front of them, so it never delays paint.
+  useEffect(() => {
+    let cancelled = false;
+    void probeLiveness().then((servedFromCache) => {
+      if (!cancelled && servedFromCache) refreshData();
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [refreshData]);
+
+  // Showing cached data is a state to get out of, not one to wait out — see
+  // STALE_RETRY_MS. Unmounts itself as soon as a live reply lands.
+  useEffect(() => {
+    if (!isStale) return;
+    const retryTimer = setInterval(() => attemptRefreshRef.current(), STALE_RETRY_MS);
+    return () => clearInterval(retryTimer);
+  }, [isStale]);
 
   return (
     <DataRefreshContext.Provider value={{ refreshKey, refreshData }}>

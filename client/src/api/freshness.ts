@@ -77,6 +77,53 @@ export function noteResponse(res: Response): void {
   setStaleSince(Math.min(generatedAt, staleSince ?? generatedAt));
 }
 
+/**
+ * Calibrate the skew from a reply that cannot have come from the cache, and
+ * report whether anything already noted this session was misjudged because of
+ * it.
+ *
+ * The estimate above is only sound once it has seen a live reply. On a cold
+ * start it has not: the first reply of the session sets the skew outright, so
+ * if that reply came from the offline cache — an installed PWA launched before
+ * the phone's radio is back is the everyday case — the skew absorbs its whole
+ * age and `noteResponse` pronounces half-hour-old entries fresh. There is no
+ * way to tell a cached reply from a live one after the fact, so this takes the
+ * one measurement that is unambiguous by construction: the caller fetches a
+ * URL the cache cannot hold (see `probeLiveness`).
+ *
+ * Returns true when the corrected skew is enough higher than what earlier
+ * replies were judged against that those replies must have been cache hits
+ * reported as live — the caller's cue to refetch.
+ */
+export function noteLiveResponse(res: Response): boolean {
+  const header = res.headers?.get("date");
+  const servedAt = header ? Date.parse(header) : NaN;
+  if (Number.isNaN(servedAt)) {
+    setStaleSince(null);
+    return false;
+  }
+
+  const sample = servedAt - Date.now();
+  const previous = clockSkewMs;
+  const corrected = previous === null || sample > previous ? sample : previous;
+  clockSkewMs = corrected;
+
+  const misjudged = previous !== null && corrected - previous >= STALE_AFTER_MS;
+  // This reply is live, so whatever it says is current by definition.
+  setStaleSince(null);
+  return misjudged;
+}
+
+/**
+ * Record that the API could not be reached, so the app is running on whatever
+ * the service worker had. Used when the liveness probe itself fails, which is
+ * the one case `noteResponse` never sees — a request that throws never reaches
+ * it.
+ */
+export function markOffline(): void {
+  setStaleSince(staleSince ?? Date.now());
+}
+
 /** Subscribe to staleness changes. Returns an unsubscribe function. */
 export function subscribeFreshness(listener: () => void): () => void {
   listeners.add(listener);

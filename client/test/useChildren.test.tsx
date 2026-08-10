@@ -3,6 +3,8 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ChildProvider, useChildren } from "../src/hooks/useChildren";
 
 vi.mock("../src/api/client", () => ({
+  // Startup liveness probe — resolves false so no extra refresh is triggered.
+  probeLiveness: vi.fn(async () => false),
   api: {
     get: vi.fn(),
     post: vi.fn(),

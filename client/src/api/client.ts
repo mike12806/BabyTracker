@@ -1,4 +1,4 @@
-import { noteResponse } from "./freshness";
+import { markOffline, noteLiveResponse, noteResponse } from "./freshness";
 
 export const API_BASE = import.meta.env.VITE_API_URL || "/api";
 
@@ -34,6 +34,34 @@ async function sessionIsAlive(): Promise<boolean> {
     });
     return res.ok;
   } catch {
+    return false;
+  }
+}
+
+/**
+ * Check at startup whether the replies already on screen actually came from
+ * the server, and calibrate the freshness clock against a known-live reply.
+ *
+ * The `probe` param is what makes this trustworthy: a URL the service worker
+ * has never cached cannot be answered from the cache, so a reply proves the
+ * network is up and its `Date` is a true reading of the server clock. Without
+ * this the first load of a session has nothing to calibrate against and cached
+ * entries are indistinguishable from live ones — see `noteLiveResponse`.
+ *
+ * Resolves true when the data already fetched this session turns out to have
+ * come from the cache, meaning the caller should refetch.
+ */
+export async function probeLiveness(): Promise<boolean> {
+  try {
+    const res = await fetch(`${API_BASE}/auth/me?probe=${Date.now()}`, {
+      credentials: "include",
+    });
+    // A 401 here is an expired Access session, not a stale-data problem; the
+    // app's own requests will hit the same wall and start the re-auth flow.
+    if (!res.ok) return false;
+    return noteLiveResponse(res);
+  } catch {
+    markOffline();
     return false;
   }
 }

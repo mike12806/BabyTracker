@@ -6,7 +6,10 @@ import type { Child } from "../src/types/models";
 
 vi.mock("../src/api/client", async () => {
   const actual = await vi.importActual<typeof import("../src/api/client")>("../src/api/client");
-  return { ...actual, API_BASE: "/api" };
+  // These cases drive the banner through `noteResponse` directly. The real
+  // startup probe would fetch (and fail) in jsdom, marking the app offline
+  // before the case under test has said anything.
+  return { ...actual, API_BASE: "/api", probeLiveness: vi.fn(async () => false) };
 });
 
 vi.mock("../src/hooks/useAuth", () => ({ useAuth: vi.fn() }));
