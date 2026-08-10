@@ -266,6 +266,12 @@ export default function Layout() {
             <Typography variant="body2" sx={{ fontWeight: 500 }} noWrap>
               {user.email}
             </Typography>
+            {/* An installed app can lag a deploy by design — the reload waits
+                until it can't cost anyone a half-filled form — so this is how
+                you tell whether a device has actually picked one up. */}
+            <Typography variant="caption" color="text.secondary" noWrap>
+              Build {__BUILD_ID__} · {new Date(__BUILD_TIME__).toLocaleString()}
+            </Typography>
           </Box>
         </>
       )}

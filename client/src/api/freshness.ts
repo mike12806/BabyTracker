@@ -7,7 +7,15 @@
  * live one: the app renders "last feeding 20m ago" with the same confidence
  * whether that was read from D1 a second ago or from cache at breakfast. This
  * module spots the cached replies so the UI can say so.
+ *
+ * The service worker labels those replies outright (`FROM_CACHE_HEADER`), so
+ * that is what this reads first. The clock reasoning below it is the fallback
+ * for the cases the label doesn't cover: a browser running no service worker,
+ * and the first load after an upgrade, where the previous worker is still the
+ * one answering and doesn't set it.
  */
+
+import { FROM_CACHE_HEADER } from "../serviceWorkerContract";
 
 /** Treat data as stale once it is this far behind the server clock (ms). */
 const STALE_AFTER_MS = 2 * 60 * 1000;
@@ -54,6 +62,17 @@ export function noteResponse(res: Response): void {
   // be the reason a response fails to come back.
   const header = res.headers?.get("date");
   const servedAt = header ? Date.parse(header) : NaN;
+
+  // Where the label is present there is nothing to work out: everything below
+  // is an attempt to infer what it states outright. Kept ahead of the clock
+  // reasoning so a cache hit can never be talked into looking live — that is
+  // what made a cold start on a phone whose radio hadn't reconnected show
+  // half-hour-old entries as current.
+  if (res.headers?.get(FROM_CACHE_HEADER) === "1") {
+    const generatedAt = Number.isNaN(servedAt) ? Date.now() : servedAt - (clockSkewMs ?? 0);
+    setStaleSince(Math.min(generatedAt, staleSince ?? generatedAt));
+    return;
+  }
   if (Number.isNaN(servedAt)) {
     // No usable `Date` (a dev server, or a mocked response in tests): fall
     // back to the connectivity signal alone rather than guessing at an age.
@@ -96,6 +115,14 @@ export function noteResponse(res: Response): void {
  * reported as live — the caller's cue to refetch.
  */
 export function noteLiveResponse(res: Response): boolean {
+  // Defensive: the probe's URL is unique per call so no cache can hold it, but
+  // if one somehow answered we must not calibrate against it — that is the
+  // exact mistake this function exists to correct.
+  if (res.headers?.get(FROM_CACHE_HEADER) === "1") {
+    markOffline();
+    return false;
+  }
+
   const header = res.headers?.get("date");
   const servedAt = header ? Date.parse(header) : NaN;
   if (Number.isNaN(servedAt)) {
