@@ -13,9 +13,24 @@
 export function isUserBusy(): boolean {
   if (typeof document === "undefined") return false;
 
-  // MUI's Dialog puts role="dialog" on its paper; Layout's bottom "Log" sheet
-  // sets the same role.
-  if (document.querySelector('[role="dialog"]')) return true;
+  // MUI's Dialog puts role="dialog" on its paper. Layout's bottom "Log" sheet
+  // is hand-rolled and has to set the role itself — it went without one for a
+  // while, and refreshes fired straight through it, rebuilding the page under
+  // an open sheet. Anything modal added later needs the same.
+  //
+  // Presence of the role is not enough on its own: `SwipeableDrawer` keeps its
+  // paper mounted while closed so the open gesture has something to drag, and
+  // that paper carries role="dialog" the whole time. Matching on the role
+  // alone therefore made this function return true permanently — the nav
+  // drawer is part of every screen — which silently disabled every refresh
+  // that consults it, and the deferred update reload with them.
+  //
+  // A closed modal is marked `aria-hidden` (MUI puts it on the Modal root
+  // around the paper), which is precisely the "not presented to the user"
+  // signal wanted here, and it needs no layout to read.
+  for (const dialog of document.querySelectorAll('[role="dialog"]')) {
+    if (!dialog.closest('[aria-hidden="true"]')) return true;
+  }
 
   const active = document.activeElement as HTMLElement | null;
   if (!active) return false;
