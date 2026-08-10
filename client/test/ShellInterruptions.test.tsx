@@ -122,6 +122,29 @@ describe("refreshes inside the real app shell", () => {
     // that fails mid-form can bounce the app through re-auth.
     expect(screen.getByTestId("refresh-key")).toHaveTextContent("0");
   });
+
+  it("still happen when a checkbox — not a form — is what has focus", async () => {
+    // Regression test: the dashboard and to-do list check off items with a
+    // plain <input type="checkbox"> that sits right in the page, not inside a
+    // dialog. iOS leaves it focused across a background/foreground cycle, and
+    // `isUserBusy` used to treat any focused <input> as a form in progress —
+    // holding this refresh (and the foreground poll) hostage indefinitely.
+    renderShell();
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    document.body.appendChild(checkbox);
+    checkbox.focus();
+
+    try {
+      await act(async () => {
+        document.dispatchEvent(new Event("visibilitychange"));
+      });
+
+      expect(screen.getByTestId("refresh-key")).toHaveTextContent("1");
+    } finally {
+      document.body.removeChild(checkbox);
+    }
+  });
 });
 
 describe("the Log sheet and background refreshes", () => {
@@ -151,5 +174,30 @@ describe("the Log sheet and background refreshes", () => {
 
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(isUserBusy()).toBe(false);
+  });
+});
+
+describe("isUserBusy and a focused input outside any dialog", () => {
+  function withFocused(type: string, run: () => void) {
+    const input = document.createElement("input");
+    input.type = type;
+    document.body.appendChild(input);
+    input.focus();
+    try {
+      run();
+    } finally {
+      document.body.removeChild(input);
+    }
+  }
+
+  it("does not count a focused checkbox or radio — nothing typed to lose", () => {
+    withFocused("checkbox", () => expect(isUserBusy()).toBe(false));
+    withFocused("radio", () => expect(isUserBusy()).toBe(false));
+  });
+
+  it("still counts a focused text-entry field, e.g. a datetime picker", () => {
+    withFocused("text", () => expect(isUserBusy()).toBe(true));
+    withFocused("datetime-local", () => expect(isUserBusy()).toBe(true));
+    withFocused("number", () => expect(isUserBusy()).toBe(true));
   });
 });
