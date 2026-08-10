@@ -236,12 +236,6 @@ export default function SleepPage() {
     closeMenu();
   };
 
-  if (!selectedChild) {
-
-    return <NoChildPlaceholder />;
-
-  }
-
   // Group by date
   const grouped = useMemo(() => {
     const map = new Map<string, SleepEntry[]>();
@@ -269,6 +263,13 @@ export default function SleepPage() {
 
   const todayNaps = todayEntries.filter((s) => Boolean(s.is_nap)).length;
   const lastSleep = entries.length > 0 ? relativeTime(entries[0].start_time) : "—";
+
+  // Below every hook — see the note in DiapersPage: `selectedChild` fills in
+  // after the children load, so guarding above the hooks changes their count
+  // between renders and blanks the app.
+  if (!selectedChild) {
+    return <NoChildPlaceholder />;
+  }
 
   const renderTable = () => (
     <Card>
