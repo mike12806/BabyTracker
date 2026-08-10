@@ -9,8 +9,8 @@ import type { Child, Feeding, Pumping } from "../src/types/models";
 import type { VolumeUnit } from "../src/utils/feedingAmount";
 
 vi.mock("../src/api/client", () => ({
-  // Startup liveness probe — resolves false so no extra refresh is triggered.
-  probeLiveness: vi.fn(async () => false),
+  // Reachability ping used by the stale-retry loop — reachable by default.
+  pingServer: vi.fn(async () => true),
   api: {
     get: vi.fn(),
     post: vi.fn(),

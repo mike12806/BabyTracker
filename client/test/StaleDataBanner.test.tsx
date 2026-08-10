@@ -6,10 +6,10 @@ import type { Child } from "../src/types/models";
 
 vi.mock("../src/api/client", async () => {
   const actual = await vi.importActual<typeof import("../src/api/client")>("../src/api/client");
-  // These cases drive the banner through `noteResponse` directly. The real
-  // startup probe would fetch (and fail) in jsdom, marking the app offline
-  // before the case under test has said anything.
-  return { ...actual, API_BASE: "/api", probeLiveness: vi.fn(async () => false) };
+  // These cases drive the banner through `noteResponse` directly. An inert
+  // ping keeps the stale-retry loop from fetching (and failing) in jsdom
+  // while a case has the banner up.
+  return { ...actual, API_BASE: "/api", pingServer: vi.fn(async () => false) };
 });
 
 vi.mock("../src/hooks/useAuth", () => ({ useAuth: vi.fn() }));
@@ -83,7 +83,7 @@ describe("stale data banner", () => {
       noteResponse(reply(new Date()));
     });
 
-    expect(screen.queryByText(/showing saved data/i)).toBeNull();
+    expect(screen.queryByText(/showing data from/i)).toBeNull();
   });
 
   it("tells the user when the app is serving data from its offline cache", async () => {
@@ -96,7 +96,7 @@ describe("stale data banner", () => {
       noteResponse(reply(new Date(Date.now() - 3 * 60 * 60000)));
     });
 
-    const banner = await screen.findByText(/showing saved data from 3h ago/i);
+    const banner = await screen.findByText(/showing data from 3h ago/i);
     expect(banner).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /retry/i })).toBeInTheDocument();
   });
@@ -107,12 +107,12 @@ describe("stale data banner", () => {
       noteResponse(reply(new Date()));
       noteResponse(reply(new Date(Date.now() - 3 * 60 * 60000)));
     });
-    await screen.findByText(/showing saved data/i);
+    await screen.findByText(/showing data from/i);
 
     await act(async () => {
       noteResponse(reply(new Date()));
     });
 
-    await waitFor(() => expect(screen.queryByText(/showing saved data/i)).toBeNull());
+    await waitFor(() => expect(screen.queryByText(/showing data from/i)).toBeNull());
   });
 });

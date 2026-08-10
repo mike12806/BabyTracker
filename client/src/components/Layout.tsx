@@ -403,10 +403,11 @@ export default function Layout() {
           overflow: "hidden",
         }}
       >
-        {/* The offline cache keeps the app readable with no signal, but these
-            screens are read as current state — how long since the last feed,
-            whether anyone has changed her — so anything served from it has to
-            say so rather than look live. */}
+        {/* Nothing caches API data anymore, so what's on screen is whatever
+            the last successful refresh brought back. These screens are read as
+            current state — how long since the last feed, whether anyone has
+            changed her — so the moment a refresh fails, the age of what's
+            showing has to be said out loud rather than left to look live. */}
         {staleSince !== null && (
           <Alert
             severity="warning"
@@ -418,9 +419,9 @@ export default function Layout() {
               </Button>
             }
           >
-            Offline — showing saved data from{" "}
+            Can't reach the server — showing data from{" "}
             {formatRelativeTime(new Date(staleSince).toISOString())}. New
-            entries from other devices aren't here yet.
+            entries from other devices aren't here yet; retrying automatically.
           </Alert>
         )}
         <Outlet />

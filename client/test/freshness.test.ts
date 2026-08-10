@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   getStaleSince,
   markOffline,
-  noteLiveResponse,
   noteResponse,
   resetFreshness,
 } from "../src/api/freshness";
@@ -105,8 +104,11 @@ describe("response freshness", () => {
   });
 });
 
-describe("replies the service worker labels as cache hits", () => {
-  /** A reply as the service worker hands one back from its offline cache. */
+// Only a previous build's worker can produce these now — the current worker
+// caches no API data — but that worker answers the one load it takes to
+// upgrade, so the label must keep being honoured.
+describe("replies a service worker labels as cache hits", () => {
+  /** A reply as an old build's worker hands one back from its offline cache. */
   function cachedReply(servedAt: Date | null): Response {
     const headers = new Headers(servedAt ? { date: servedAt.toUTCString() } : {});
     headers.set(FROM_CACHE_HEADER, "1");
@@ -151,64 +153,34 @@ describe("replies the service worker labels as cache hits", () => {
     expect(getStaleSince()).toBeNull();
   });
 
-  it("refuses to calibrate the probe against one", () => {
-    // The probe's URL is unique so this should be unreachable, but calibrating
-    // from a cached reply is precisely the bug the probe exists to correct.
-    expect(noteLiveResponse(cachedReply(NOW))).toBe(false);
-    expect(getStaleSince()).not.toBeNull();
-  });
 });
 
-describe("the cold-start blind spot", () => {
-  it("cannot tell a cached first reply from a live one on its own", () => {
-    // Documents *why* `noteLiveResponse` exists rather than asserting good
-    // behaviour: with nothing to calibrate against, the first reply of the
-    // session defines the skew, so its own age vanishes into that estimate.
-    // The device is online as far as the browser is concerned — a phone whose
-    // radio has not finished reconnecting reports exactly this.
-    noteResponse(response(new Date(NOW.getTime() - 30 * 60000)));
-
-    expect(getStaleSince()).toBeNull();
-  });
-
-  it("spots that earlier replies came from the cache once a live one lands", () => {
-    noteResponse(response(new Date(NOW.getTime() - 30 * 60000)));
-
-    // A reply from a URL the cache cannot hold, so this one is live by
-    // construction and its Date is a true reading of the server clock.
-    expect(noteLiveResponse(response(NOW))).toBe(true);
-  });
-
-  it("does not claim a miscalibration on an ordinary healthy start", () => {
-    noteResponse(response(NOW));
-
-    expect(noteLiveResponse(response(NOW))).toBe(false);
-    expect(getStaleSince()).toBeNull();
-  });
-
-  it("leaves a wrong device clock alone rather than reading it as cached data", () => {
-    // Phone 20 minutes fast, connection fine. The probe agrees with the reply
-    // that calibrated the skew, so there is nothing to correct.
-    const serverNow = new Date(NOW.getTime() - 20 * 60000);
-    noteResponse(response(serverNow));
-
-    expect(noteLiveResponse(response(serverNow))).toBe(false);
-    expect(getStaleSince()).toBeNull();
-  });
-
-  it("flags the app as offline when the probe cannot get through at all", () => {
-    // A request that throws never reaches `noteResponse`, so without this the
-    // app would sit on cached data with nothing marking it.
+describe("failed requests", () => {
+  it("flags the screen as stale when a request cannot get through at all", () => {
+    // With no offline cache, a dead network means requests throw — and a
+    // request that throws never reaches `noteResponse`, so the client calls
+    // this instead. Without it the app would sit on the last rendered data
+    // with nothing marking it.
     markOffline();
 
     expect(getStaleSince()).toBe(NOW.getTime());
   });
 
-  it("keeps the original stale timestamp when the probe fails twice", () => {
+  it("keeps the first failure's timestamp when failures repeat", () => {
+    // The screen has been stale since the first failed refresh, not the
+    // latest one — the banner's age must not creep forward while offline.
     markOffline();
     vi.setSystemTime(new Date(NOW.getTime() + 60000));
     markOffline();
 
     expect(getStaleSince()).toBe(NOW.getTime());
+  });
+
+  it("clears the flag once any request succeeds again", () => {
+    markOffline();
+    expect(getStaleSince()).not.toBeNull();
+
+    noteResponse(response(NOW));
+    expect(getStaleSince()).toBeNull();
   });
 });
