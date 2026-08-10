@@ -39,9 +39,17 @@ she's been changed. Stale data is a correctness bug here, not a cosmetic one.
   (`visibilitychange`, `focus`, bfcache `pageshow`), on a foreground poll, and
   whenever an entry is saved. It holds refreshes back while a form is open —
   see `isUserBusy` — so nothing rebuilds under a half-filled dialog.
-- `FOREGROUND_POLL_MS` is a cost lever, not just a freshness one: a Dashboard
-  refresh is 12 requests, five of them `limit=500`, so a device left open all
-  day polls millions of D1 rows. Don't shorten it without doing that maths.
+- `FOREGROUND_POLL_MS` is a freshness lever first. A Dashboard refresh is 12
+  requests, five of them `limit=500`, so a device left open all day polls tens
+  of millions of D1 rows a month — against the 25 billion rows/month the
+  Workers Paid plan includes, and $0.001/million beyond it. Redo that maths
+  before shortening it further, and note it would bite hard on the free plan.
+- The offline cache can answer the first load of a session before the app has
+  any live reply to calibrate against, so a cold start can't tell cached data
+  from live data on its own. `probeLiveness` settles it with a request the
+  cache cannot hold; don't drop the cache-busting param.
+- Staleness is a state to get out of, not to wait out: `STALE_RETRY_MS` retries
+  while cached data is on screen, and an `online` event refetches immediately.
 - The service worker's `/api/` cache is an offline fallback only: it must never
   pre-empt a working network. Don't reintroduce `networkTimeoutSeconds`.
 - Anything served from that cache is flagged to the user by the banner in

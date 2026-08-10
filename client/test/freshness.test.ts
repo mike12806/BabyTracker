@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { getStaleSince, noteResponse, resetFreshness } from "../src/api/freshness";
+import {
+  getStaleSince,
+  markOffline,
+  noteLiveResponse,
+  noteResponse,
+  resetFreshness,
+} from "../src/api/freshness";
 
 const NOW = new Date(2026, 2, 4, 12, 0, 0);
 
@@ -95,5 +101,59 @@ describe("response freshness", () => {
     noteResponse(response(older));
 
     expect(getStaleSince()).toBe(older.getTime());
+  });
+});
+
+describe("the cold-start blind spot", () => {
+  it("cannot tell a cached first reply from a live one on its own", () => {
+    // Documents *why* `noteLiveResponse` exists rather than asserting good
+    // behaviour: with nothing to calibrate against, the first reply of the
+    // session defines the skew, so its own age vanishes into that estimate.
+    // The device is online as far as the browser is concerned — a phone whose
+    // radio has not finished reconnecting reports exactly this.
+    noteResponse(response(new Date(NOW.getTime() - 30 * 60000)));
+
+    expect(getStaleSince()).toBeNull();
+  });
+
+  it("spots that earlier replies came from the cache once a live one lands", () => {
+    noteResponse(response(new Date(NOW.getTime() - 30 * 60000)));
+
+    // A reply from a URL the cache cannot hold, so this one is live by
+    // construction and its Date is a true reading of the server clock.
+    expect(noteLiveResponse(response(NOW))).toBe(true);
+  });
+
+  it("does not claim a miscalibration on an ordinary healthy start", () => {
+    noteResponse(response(NOW));
+
+    expect(noteLiveResponse(response(NOW))).toBe(false);
+    expect(getStaleSince()).toBeNull();
+  });
+
+  it("leaves a wrong device clock alone rather than reading it as cached data", () => {
+    // Phone 20 minutes fast, connection fine. The probe agrees with the reply
+    // that calibrated the skew, so there is nothing to correct.
+    const serverNow = new Date(NOW.getTime() - 20 * 60000);
+    noteResponse(response(serverNow));
+
+    expect(noteLiveResponse(response(serverNow))).toBe(false);
+    expect(getStaleSince()).toBeNull();
+  });
+
+  it("flags the app as offline when the probe cannot get through at all", () => {
+    // A request that throws never reaches `noteResponse`, so without this the
+    // app would sit on cached data with nothing marking it.
+    markOffline();
+
+    expect(getStaleSince()).toBe(NOW.getTime());
+  });
+
+  it("keeps the original stale timestamp when the probe fails twice", () => {
+    markOffline();
+    vi.setSystemTime(new Date(NOW.getTime() + 60000));
+    markOffline();
+
+    expect(getStaleSince()).toBe(NOW.getTime());
   });
 });

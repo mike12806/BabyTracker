@@ -6,6 +6,8 @@ import type { ComponentType } from "react";
 import type { Child } from "../src/types/models";
 
 vi.mock("../src/api/client", () => ({
+  // Startup liveness probe — resolves false so no extra refresh is triggered.
+  probeLiveness: vi.fn(async () => false),
   api: {
     get: vi.fn(),
     post: vi.fn(),
@@ -25,10 +27,11 @@ import TemperaturePage from "../src/pages/TemperaturePage";
 import TimersPage from "../src/pages/TimersPage";
 import MedicationsPage from "../src/pages/MedicationsPage";
 import TodosPage from "../src/pages/TodosPage";
-import { DataRefreshProvider, FOREGROUND_POLL_MS } from "../src/hooks/useDataRefresh";
+import { DataRefreshProvider, FOREGROUND_POLL_MS, STALE_RETRY_MS } from "../src/hooks/useDataRefresh";
 import { NotificationProvider } from "../src/hooks/useNotification";
 import { useChildren } from "../src/hooks/useChildren";
-import { api } from "../src/api/client";
+import { api, probeLiveness } from "../src/api/client";
+import { markOffline, resetFreshness } from "../src/api/freshness";
 
 const mockUseChildren = vi.mocked(useChildren);
 const mockApi = vi.mocked(api);
@@ -166,5 +169,90 @@ describe("an app left open in front of the user", () => {
     });
 
     expect(fetchCount("/todos")).toBe(1);
+  });
+
+  it("picks a held refresh back up once the form is gone", async () => {
+    // `focusout` is the responsive release, but it doesn't always fire — a
+    // dialog dismissed by tapping the backdrop with nothing focused inside it
+    // fires none — so the poll tick has to be able to pick it up unaided.
+    const { container } = renderPage(TodosPage);
+    await waitFor(() => expect(fetchCount("/todos")).toBe(1));
+
+    const input = document.createElement("input");
+    container.appendChild(input);
+    input.focus();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(FOREGROUND_POLL_MS);
+    });
+    expect(fetchCount("/todos")).toBe(1);
+
+    // Form closed, with no focusout of its own.
+    input.remove();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(FOREGROUND_POLL_MS);
+    });
+
+    await waitFor(() => expect(fetchCount("/todos")).toBe(2));
+  });
+});
+
+describe("an app that was opened on a dead connection", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    resetFreshness();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    resetFreshness();
+  });
+
+  it("keeps trying while it is knowingly showing cached data", async () => {
+    renderPage(TodosPage);
+    await waitFor(() => expect(fetchCount("/todos")).toBe(1));
+
+    // The launch was answered out of the offline cache. Sitting on that until
+    // the next ordinary poll is the "opened it and it was out of date" case.
+    await act(async () => {
+      markOffline();
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(STALE_RETRY_MS);
+    });
+
+    await waitFor(() => expect(fetchCount("/todos")).toBe(2));
+  });
+
+  it("does not retry on that cadence once data is live again", async () => {
+    renderPage(TodosPage);
+    await waitFor(() => expect(fetchCount("/todos")).toBe(1));
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(STALE_RETRY_MS * 3);
+    });
+
+    expect(fetchCount("/todos")).toBe(1);
+  });
+
+  it("refetches the moment the connection comes back", async () => {
+    renderPage(TodosPage);
+    await waitFor(() => expect(fetchCount("/todos")).toBe(1));
+
+    await act(async () => {
+      window.dispatchEvent(new Event("online"));
+    });
+
+    await waitFor(() => expect(fetchCount("/todos")).toBe(2));
+  });
+
+  it("refetches when the startup probe reveals the first load came from cache", async () => {
+    vi.mocked(probeLiveness).mockResolvedValueOnce(true);
+
+    renderPage(TodosPage);
+
+    await waitFor(() => expect(fetchCount("/todos")).toBe(2));
   });
 });
