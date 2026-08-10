@@ -269,6 +269,7 @@ describe("DiaperChart", () => {
       makeDiaper("solid", today, 12),
       makeDiaper("both", today, 15),
       makeDiaper("both", today, 18),
+      makeDiaper("none", today, 20),
     ];
     const { container } = render(<DiaperChart diapers={diapers} days={3} />, { wrapper: Wrapper });
     const chart = container.querySelector("[data-testid='chart']");
@@ -277,6 +278,7 @@ describe("DiaperChart", () => {
     expect(todayData.Wet).toBe(2);
     expect(todayData.Solid).toBe(1);
     expect(todayData.Both).toBe(2);
+    expect(todayData.None).toBe(1);
   });
 });
 

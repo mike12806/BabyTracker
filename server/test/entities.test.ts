@@ -29,6 +29,17 @@ describe("Diaper Changes API", () => {
     expect(change.type).toBe("wet");
   });
 
+  it("POST /api/diaper-changes accepts the none type", async () => {
+    const res = await api.post("/api/diaper-changes", {
+      child_id: childId,
+      time: "2024-12-01T09:00:00Z",
+      type: "none",
+    });
+    expect(res.status).toBe(201);
+    const change = (await res.json()) as Record<string, unknown>;
+    expect(change.type).toBe("none");
+  });
+
   it("GET /api/diaper-changes lists changes for a child", async () => {
     await api.post("/api/diaper-changes", {
       child_id: childId,

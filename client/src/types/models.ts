@@ -32,7 +32,7 @@ export interface DiaperChange {
   id: number;
   child_id: number;
   time: string;
-  type: "wet" | "solid" | "both";
+  type: "wet" | "solid" | "both" | "none";
   color: string | null;
   notes: string | null;
   created_at: string;

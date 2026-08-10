@@ -30,6 +30,7 @@ import migration0009 from "../migrations/0009_add_pumping_side.sql?raw";
 import migration0010 from "../migrations/0010_add_cc_feeding_unit.sql?raw";
 import migration0011 from "../migrations/0011_add_volume_unit_setting.sql?raw";
 import migration0012 from "../migrations/0012_add_clinic_weight_readings.sql?raw";
+import migration0013 from "../migrations/0013_add_diaper_type_none.sql?raw";
 
 type AppEnv = { Bindings: Env; Variables: { userId: number; userEmail: string; userName: string } };
 
@@ -126,7 +127,7 @@ export async function applyMigrations(db: D1Database) {
   `;
 
   // Execute the real migration files in order to keep test schema in sync
-  const migrations = [migration0001, migration0002, migration0003, migration0004, migration0005, migration0006, migration0007, migration0008, migration0009, migration0010, migration0011, migration0012];
+  const migrations = [migration0001, migration0002, migration0003, migration0004, migration0005, migration0006, migration0007, migration0008, migration0009, migration0010, migration0011, migration0012, migration0013];
 
   await execScript(db, dropSQL + migrations.join("\n"));
 }

@@ -153,8 +153,8 @@ export function DiaperChart({ diapers, days = 14 }: DiaperChartProps) {
   const theme = useTheme();
   const data = useMemo(() => {
     const dateKeys = lastNDays(days);
-    const map: Record<string, { wet: number; solid: number; both: number }> = {};
-    for (const d of dateKeys) map[d] = { wet: 0, solid: 0, both: 0 };
+    const map: Record<string, { wet: number; solid: number; both: number; none: number }> = {};
+    for (const d of dateKeys) map[d] = { wet: 0, solid: 0, both: 0, none: 0 };
 
     for (const dc of diapers) {
       const key = toDateKey(dc.time);
@@ -167,6 +167,7 @@ export function DiaperChart({ diapers, days = 14 }: DiaperChartProps) {
       Wet: map[d].wet,
       Solid: map[d].solid,
       Both: map[d].both,
+      None: map[d].none,
     }));
   }, [diapers, days]);
 
@@ -186,7 +187,8 @@ export function DiaperChart({ diapers, days = 14 }: DiaperChartProps) {
         <Legend />
         <Bar dataKey="Wet" stackId="a" fill="#ffa726" radius={[0, 0, 0, 0]} />
         <Bar dataKey="Solid" stackId="a" fill="#8d6e63" />
-        <Bar dataKey="Both" stackId="a" fill="#78909c" radius={[4, 4, 0, 0]} />
+        <Bar dataKey="Both" stackId="a" fill="#78909c" />
+        <Bar dataKey="None" stackId="a" fill="#b0bec5" radius={[4, 4, 0, 0]} />
       </BarChart>
     </ResponsiveContainer>
   );
