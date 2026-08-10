@@ -211,12 +211,6 @@ export default function FeedingsPage() {
     setMenuEntry(null);
   };
 
-  if (!selectedChild) {
-
-    return <NoChildPlaceholder />;
-
-  }
-
   // Group feedings by date for section headers
   const grouped = useMemo(() => {
     const map = new Map<string, Feeding[]>();
@@ -241,6 +235,13 @@ export default function FeedingsPage() {
   // gram total carried alongside rather than folded into a volume.
   const todayAmounts = useMemo(() => amountTotals(todayFeedings, unit), [todayFeedings, unit]);
   const lastFeedingTime = feedings.length > 0 ? formatRelativeTime(feedings[0].start_time) : "—";
+
+  // Below every hook — see the note in DiapersPage: `selectedChild` fills in
+  // after the children load, so guarding above the hooks changes their count
+  // between renders and blanks the app.
+  if (!selectedChild) {
+    return <NoChildPlaceholder />;
+  }
 
   return (
     <Box>

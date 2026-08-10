@@ -205,10 +205,6 @@ export default function MedicationsPage() {
     closeMenu();
   };
 
-  if (!selectedChild) {
-    return <NoChildPlaceholder />;
-  }
-
   // Group by date
   const grouped = useMemo(() => {
     const map = new Map<string, Medication[]>();
@@ -230,6 +226,13 @@ export default function MedicationsPage() {
   const todayCount = todayEntries.length;
   const uniqueMedsToday = useMemo(() => new Set(todayEntries.map((m) => m.name)).size, [todayEntries]);
   const lastMed = entries.length > 0 ? relativeTime(entries[0].time) : "—";
+
+  // Below every hook — see the note in DiapersPage: `selectedChild` fills in
+  // after the children load, so guarding above the hooks changes their count
+  // between renders and blanks the app.
+  if (!selectedChild) {
+    return <NoChildPlaceholder />;
+  }
 
   return (
     <Box>

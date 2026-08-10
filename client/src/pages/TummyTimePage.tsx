@@ -217,12 +217,6 @@ export default function TummyTimePage() {
     setEditingEntry(null);
   };
 
-  if (!selectedChild) {
-
-    return <NoChildPlaceholder />;
-
-  }
-
   // Group by date
   const grouped = useMemo(() => {
     const map = new Map<string, TummyTime[]>();
@@ -250,6 +244,13 @@ export default function TummyTimePage() {
   }, [todayEntries]);
   const todayTotalDuration = humanDuration(new Date(Date.now() - todayTotalMs).toISOString(), new Date().toISOString());
   const lastTummy = entries.length > 0 ? relativeTime(entries[0].start_time) : "—";
+
+  // Below every hook — see the note in DiapersPage: `selectedChild` fills in
+  // after the children load, so guarding above the hooks changes their count
+  // between renders and blanks the app.
+  if (!selectedChild) {
+    return <NoChildPlaceholder />;
+  }
 
   return (
     <Box sx={{ pb: { xs: 10, md: 0 } }}>
