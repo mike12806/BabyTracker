@@ -191,10 +191,6 @@ export default function DiapersPage() {
     setMenuEntry(null);
   };
 
-  if (!selectedChild) {
-    return <NoChildPlaceholder />;
-  }
-
   const renderColorDot = (color: string) => {
     const swatch = KNOWN_COLOR_SWATCHES[color.toLowerCase()];
     if (!swatch) return color;
@@ -235,6 +231,17 @@ export default function DiapersPage() {
   const todayWet = todayDiapers.filter((d) => d.type === "wet" || d.type === "both").length;
   const todaySolid = todayDiapers.filter((d) => d.type === "solid" || d.type === "both").length;
   const lastChange = diapers.length > 0 ? relativeTime(diapers[0].time) : "—";
+
+  // Below every hook, deliberately. `selectedChild` starts null and fills in
+  // once the children have loaded, so a guard placed higher up would render
+  // this component with fewer hooks on the first pass and more on the second —
+  // which throws, and with no error boundary above us takes the whole app down
+  // to a blank screen. Anyone landing on `/diapers` directly (a reload, a cold
+  // start, or a `?edit=<id>` link tapped from the dashboard) hits exactly that
+  // ordering.
+  if (!selectedChild) {
+    return <NoChildPlaceholder />;
+  }
 
   return (
     <Box sx={{ pb: { xs: 10, md: 0 } }}>

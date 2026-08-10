@@ -202,10 +202,6 @@ export default function TemperaturePage() {
     setMenuEntry(null);
   };
 
-  if (!selectedChild) {
-    return <NoChildPlaceholder />;
-  }
-
   // Group by date
   const grouped = useMemo(() => {
     const map = new Map<string, Temperature[]>();
@@ -227,6 +223,13 @@ export default function TemperaturePage() {
   const todayCount = todayEntries.length;
   const latestReading = entries.length > 0 ? `${entries[0].reading}°${entries[0].reading_unit}` : "—";
   const lastTime = entries.length > 0 ? relativeTime(entries[0].time) : "—";
+
+  // Below every hook — see the note in DiapersPage: `selectedChild` fills in
+  // after the children load, so guarding above the hooks changes their count
+  // between renders and blanks the app.
+  if (!selectedChild) {
+    return <NoChildPlaceholder />;
+  }
 
   // Chip-like rendering for desktop table
   const renderChipInTable = (entry: Temperature) => {
