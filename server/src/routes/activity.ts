@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import type { Env } from "../types/env.js";
+import { verifyChildExists } from "./crud.js";
 
 type AppEnv = { Bindings: Env; Variables: { userId: number; userEmail: string; userName: string } };
 
@@ -20,7 +21,6 @@ const activity = new Hono<AppEnv>();
 // GET /api/activity?child_id=X&limit=Y&offset=Z
 // Returns a merged, reverse-chronological activity feed for the given child.
 activity.get("/", async (c) => {
-  const userId = c.get("userId");
   const childId = parseInt(c.req.query("child_id") || "0", 10);
   const limit = Math.min(parseInt(c.req.query("limit") || "50", 10), 200);
   const offset = parseInt(c.req.query("offset") || "0", 10);
@@ -31,14 +31,13 @@ activity.get("/", async (c) => {
     return c.json({ error: "child_id is required" }, 400);
   }
 
-  // Verify the logged-in user has access to this child
-  const access = await c.env.DB.prepare(
-    "SELECT 1 FROM user_children WHERE user_id = ? AND child_id = ?"
-  )
-    .bind(userId, childId)
-    .first();
-
-  if (!access) {
+  // Verify the child exists. Access is granted to any logged-in user, matching
+  // every other read route (`/api/children`, and the child-scoped CRUD routes
+  // via `verifyChildExists`). This route used to require a `user_children` row
+  // instead, making it the only endpoint a user without one could not read:
+  // they saw a working app everywhere else and a bare "No activity yet" here,
+  // because the 404 left the feed empty.
+  if (!(await verifyChildExists(c.env.DB, childId))) {
     return c.json({ error: "Child not found" }, 404);
   }
 

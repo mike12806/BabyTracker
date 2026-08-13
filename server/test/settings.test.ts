@@ -92,8 +92,8 @@ describe("Settings API", () => {
     expect(data.theme_mode).toBe("light");
   });
 
-  it("settings cannot reference another user's child", async () => {
-    // User A creates a child
+  it("settings can reference a child the user has no user_children row for", async () => {
+    // User A creates a child — only A gets a `user_children` row.
     const childRes = await api.post(
       "/api/children",
       { first_name: "Emma", birth_date: "2024-06-15" },
@@ -101,13 +101,16 @@ describe("Settings API", () => {
     );
     const child = (await childRes.json()) as { id: number };
 
-    // User B tries to set it as default
+    // User B can still set it as default: `GET /api/children` already lists it
+    // for B, so rejecting it here left B able to pick a child it could not save.
     const res = await api.put(
       "/api/settings",
       { default_child_id: child.id },
       { "X-Test-Email": "userB@example.com" }
     );
-    expect(res.status).toBe(404);
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as Record<string, unknown>;
+    expect(data.default_child_id).toBe(child.id);
   });
 
   it("PUT /api/settings can opt out of email reports", async () => {
