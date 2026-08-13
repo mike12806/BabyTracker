@@ -86,4 +86,32 @@ describe("Activity API", () => {
     // Feed is reverse-chronological, so the later feeding comes first.
     expect(body.results.map((e) => e.id)).toEqual([secondId, firstId]);
   });
+
+  it("serves a user with no user_children row for the child", async () => {
+    // The child was created by the default test user, so only that user gets a
+    // `user_children` row. A second user sees this child in `GET /api/children`
+    // and can read every other endpoint for it, so the feed must load too —
+    // requiring the link row here was the one thing that 404'd, leaving the
+    // page stuck on "No activity yet" while the rest of the app worked.
+    await api.post("/api/feedings", {
+      child_id: childId,
+      type: "bottle_formula",
+      start_time: "2024-12-01T09:00:00Z",
+      amount: 4,
+      amount_unit: "oz",
+    });
+
+    const res = await api.get(`/api/activity?child_id=${childId}`, {
+      "X-Test-Email": "coparent@example.com",
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as ActivityResponse;
+    expect(body.total).toBe(1);
+    expect(body.results).toHaveLength(1);
+  });
+
+  it("still 404s for a child that does not exist", async () => {
+    const res = await api.get(`/api/activity?child_id=${childId + 999}`);
+    expect(res.status).toBe(404);
+  });
 });

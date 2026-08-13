@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import type { Env } from "../types/env.js";
+import { verifyChildExists } from "./crud.js";
 
 type AppEnv = { Bindings: Env; Variables: { userId: number; userEmail: string; userName: string } };
 
@@ -35,15 +36,11 @@ settings.put("/", async (c) => {
     volume_unit?: "ml" | "oz" | "cc";
   }>();
 
-  // Validate default_child_id belongs to this user if provided
+  // Validate the child exists if provided. Same reasoning as `/api/activity`:
+  // requiring a `user_children` row here rejected a default child the user can
+  // already see and select everywhere else in the app.
   if (body.default_child_id != null) {
-    const access = await c.env.DB.prepare(
-      "SELECT 1 FROM user_children WHERE user_id = ? AND child_id = ?"
-    )
-      .bind(userId, body.default_child_id)
-      .first();
-
-    if (!access) {
+    if (!(await verifyChildExists(c.env.DB, body.default_child_id))) {
       return c.json({ error: "Child not found" }, 404);
     }
   }
