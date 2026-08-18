@@ -3,6 +3,27 @@ import { FROM_CACHE_HEADER } from "../serviceWorkerContract";
 
 export const API_BASE = import.meta.env.VITE_API_URL || "/api";
 
+/**
+ * How long to wait for a reply before giving up on a request (ms).
+ *
+ * Without this a request has no failure mode at all on a phone: a radio that
+ * has dropped the connection without telling anyone leaves `fetch` pending
+ * indefinitely, so it never throws, `markOffline` never runs, and the banner
+ * and its retry loop — the whole apparatus for saying "this data is old" —
+ * never arm. The screen just sits there looking current. A request that has
+ * gone this long is not going to be answered, and calling it failed is what
+ * puts the app back on a path that recovers.
+ */
+export const REQUEST_TIMEOUT_MS = 12_000;
+
+/**
+ * The same, for the two probes below (ms).
+ *
+ * Shorter because nothing is waiting on their answer: they only decide whether
+ * to re-auth or when to retry, and both have another tick coming.
+ */
+export const PROBE_TIMEOUT_MS = 6_000;
+
 function triggerReauth(): void {
   // Navigate (don't reload) to an /api/* URL: the service worker serves
   // cached HTML for normal navigations, so a reload never reaches Cloudflare
@@ -32,6 +53,7 @@ async function sessionIsAlive(): Promise<boolean> {
   try {
     const res = await fetch(`${API_BASE}/auth/me?probe=${Date.now()}`, {
       credentials: "include",
+      signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
     });
     return res.ok;
   } catch {
@@ -56,6 +78,7 @@ export async function pingServer(): Promise<boolean> {
   try {
     const res = await fetch(`${API_BASE}/auth/me?probe=${Date.now()}`, {
       credentials: "include",
+      signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
     });
     // A 401 is an expired Access session, not reachability; the refresh's own
     // requests will hit the same wall and start the re-auth flow.
@@ -68,7 +91,10 @@ export async function pingServer(): Promise<boolean> {
 async function doFetch(path: string, options: RequestInit): Promise<Response> {
   let res: Response;
   try {
-    res = await fetch(`${API_BASE}${path}`, options);
+    res = await fetch(`${API_BASE}${path}`, {
+      ...options,
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
   } catch {
     // fetch() throws for two very different reasons: Cloudflare Access
     // redirecting an unauthenticated request to its login domain (surfaced as
@@ -93,7 +119,15 @@ async function doFetch(path: string, options: RequestInit): Promise<Response> {
   // reachable again — `noteResponse` clears the staleness banner (and still
   // spots the cached replies a previous build's worker can serve during the
   // one load it takes to upgrade).
-  noteResponse(res);
+  //
+  // Except when the server answers but cannot serve: a 5xx carries no data, so
+  // the screen still shows whatever the last working refresh left there. Taking
+  // it as proof of freshness cleared the banner off a reply that refreshed
+  // nothing. Anything below 500 does prove the app can talk to the server —
+  // including the 401 that starts re-auth and the 400 a rejected form gets —
+  // and a refresh behind it will land.
+  if (res.status >= 500) markOffline();
+  else noteResponse(res);
   return res;
 }
 

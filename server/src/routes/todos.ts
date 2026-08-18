@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import type { Env } from "../types/env.js";
 import { verifyChildExists } from "./crud.js";
+import { insertOnce, readClientRequestId } from "./idempotency.js";
 
 type AppEnv = { Bindings: Env; Variables: { userId: number; userEmail: string; userName: string } };
 
@@ -44,23 +45,29 @@ router.post("/", async (c) => {
   }
 
   const userId = c.get("userId");
-  const result = await c.env.DB.prepare(
-    `INSERT INTO todos (child_id, created_by_user_id, title, notes, due_date, priority, completed)
+  const { rowId } = await insertOnce({
+    db: c.env.DB,
+    userId,
+    table: "todos",
+    clientRequestId: readClientRequestId(body),
+    insert: c.env.DB.prepare(
+      `INSERT INTO todos (child_id, created_by_user_id, title, notes, due_date, priority, completed)
      VALUES (?, ?, ?, ?, ?, ?, 0)`
-  )
-    .bind(
+    ).bind(
       childId,
       userId,
       (body.title as string).trim(),
       body.notes ?? null,
       body.due_date ?? null,
       body.priority ?? "medium",
-    )
-    .run();
+    ),
+  });
 
   const created = await c.env.DB.prepare("SELECT * FROM todos WHERE id = ?")
-    .bind(result.meta.last_row_id)
+    .bind(rowId)
     .first();
+
+  if (!created) return c.json({ deleted: true });
 
   return c.json(created, 201);
 });

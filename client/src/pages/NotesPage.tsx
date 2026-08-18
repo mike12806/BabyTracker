@@ -43,6 +43,7 @@ import { buildCategoryColors } from "../theme/categoryColors";
 import type { Note } from "../types/models";
 import { isoToLocal } from "../utils/dateTime";
 import { useEditEntryParam } from "../hooks/useEditEntryParam";
+import { useSaveGuard } from "../hooks/useSaveGuard";
 
 function relativeTime(iso: string): string {
   const now = new Date();
@@ -78,6 +79,7 @@ export default function NotesPage() {
   const { selectedChild } = useChildren();
   const { refreshKey } = useDataRefresh();
   const { notify } = useNotification();
+  const { saving, save } = useSaveGuard();
   const isDark = theme.palette.mode === "dark";
   const cat = useMemo(() => buildCategoryColors(isDark), [isDark]);
 
@@ -149,19 +151,21 @@ export default function NotesPage() {
       title: form.title || null,
       content: form.content,
     };
-    try {
-      if (editingEntry) {
-        await api.put(`/notes/${editingEntry.id}`, payload);
-      } else {
-        await api.post("/notes", { child_id: selectedChild.id, ...payload });
+    await save(payload, async (idempotencyKey) => {
+      try {
+        if (editingEntry) {
+          await api.put(`/notes/${editingEntry.id}`, payload);
+        } else {
+          await api.post("/notes", { child_id: selectedChild.id, ...payload, client_request_id: idempotencyKey });
+        }
+        setDialogOpen(false);
+        setEditingEntry(null);
+        setForm({ time: "", title: "", content: "" });
+        await load();
+      } catch (err) {
+        notify(err instanceof Error ? err.message : "Failed to save note.", "error");
       }
-      setDialogOpen(false);
-      setEditingEntry(null);
-      setForm({ time: "", title: "", content: "" });
-      await load();
-    } catch (err) {
-      notify(err instanceof Error ? err.message : "Failed to save note.", "error");
-    }
+    });
   };
 
   const handleDelete = async (id: number) => {
@@ -492,8 +496,8 @@ export default function NotesPage() {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => { setDialogOpen(false); setEditingEntry(null); }}>Cancel</Button>
-          <Button onClick={handleSave} variant="contained" disabled={!form.time || !form.content}>
-            Save
+          <Button onClick={handleSave} variant="contained" disabled={saving || !form.time || !form.content}>
+            {saving ? "Saving…" : "Save"}
           </Button>
         </DialogActions>
       </Dialog>

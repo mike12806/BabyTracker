@@ -34,6 +34,7 @@ import { FAB_BOTTOM_OFFSET } from "../components/Layout";
 import NoChildPlaceholder from "../components/NoChildPlaceholder";
 import { buildCategoryColors } from "../theme/categoryColors";
 import type { Timer } from "../types/models";
+import { useSaveGuard } from "../hooks/useSaveGuard";
 
 function humanDuration(ms: number): string {
   if (ms <= 0) return "0m";
@@ -146,6 +147,8 @@ export default function TimersPage() {
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const { selectedChild } = useChildren();
   const { notify } = useNotification();
+  const { saving, save } = useSaveGuard();
+  const quickStart = useSaveGuard();
   const { refreshKey } = useDataRefresh();
   const isDark = theme.palette.mode === "dark";
   const cat = useMemo(() => buildCategoryColors(isDark), [isDark]);
@@ -173,24 +176,33 @@ export default function TimersPage() {
 
   const handleStart = async () => {
     if (!selectedChild) return;
-    try {
-      await api.post("/timers", { child_id: selectedChild.id, name: form.name, notes: form.notes || null });
-      setDialogOpen(false);
-      setForm({ name: "", notes: "" });
-      await load();
-    } catch (err) {
-      notify(err instanceof Error ? err.message : "Failed to start timer.", "error");
-    }
+    const payload = { child_id: selectedChild.id, name: form.name, notes: form.notes || null };
+    await save(payload, async (idempotencyKey) => {
+      try {
+        await api.post("/timers", { ...payload, client_request_id: idempotencyKey });
+        setDialogOpen(false);
+        setForm({ name: "", notes: "" });
+        await load();
+      } catch (err) {
+        notify(err instanceof Error ? err.message : "Failed to start timer.", "error");
+      }
+    });
   };
 
+  // The quick-start tiles are the easiest thing in the app to hit twice — they
+  // are one tap with no dialog to close behind them, so nothing on screen
+  // changes until the list reloads.
   const handleQuickStart = async (name: string) => {
     if (!selectedChild) return;
-    try {
-      await api.post("/timers", { child_id: selectedChild.id, name, notes: null });
-      await load();
-    } catch (err) {
-      notify(err instanceof Error ? err.message : "Failed to start timer.", "error");
-    }
+    const payload = { child_id: selectedChild.id, name, notes: null };
+    await quickStart.save(payload, async (idempotencyKey) => {
+      try {
+        await api.post("/timers", { ...payload, client_request_id: idempotencyKey });
+        await load();
+      } catch (err) {
+        notify(err instanceof Error ? err.message : "Failed to start timer.", "error");
+      }
+    });
   };
 
   const handleStop = async (id: number) => {
@@ -300,7 +312,7 @@ export default function TimersPage() {
               onClick={() => {
                 if (tile.name === "Custom") {
                   setDialogOpen(true);
-                } else {
+                } else if (!quickStart.saving) {
                   handleQuickStart(tile.name);
                 }
               }}
@@ -420,7 +432,7 @@ export default function TimersPage() {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDialogOpen(false)}>Cancel</Button>
-          <Button onClick={handleStart} variant="contained" disabled={!form.name}>
+          <Button onClick={handleStart} variant="contained" disabled={saving || !form.name}>
             Start
           </Button>
         </DialogActions>

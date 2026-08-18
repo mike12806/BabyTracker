@@ -40,6 +40,7 @@ import type { Medication } from "../types/models";
 import { isoToLocal } from "../utils/dateTime";
 import { buildCategoryColors } from "../theme/categoryColors";
 import { useEditEntryParam } from "../hooks/useEditEntryParam";
+import { useSaveGuard } from "../hooks/useSaveGuard";
 
 function relativeTime(iso: string): string {
   const then = new Date(iso).getTime();
@@ -99,6 +100,7 @@ export default function MedicationsPage() {
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const { selectedChild } = useChildren();
   const { notify } = useNotification();
+  const { saving, save } = useSaveGuard();
   const { refreshKey } = useDataRefresh();
   const [entries, setEntries] = useState<Medication[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -160,19 +162,21 @@ export default function MedicationsPage() {
       dosage_unit: form.dosage_unit || null,
       notes: form.notes || null,
     };
-    try {
-      if (editingEntry) {
-        await api.put(`/medications/${editingEntry.id}`, payload);
-      } else {
-        await api.post("/medications", { child_id: selectedChild.id, ...payload });
+    await save(payload, async (idempotencyKey) => {
+      try {
+        if (editingEntry) {
+          await api.put(`/medications/${editingEntry.id}`, payload);
+        } else {
+          await api.post("/medications", { child_id: selectedChild.id, ...payload, client_request_id: idempotencyKey });
+        }
+        setDialogOpen(false);
+        setEditingEntry(null);
+        setForm({ time: "", name: "", dosage: "", dosage_unit: "", notes: "" });
+        await load();
+      } catch (err) {
+        notify(err instanceof Error ? err.message : "Failed to save medication.", "error");
       }
-      setDialogOpen(false);
-      setEditingEntry(null);
-      setForm({ time: "", name: "", dosage: "", dosage_unit: "", notes: "" });
-      await load();
-    } catch (err) {
-      notify(err instanceof Error ? err.message : "Failed to save medication.", "error");
-    }
+    });
   };
 
   const handleDelete = async (id: number) => {
@@ -468,8 +472,8 @@ export default function MedicationsPage() {
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCloseDialog}>Cancel</Button>
-          <Button onClick={handleSave} variant="contained" disabled={!form.time || !form.name}>
-            Save
+          <Button onClick={handleSave} variant="contained" disabled={saving || !form.time || !form.name}>
+            {saving ? "Saving…" : "Save"}
           </Button>
         </DialogActions>
       </Dialog>

@@ -45,6 +45,7 @@ import type { SleepEntry } from "../types/models";
 import { isoToLocal } from "../utils/dateTime";
 import { buildCategoryColors } from "../theme/categoryColors";
 import { useEditEntryParam } from "../hooks/useEditEntryParam";
+import { useSaveGuard } from "../hooks/useSaveGuard";
 
 function humanDuration(ms: number): string {
   if (ms < 0) ms = 0;
@@ -136,6 +137,7 @@ export default function SleepPage() {
   const { selectedChild } = useChildren();
   const { refreshKey } = useDataRefresh();
   const { notify } = useNotification();
+  const { saving, save } = useSaveGuard();
   const [entries, setEntries] = useState<SleepEntry[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState<SleepEntry | null>(null);
@@ -191,19 +193,21 @@ export default function SleepPage() {
       is_nap: form.is_nap ? 1 : 0,
       notes: form.notes || null,
     };
-    try {
-      if (editingEntry) {
-        await api.put(`/sleep/${editingEntry.id}`, payload);
-      } else {
-        await api.post("/sleep", { child_id: selectedChild.id, ...payload });
+    await save(payload, async (idempotencyKey) => {
+      try {
+        if (editingEntry) {
+          await api.put(`/sleep/${editingEntry.id}`, payload);
+        } else {
+          await api.post("/sleep", { child_id: selectedChild.id, ...payload, client_request_id: idempotencyKey });
+        }
+        setDialogOpen(false);
+        setEditingEntry(null);
+        setForm({ start_time: "", end_time: "", is_nap: false, notes: "" });
+        await load();
+      } catch (err) {
+        notify(err instanceof Error ? err.message : "Failed to save sleep entry.", "error");
       }
-      setDialogOpen(false);
-      setEditingEntry(null);
-      setForm({ start_time: "", end_time: "", is_nap: false, notes: "" });
-      await load();
-    } catch (err) {
-      notify(err instanceof Error ? err.message : "Failed to save sleep entry.", "error");
-    }
+    });
   };
 
   const handleDelete = async (id: number) => {
@@ -512,8 +516,8 @@ export default function SleepPage() {
         </DialogContent>
         <DialogActions>
           <Button onClick={closeDialog}>Cancel</Button>
-          <Button onClick={handleSave} variant="contained" disabled={!form.start_time}>
-            Save
+          <Button onClick={handleSave} variant="contained" disabled={saving || !form.start_time}>
+            {saving ? "Saving…" : "Save"}
           </Button>
         </DialogActions>
       </Dialog>

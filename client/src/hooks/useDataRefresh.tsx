@@ -149,6 +149,12 @@ export function DataRefreshProvider({ children }: { children: ReactNode }) {
     if (!isStale) return;
     let cancelled = false;
     const retryTimer = setInterval(() => {
+      // A hidden tab is not waiting on anything, and `attemptRefresh` would
+      // decline to refresh anyway — so the ping would be a request asked purely
+      // to have its answer thrown away, every 15s, for as long as the tab sits
+      // in the background. Returning to it fires `visibilitychange`, which
+      // refreshes directly.
+      if (document.visibilityState !== "visible") return;
       void pingServer().then((reachable) => {
         if (!cancelled && reachable) attemptRefreshRef.current();
       });

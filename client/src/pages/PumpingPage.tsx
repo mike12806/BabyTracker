@@ -45,6 +45,7 @@ import { amountTotals, formatAmountTotal, formatEntryAmount, pumpingLogUnit } fr
 import { useVolumeUnit } from "../hooks/useVolumeUnit";
 import { buildCategoryColors } from "../theme/categoryColors";
 import { useEditEntryParam } from "../hooks/useEditEntryParam";
+import { useSaveGuard } from "../hooks/useSaveGuard";
 
 function relativeTime(iso: string): string {
   const then = new Date(iso).getTime();
@@ -108,6 +109,7 @@ export default function PumpingPage() {
   const { selectedChild } = useChildren();
   const { refreshKey } = useDataRefresh();
   const { notify } = useNotification();
+  const { saving, save } = useSaveGuard();
   const theme = useTheme();
   const isDark = theme.palette.mode === "dark";
   const cat = useMemo(() => buildCategoryColors(isDark), [isDark]);
@@ -170,19 +172,21 @@ export default function PumpingPage() {
       amount_unit: form.amount ? form.amount_unit : null,
       notes: form.notes || null,
     };
-    try {
-      if (editingEntry) {
-        await api.put(`/pumping/${editingEntry.id}`, payload);
-      } else {
-        await api.post("/pumping", { child_id: selectedChild.id, ...payload });
+    await save(payload, async (idempotencyKey) => {
+      try {
+        if (editingEntry) {
+          await api.put(`/pumping/${editingEntry.id}`, payload);
+        } else {
+          await api.post("/pumping", { child_id: selectedChild.id, ...payload, client_request_id: idempotencyKey });
+        }
+        setDialogOpen(false);
+        setEditingEntry(null);
+        setForm({ start_time: "", end_time: "", side: "both", amount: "", amount_unit: logUnit, notes: "" });
+        await load();
+      } catch (err) {
+        notify(err instanceof Error ? err.message : "Failed to save pumping session.", "error");
       }
-      setDialogOpen(false);
-      setEditingEntry(null);
-      setForm({ start_time: "", end_time: "", side: "both", amount: "", amount_unit: logUnit, notes: "" });
-      await load();
-    } catch (err) {
-      notify(err instanceof Error ? err.message : "Failed to save pumping session.", "error");
-    }
+    });
   };
 
   const handleDelete = async (id: number) => {
@@ -519,8 +523,8 @@ export default function PumpingPage() {
         </DialogContent>
         <DialogActions>
           <Button onClick={closeDialog}>Cancel</Button>
-          <Button onClick={handleSave} variant="contained" disabled={!form.start_time}>
-            Save
+          <Button onClick={handleSave} variant="contained" disabled={saving || !form.start_time}>
+            {saving ? "Saving…" : "Save"}
           </Button>
         </DialogActions>
       </Dialog>

@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import type { Env } from "../types/env.js";
 import { verifyChildExists } from "./crud.js";
+import { insertOnce, readClientRequestId } from "./idempotency.js";
 
 type AppEnv = { Bindings: Env; Variables: { userId: number; userEmail: string; userName: string } };
 
@@ -42,15 +43,21 @@ timers.post("/", async (c) => {
     return c.json({ error: "Child not found" }, 404);
   }
 
-  const result = await c.env.DB.prepare(
-    "INSERT INTO timers (child_id, user_id, name, start_time, notes) VALUES (?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), ?)"
-  )
-    .bind(body.child_id, userId, body.name, body.notes || null)
-    .run();
+  const { rowId } = await insertOnce({
+    db: c.env.DB,
+    userId,
+    table: "timers",
+    clientRequestId: readClientRequestId(body as unknown as Record<string, unknown>),
+    insert: c.env.DB.prepare(
+      "INSERT INTO timers (child_id, user_id, name, start_time, notes) VALUES (?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), ?)"
+    ).bind(body.child_id, userId, body.name, body.notes || null),
+  });
 
   const timer = await c.env.DB.prepare("SELECT * FROM timers WHERE id = ?")
-    .bind(result.meta.last_row_id)
+    .bind(rowId)
     .first();
+
+  if (!timer) return c.json({ deleted: true });
 
   return c.json(timer, 201);
 });

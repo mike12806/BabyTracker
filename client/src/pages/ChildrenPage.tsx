@@ -32,6 +32,7 @@ import { useNotification } from "../hooks/useNotification";
 import { FAB_BOTTOM_OFFSET } from "../components/Layout";
 import { buildCategoryColors } from "../theme/categoryColors";
 import type { Child } from "../types/models";
+import { useSaveGuard } from "../hooks/useSaveGuard";
 
 function formatAge(birthDateStr: string): string {
   const [y, m, d] = birthDateStr.split("T")[0].split("-").map(Number);
@@ -57,6 +58,7 @@ export default function ChildrenPage() {
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const { children, selectedChild, selectChild, refreshChildren, defaultChildId, setDefaultChild } = useChildren();
   const { notify } = useNotification();
+  const { saving, save } = useSaveGuard();
   const isDark = theme.palette.mode === "dark";
   const cat = useMemo(() => buildCategoryColors(isDark), [isDark]);
 
@@ -100,27 +102,34 @@ export default function ChildrenPage() {
   };
 
   const handleSave = async () => {
-    try {
-      if (editing) {
-        await api.put(`/children/${editing.id}`, form);
-      } else {
-        const newChild = await api.post<Child>("/children", form);
-        if (pendingPhoto) {
-          const formData = new FormData();
-          formData.append("photo", pendingPhoto);
-          await api.upload(`/children/${newChild.id}/photo`, formData);
+    await save(form, async (idempotencyKey) => {
+      try {
+        if (editing) {
+          await api.put(`/children/${editing.id}`, form);
+        } else {
+          // A replayed key returns the child the first attempt created, so the
+          // photo lands on that one rather than on a second Emma.
+          const newChild = await api.post<Child>("/children", {
+            ...form,
+            client_request_id: idempotencyKey,
+          });
+          if (pendingPhoto) {
+            const formData = new FormData();
+            formData.append("photo", pendingPhoto);
+            await api.upload(`/children/${newChild.id}/photo`, formData);
+          }
         }
+        setDialogOpen(false);
+        if (photoPreview) {
+          URL.revokeObjectURL(photoPreview);
+          setPhotoPreview(null);
+        }
+        setPendingPhoto(null);
+        await refreshChildren();
+      } catch (err) {
+        notify(err instanceof Error ? err.message : "Failed to save child.", "error");
       }
-      setDialogOpen(false);
-      if (photoPreview) {
-        URL.revokeObjectURL(photoPreview);
-        setPhotoPreview(null);
-      }
-      setPendingPhoto(null);
-      await refreshChildren();
-    } catch (err) {
-      notify(err instanceof Error ? err.message : "Failed to save child.", "error");
-    }
+    });
   };
 
   const handleDelete = async (id: number) => {
@@ -490,8 +499,8 @@ export default function ChildrenPage() {
             if (photoPreview) { URL.revokeObjectURL(photoPreview); setPhotoPreview(null); }
             setPendingPhoto(null);
           }}>Cancel</Button>
-          <Button onClick={handleSave} variant="contained" disabled={!form.first_name || !form.birth_date}>
-            {editing ? "Save" : "Add"}
+          <Button onClick={handleSave} variant="contained" disabled={saving || !form.first_name || !form.birth_date}>
+            {saving ? "Saving…" : editing ? "Save" : "Add"}
           </Button>
         </DialogActions>
       </Dialog>

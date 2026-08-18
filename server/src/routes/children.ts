@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import type { Env } from "../types/env.js";
+import { claimClientRequestId, findClaimedRowId, readClientRequestId } from "./idempotency.js";
 
 type AppEnv = { Bindings: Env; Variables: { userId: number; userEmail: string; userName: string } };
 
@@ -41,17 +42,33 @@ children.post("/", async (c) => {
     return c.json({ error: "first_name and birth_date are required" }, 400);
   }
 
-  const result = await c.env.DB.prepare(
-    "INSERT INTO children (first_name, last_name, birth_date) VALUES (?, ?, ?)"
-  )
-    .bind(body.first_name, body.last_name || "", body.birth_date)
-    .run();
+  const clientRequestId = readClientRequestId(body as unknown as Record<string, unknown>);
+  const priorChildId = await findClaimedRowId(c.env.DB, userId, "children", clientRequestId);
+  if (priorChildId !== null) {
+    const existing = await c.env.DB.prepare("SELECT * FROM children WHERE id = ?")
+      .bind(priorChildId)
+      .first();
+    if (existing) return c.json(existing, 201);
+  }
 
-  const childId = result.meta.last_row_id;
+  // One batch, so the child and the link that makes it visible to its creator
+  // are written together. Run apart, a failure between them left a child no
+  // one was linked to — present in the database and reachable from nowhere.
+  const [childInsert] = await c.env.DB.batch([
+    c.env.DB.prepare(
+      "INSERT INTO children (first_name, last_name, birth_date) VALUES (?, ?, ?)"
+    ).bind(body.first_name, body.last_name || "", body.birth_date),
+    c.env.DB.prepare(
+      "INSERT INTO user_children (user_id, child_id) VALUES (?, last_insert_rowid())"
+    ).bind(userId),
+  ]);
 
-  await c.env.DB.prepare("INSERT INTO user_children (user_id, child_id) VALUES (?, ?)")
-    .bind(userId, childId)
-    .run();
+  const childId = childInsert.meta.last_row_id;
+
+  // Claimed after the fact rather than inside the batch above: the batch already
+  // uses `last_insert_rowid()` for the link, and a third statement would read it
+  // back as the link's id instead of the child's.
+  await claimClientRequestId(c.env.DB, userId, "children", clientRequestId, Number(childId));
 
   const child = await c.env.DB.prepare("SELECT * FROM children WHERE id = ?")
     .bind(childId)

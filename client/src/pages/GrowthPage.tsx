@@ -40,6 +40,7 @@ import NoChildPlaceholder from "../components/NoChildPlaceholder";
 import { buildCategoryColors } from "../theme/categoryColors";
 import { formatWeight, lbOzToPounds, poundsToLbOz } from "../utils/weight";
 import type { Growth } from "../types/models";
+import { useSaveGuard } from "../hooks/useSaveGuard";
 
 const EMPTY_FORM = {
   date: "",
@@ -289,6 +290,7 @@ function EntryCard({ entry, onEdit, onDelete, gutterColor }: EntryCardProps) {
 export default function GrowthPage() {
   const { selectedChild } = useChildren();
   const { notify } = useNotification();
+  const { saving, save } = useSaveGuard();
   const { refreshKey } = useDataRefresh();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
@@ -385,19 +387,21 @@ export default function GrowthPage() {
       head_circumference_unit: form.head_circumference ? form.head_circumference_unit : null,
       notes: form.notes || null,
     };
-    try {
-      if (editingEntry) {
-        await api.put(`/growth/${editingEntry.id}`, payload);
-      } else {
-        await api.post("/growth", { child_id: selectedChild.id, ...payload });
+    await save(payload, async (idempotencyKey) => {
+      try {
+        if (editingEntry) {
+          await api.put(`/growth/${editingEntry.id}`, payload);
+        } else {
+          await api.post("/growth", { child_id: selectedChild.id, ...payload, client_request_id: idempotencyKey });
+        }
+        setDialogOpen(false);
+        setEditingEntry(null);
+        setForm(EMPTY_FORM);
+        await load();
+      } catch (err) {
+        notify(err instanceof Error ? err.message : "Failed to save growth measurement.", "error");
       }
-      setDialogOpen(false);
-      setEditingEntry(null);
-      setForm(EMPTY_FORM);
-      await load();
-    } catch (err) {
-      notify(err instanceof Error ? err.message : "Failed to save growth measurement.", "error");
-    }
+    });
   };
 
   const handleDelete = async (id: number) => {
@@ -663,8 +667,8 @@ export default function GrowthPage() {
         </DialogContent>
         <DialogActions>
           <Button onClick={closeDialog}>Cancel</Button>
-          <Button onClick={handleSave} variant="contained" disabled={!form.date}>
-            Save
+          <Button onClick={handleSave} variant="contained" disabled={saving || !form.date}>
+            {saving ? "Saving…" : "Save"}
           </Button>
         </DialogActions>
       </Dialog>

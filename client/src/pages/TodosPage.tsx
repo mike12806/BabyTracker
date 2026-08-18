@@ -42,6 +42,7 @@ import { FAB_BOTTOM_OFFSET } from "../components/Layout";
 import NoChildPlaceholder from "../components/NoChildPlaceholder";
 import { buildCategoryColors } from "../theme/categoryColors";
 import type { Todo } from "../types/models";
+import { useSaveGuard } from "../hooks/useSaveGuard";
 
 type FilterTab = "active" | "high" | "today" | "overdue" | "completed";
 type Priority = "low" | "medium" | "high";
@@ -86,6 +87,7 @@ export default function TodosPage() {
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const { selectedChild } = useChildren();
   const { notify } = useNotification();
+  const { saving, save } = useSaveGuard();
   const { refreshKey } = useDataRefresh();
   const isDark = theme.palette.mode === "dark";
   const cat = useMemo(() => buildCategoryColors(isDark), [isDark]);
@@ -160,17 +162,23 @@ export default function TodosPage() {
       due_date: form.due_date || null,
       priority: form.priority,
     };
-    try {
-      if (editingTodo) {
-        await api.put(`/todos/${editingTodo.id}`, payload);
-      } else {
-        await api.post("/todos", { child_id: selectedChild.id, ...payload });
+    await save(payload, async (idempotencyKey) => {
+      try {
+        if (editingTodo) {
+          await api.put(`/todos/${editingTodo.id}`, payload);
+        } else {
+          await api.post("/todos", {
+            child_id: selectedChild.id,
+            ...payload,
+            client_request_id: idempotencyKey,
+          });
+        }
+        closeDialog();
+        await load();
+      } catch (err) {
+        notify(err instanceof Error ? err.message : "Failed to save todo.", "error");
       }
-      closeDialog();
-      await load();
-    } catch (err) {
-      notify(err instanceof Error ? err.message : "Failed to save todo.", "error");
-    }
+    });
   };
 
   const handleToggle = async (todo: Todo) => {
@@ -641,8 +649,8 @@ export default function TodosPage() {
         </DialogContent>
         <DialogActions>
           <Button onClick={closeDialog}>Cancel</Button>
-          <Button onClick={handleSave} variant="contained" disabled={!form.title.trim()}>
-            Save
+          <Button onClick={handleSave} variant="contained" disabled={saving || !form.title.trim()}>
+            {saving ? "Saving…" : "Save"}
           </Button>
         </DialogActions>
       </Dialog>

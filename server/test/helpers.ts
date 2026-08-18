@@ -17,6 +17,7 @@ import { timers } from "../src/routes/timers.js";
 import { settings } from "../src/routes/settings.js";
 import { medications } from "../src/routes/medications.js";
 import { activity } from "../src/routes/activity.js";
+import { todos } from "../src/routes/todos.js";
 import type { MiddlewareHandler } from "hono";
 import migration0001 from "../migrations/0001_initial_schema.sql?raw";
 import migration0002 from "../migrations/0002_add_picture_blob.sql?raw";
@@ -31,6 +32,7 @@ import migration0010 from "../migrations/0010_add_cc_feeding_unit.sql?raw";
 import migration0011 from "../migrations/0011_add_volume_unit_setting.sql?raw";
 import migration0012 from "../migrations/0012_add_clinic_weight_readings.sql?raw";
 import migration0013 from "../migrations/0013_add_diaper_type_none.sql?raw";
+import migration0014 from "../migrations/0014_add_client_requests.sql?raw";
 
 type AppEnv = { Bindings: Env; Variables: { userId: number; userEmail: string; userName: string } };
 
@@ -85,6 +87,7 @@ export function createTestApp() {
   app.route("/api/settings", settings);
   app.route("/api/medications", medications);
   app.route("/api/activity", activity);
+  app.route("/api/todos", todos);
 
   return app;
 }
@@ -109,6 +112,7 @@ export async function execScript(db: D1Database, script: string) {
 export async function applyMigrations(db: D1Database) {
   // Drop all tables first to ensure clean state between tests
   const dropSQL = `
+    DROP TABLE IF EXISTS client_requests;
     DROP TABLE IF EXISTS todos;
     DROP TABLE IF EXISTS user_settings;
     DROP TABLE IF EXISTS timers;
@@ -127,7 +131,7 @@ export async function applyMigrations(db: D1Database) {
   `;
 
   // Execute the real migration files in order to keep test schema in sync
-  const migrations = [migration0001, migration0002, migration0003, migration0004, migration0005, migration0006, migration0007, migration0008, migration0009, migration0010, migration0011, migration0012, migration0013];
+  const migrations = [migration0001, migration0002, migration0003, migration0004, migration0005, migration0006, migration0007, migration0008, migration0009, migration0010, migration0011, migration0012, migration0013, migration0014];
 
   await execScript(db, dropSQL + migrations.join("\n"));
 }
