@@ -109,8 +109,21 @@ children.delete("/:id", async (c) => {
   return c.json({ ok: true });
 });
 
-const MAX_PHOTO_SIZE = 2 * 1024 * 1024; // 2 MB
+/**
+ * Upload cap.
+ *
+ * The app crops and re-encodes before uploading, so a normal upload is a
+ * square JPEG of a few dozen KB. The old 2 MB cap was below what a phone
+ * camera produces, which meant every upload from a phone came back "File too
+ * large" — the headroom here is for anything reaching this endpoint without
+ * going through the cropper.
+ */
+const MAX_PHOTO_SIZE = 10 * 1024 * 1024; // 10 MB
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+
+function describeBytes(bytes: number): string {
+  return `${Math.round((bytes / (1024 * 1024)) * 10) / 10} MB`;
+}
 
 function photoKey(childId: number): string {
   return `children/${childId}/photo`;
@@ -130,7 +143,15 @@ children.post("/:id/photo", async (c) => {
     return c.json({ error: "Child not found" }, 404);
   }
 
-  const formData = await c.req.formData();
+  // A truncated or malformed multipart body throws here; without the catch it
+  // surfaces as a bare 500 that says nothing the user can act on.
+  let formData: FormData;
+  try {
+    formData = await c.req.formData();
+  } catch {
+    return c.json({ error: "The photo upload was incomplete. Please try again." }, 400);
+  }
+
   const file = formData.get("photo") as unknown as File | null;
 
   if (!file || typeof file === "string" || typeof file.arrayBuffer !== "function") {
@@ -141,21 +162,36 @@ children.post("/:id/photo", async (c) => {
     return c.json({ error: "Invalid file type. Allowed: JPEG, PNG, WebP, GIF" }, 400);
   }
 
+  if (file.size === 0) {
+    return c.json({ error: "That photo file was empty. Please try again." }, 400);
+  }
+
   if (file.size > MAX_PHOTO_SIZE) {
-    return c.json({ error: "File too large. Maximum size is 2 MB" }, 400);
+    return c.json(
+      { error: `File too large (${describeBytes(file.size)}). Maximum size is ${describeBytes(MAX_PHOTO_SIZE)}` },
+      400
+    );
   }
 
   const buffer = await file.arrayBuffer();
 
-  await c.env.PHOTOS.put(photoKey(childId), buffer, {
-    httpMetadata: { contentType: file.type },
-  });
+  // R2 and D1 are separate writes: storing the object but not recording the
+  // content type leaves a photo nothing will ever render, so report the
+  // failure rather than returning ok over a half-finished upload.
+  try {
+    await c.env.PHOTOS.put(photoKey(childId), buffer, {
+      httpMetadata: { contentType: file.type },
+    });
 
-  await c.env.DB.prepare(
-    "UPDATE children SET picture_content_type = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?"
-  )
-    .bind(file.type, childId)
-    .run();
+    await c.env.DB.prepare(
+      "UPDATE children SET picture_content_type = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?"
+    )
+      .bind(file.type, childId)
+      .run();
+  } catch (err) {
+    console.error("Photo upload failed:", err);
+    return c.json({ error: "Couldn't save the photo. Please try again." }, 500);
+  }
 
   return c.json({ ok: true });
 });
