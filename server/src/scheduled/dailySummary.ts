@@ -1,6 +1,16 @@
 import type { Env } from "../types/env.js";
 import { pruneClientRequests } from "../routes/idempotency.js";
 
+/**
+ * Queue names, as declared in `wrangler.toml`.
+ *
+ * Duplicated from the config because a Worker with more than one consumer gets
+ * one `queue()` handler for all of them and has to tell the batches apart by
+ * name. `queueNames.test.ts` fails if these and the config drift.
+ */
+export const DAILY_SUMMARY_QUEUE = "baby-tracker-daily-summary";
+export const DAILY_SUMMARY_DLQ = "baby-tracker-daily-summary-dlq";
+
 // ── HTML helpers ──────────────────────────────────────────────────────────────
 
 function esc(str: string): string {
@@ -885,4 +895,59 @@ export async function sendDailySummary(env: Env): Promise<void> {
   } catch (error) {
     console.error("Failed to prune idempotency keys:", error);
   }
+}
+
+/**
+ * Tell the operator that a reader's summary was given up on.
+ *
+ * The dead letter queue is where a report goes after `max_retries`, and until
+ * now nothing looked in it — the message would sit there for its retention
+ * period and expire unseen, which is only marginally better than the drop it
+ * replaced. This is the part that makes it a real backstop.
+ *
+ * It reports over the same channel that just failed, which is worth being
+ * honest about: if SES is down outright, this does not arrive either. It earns
+ * its place on the ordinary failures — a bounce, a suppression, a throttle
+ * against one address — where the rest of SES is fine and only that one report
+ * did not make it.
+ */
+export async function alertDeadLetteredSummary(
+  env: Env,
+  job: DailySummaryJob,
+  attempts: number,
+): Promise<void> {
+  const to = env.ALERT_EMAIL ?? env.REPORT_FROM_EMAIL;
+  if (!to) {
+    // Nowhere to send it. Still worth a log line — the report is gone either
+    // way, and this is the only trace of it left.
+    console.error(
+      `Daily summary for ${job.email} (${job.reportDateLabel}) was dead-lettered, and no ALERT_EMAIL or REPORT_FROM_EMAIL is set to report it to`,
+    );
+    return;
+  }
+
+  const html = `<!DOCTYPE html>
+<html><body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#333">
+  <h2 style="margin:0 0 12px">A daily summary could not be delivered</h2>
+  <p style="margin:0 0 16px">
+    Baby Tracker gave up on one report after ${esc(String(attempts))} attempt${attempts === 1 ? "" : "s"}.
+    Nothing else was affected — other readers' summaries are sent independently.
+  </p>
+  <table cellpadding="6" style="border-collapse:collapse;font-size:14px">
+    <tr><td style="color:#888">Reader</td><td>${esc(job.name)} &lt;${esc(job.email)}&gt;</td></tr>
+    <tr><td style="color:#888">Report</td><td>${esc(job.reportDateLabel)}</td></tr>
+    <tr><td style="color:#888">Window</td><td>${esc(job.windowStart)} – ${esc(job.windowEnd)}</td></tr>
+  </table>
+  <p style="margin:16px 0 0;color:#888;font-size:13px">
+    The data itself is safe — this is only the emailed summary. The Worker logs
+    for the send that failed will say why.
+  </p>
+</body></html>`;
+
+  await sendEmail(
+    env,
+    to,
+    `Baby Tracker: daily summary not delivered – ${job.reportDateLabel}`,
+    html,
+  );
 }

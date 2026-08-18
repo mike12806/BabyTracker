@@ -12,6 +12,11 @@ export interface Env {
   AWS_SES_REGION?: string;
   REPORT_FROM_EMAIL?: string;
   /**
+   * Where to report a summary that could not be delivered. Falls back to
+   * REPORT_FROM_EMAIL, which is already a verified SES address.
+   */
+  ALERT_EMAIL?: string;
+  /**
    * Daily summary delivery queue.
    *
    * Optional so the Worker still runs without it — local dev and the tests
