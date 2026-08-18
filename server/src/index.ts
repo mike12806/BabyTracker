@@ -2,7 +2,8 @@ import { Hono } from "hono";
 import type { Env } from "./types/env.js";
 import { authMiddleware } from "./middleware/auth.js";
 import { cacheControlMiddleware } from "./middleware/cacheControl.js";
-import { sendDailySummary } from "./scheduled/dailySummary.js";
+import { deliverDailySummary, sendDailySummary } from "./scheduled/dailySummary.js";
+import type { DailySummaryJob } from "./scheduled/dailySummary.js";
 import { auth } from "./routes/auth.js";
 import { children } from "./routes/children.js";
 import { feedings } from "./routes/feedings.js";
@@ -63,5 +64,27 @@ export default {
         console.error("Daily summary failed:", err)
       )
     );
+  },
+
+  /**
+   * Deliver queued daily summaries.
+   *
+   * Acked and retried per message rather than per batch: a batch-level retry
+   * would redeliver the reports that already went out alongside the one that
+   * failed, and a duplicate summary in someone's inbox is the failure this is
+   * meant to avoid creating. A message that keeps failing is retried
+   * `max_retries` times and then goes to the dead letter queue — where it can
+   * be looked at, which is more than the old inline version offered.
+   */
+  async queue(batch: MessageBatch<DailySummaryJob>, env: Env): Promise<void> {
+    for (const message of batch.messages) {
+      try {
+        await deliverDailySummary(env, message.body);
+        message.ack();
+      } catch (err) {
+        console.error(`Daily summary delivery failed for ${message.body?.email}:`, err);
+        message.retry();
+      }
+    }
   },
 };

@@ -15,6 +15,7 @@ Monorepo for a baby tracking application. Two packages:
 - **Server**: Single Cloudflare Worker using Hono as the router. Uses Cloudflare D1 (SQLite-compatible) for persistence.
 - **Auth**: Cloudflare Access. Both the client (Pages) and server (Worker) are behind Cloudflare Access. The Worker validates the `Cf-Access-Jwt-Assertion` header, extracts the user's email, and auto-creates a user row on first request. No custom login UI or session management needed.
 - **Database**: Cloudflare D1. Migrations live in `server/migrations/`. Use sequential numbered migration files.
+- **Daily summary email**: a cron trigger enqueues one message per reader onto a Cloudflare Queue; the queue consumer renders and sends it via SES. Failed sends are retried and end up in a dead letter queue rather than being dropped. Without the queue binding (local dev, tests) the same code sends inline.
 - **Multi-tenancy**: Multiple users, each linked to one or more children via a junction table. Users are auto-created from the Cloudflare Access JWT email.
 
 ## Domain Model
@@ -47,6 +48,8 @@ All entries are associated with a child. Multi-child support is required.
 - All API routes are prefixed with `/api/`
 - Use ISO 8601 for all date/time fields in API requests and responses
 - D1 queries use prepared statements with bound parameters — never interpolate user input into SQL
+- POST creates accept an optional `client_request_id` and deduplicate on it, so a retried or double-tapped save cannot log the same entry twice. Use `insertOnce` for single-statement creates — it writes the row and claims the key in one `D1.batch()`, which D1 runs as a transaction
+- Creates that write more than one row (e.g. a child plus its `user_children` link) must use `D1.batch()` so they cannot half-apply
 - Hono is the sole router — define routes in modular files and mount them on the main app
 - Environment variables and secrets are accessed via the Worker's `Env` bindings, not `process.env`
 - User identity is derived from the Cloudflare Access JWT and used to scope all data access
@@ -69,3 +72,4 @@ All entries are associated with a child. Multi-child support is required.
 - Use `INTEGER` for booleans (0/1) — D1 is SQLite-compatible
 - Store timestamps as ISO 8601 text strings
 - Every table includes `created_at` and `updated_at` columns
+- Multi-statement writes go through `D1.batch()`, which is transactional; `last_insert_rowid()` inside a batch refers to the statement immediately before it

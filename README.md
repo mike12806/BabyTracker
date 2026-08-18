@@ -19,6 +19,7 @@ A baby tracking application inspired by [Baby Buddy](https://github.com/babybudd
 | Database | D1 (SQLite) | Cloudflare D1 |
 | Object Storage | R2 | Cloudflare R2 |
 | Auth | Cloudflare Access | JWT validation |
+| Email delivery | Cloudflare Queues + SES | Retried, with a dead letter queue |
 
 ## Getting Started
 
@@ -82,7 +83,15 @@ npx wrangler d1 create baby-tracker-db
 
 # R2 bucket for photos
 npx wrangler r2 bucket create baby-tracker-photos
+
+# Queues for daily summary delivery (the deploy workflow also creates these)
+npx wrangler queues create baby-tracker-daily-summary
+npx wrangler queues create baby-tracker-daily-summary-dlq
 ```
+
+Queues require the Workers Paid plan, and the API token used by CI needs
+**Queues:Edit** in addition to Workers and D1 permissions — `wrangler deploy`
+rejects a Worker whose queue bindings do not resolve.
 
 ### 2. Configure
 
