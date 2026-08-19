@@ -97,6 +97,26 @@ async function doFetch(path: string, options: RequestInit): Promise<Response> {
   return res;
 }
 
+/**
+ * The best sentence available for a failed response.
+ *
+ * The API sends `{ error }` for everything it rejects itself, but a request
+ * can also die before reaching it — Cloudflare answers an oversized upload
+ * with an HTML 413, and a gateway hiccup with an HTML 5xx. Parsing those as
+ * JSON fails, and the old fallback ("Request failed") told the user nothing
+ * about what to do next.
+ */
+async function errorFromResponse(res: Response): Promise<Error> {
+  const body = await res.json().catch(() => null);
+  const message = (body as { error?: string } | null)?.error;
+  if (message) return new Error(message);
+
+  if (res.status === 413) return new Error("That file is too large to upload.");
+  if (res.status === 429) return new Error("Too many requests — wait a moment and try again.");
+  if (res.status >= 500) return new Error(`The server had a problem (HTTP ${res.status}). Please try again.`);
+  return new Error(`Request failed (HTTP ${res.status})`);
+}
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const res = await doFetch(path, {
     ...options,
@@ -113,8 +133,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   }
 
   if (!res.ok) {
-    const body = await res.json().catch(() => ({ error: "Request failed" }));
-    throw new Error((body as { error?: string }).error || `HTTP ${res.status}`);
+    throw await errorFromResponse(res);
   }
 
   return res.json() as Promise<T>;
@@ -144,8 +163,7 @@ export const api = {
     }
 
     if (!res.ok) {
-      const body = await res.json().catch(() => ({ error: "Request failed" }));
-      throw new Error((body as { error?: string }).error || `HTTP ${res.status}`);
+      throw await errorFromResponse(res);
     }
 
     return res.json() as Promise<T>;

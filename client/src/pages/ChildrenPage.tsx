@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Avatar,
   Box,
@@ -31,6 +31,8 @@ import { useChildren } from "../hooks/useChildren";
 import { useNotification } from "../hooks/useNotification";
 import { FAB_BOTTOM_OFFSET } from "../components/Layout";
 import { buildCategoryColors } from "../theme/categoryColors";
+import PhotoCropDialog from "../components/PhotoCropDialog";
+import { PHOTO_INPUT_ACCEPT, describePickedFileProblem } from "../utils/imageCrop";
 import type { Child } from "../types/models";
 
 function formatAge(birthDateStr: string): string {
@@ -63,30 +65,39 @@ export default function ChildrenPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Child | null>(null);
   const [form, setForm] = useState({ first_name: "", last_name: "", birth_date: "" });
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const addPhotoRef = useRef<HTMLInputElement>(null);
-  const [uploadTargetId, setUploadTargetId] = useState<number | null>(null);
+  // One input per trigger: the card avatars share the page-level input, the
+  // dialog carries its own. Each opener reaches an input in its own subtree
+  // rather than across the portal boundary a modal puts between them.
+  const cardInputRef = useRef<HTMLInputElement>(null);
+  const dialogInputRef = useRef<HTMLInputElement>(null);
+  // Which child a picked photo belongs to. `null` means "the child being
+  // filled in right now" — the upload waits for the save that gives it an id.
+  const [photoTargetId, setPhotoTargetId] = useState<number | null>(null);
+  const [cropSource, setCropSource] = useState<File | null>(null);
   const [pendingPhoto, setPendingPhoto] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+
+  // Object URLs outlive the component unless revoked, and the preview is
+  // replaced on every re-pick.
+  const previewRef = useRef<string | null>(null);
+  useEffect(() => {
+    previewRef.current = photoPreview;
+  }, [photoPreview]);
+  useEffect(() => () => {
+    if (previewRef.current) URL.revokeObjectURL(previewRef.current);
+  }, []);
+
+  const clearPendingPhoto = () => {
+    if (photoPreview) URL.revokeObjectURL(photoPreview);
+    setPhotoPreview(null);
+    setPendingPhoto(null);
+  };
 
   const openCreate = () => {
     setEditing(null);
     setForm({ first_name: "", last_name: "", birth_date: "" });
-    setPendingPhoto(null);
-    if (photoPreview) {
-      URL.revokeObjectURL(photoPreview);
-      setPhotoPreview(null);
-    }
+    clearPendingPhoto();
     setDialogOpen(true);
-  };
-
-  const handleAddPhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (photoPreview) URL.revokeObjectURL(photoPreview);
-    setPendingPhoto(file);
-    setPhotoPreview(URL.createObjectURL(file));
-    if (addPhotoRef.current) addPhotoRef.current.value = "";
   };
 
   const openEdit = (child: Child) => {
@@ -96,27 +107,96 @@ export default function ChildrenPage() {
       last_name: child.last_name,
       birth_date: child.birth_date.split("T")[0],
     });
+    clearPendingPhoto();
     setDialogOpen(true);
+  };
+
+  const closeDialog = () => {
+    setDialogOpen(false);
+    clearPendingPhoto();
+  };
+
+  const pickPhotoForChild = (childId: number) => {
+    setPhotoTargetId(childId);
+    cardInputRef.current?.click();
+  };
+
+  const pickPhotoInDialog = () => {
+    setPhotoTargetId(null);
+    dialogInputRef.current?.click();
+  };
+
+  const handleFilePicked = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    // Cleared before anything else: without it, picking the same file again
+    // fires no `change` event and the cropper never opens.
+    e.target.value = "";
+    if (!file) return;
+
+    const problem = describePickedFileProblem(file);
+    if (problem) {
+      setPhotoTargetId(null);
+      notify(problem, "error");
+      return;
+    }
+
+    setCropSource(file);
+  };
+
+  const uploadPhoto = async (childId: number, photo: File) => {
+    const formData = new FormData();
+    formData.append("photo", photo);
+    await api.upload(`/children/${childId}/photo`, formData);
+  };
+
+  // Called with the square JPEG the cropper produced — a few dozen KB, where
+  // the phone photo it came from was several MB and used to be rejected
+  // outright by the upload cap.
+  const handleCropped = async (cropped: File) => {
+    const targetId = photoTargetId;
+    setCropSource(null);
+    setPhotoTargetId(null);
+
+    if (targetId === null) {
+      // No child id yet — hold it until the dialog is saved.
+      if (photoPreview) URL.revokeObjectURL(photoPreview);
+      setPendingPhoto(cropped);
+      setPhotoPreview(URL.createObjectURL(cropped));
+      return;
+    }
+
+    try {
+      await uploadPhoto(targetId, cropped);
+      await refreshChildren();
+      notify("Photo updated.", "success");
+    } catch (err) {
+      notify(err instanceof Error ? err.message : "Failed to upload photo.", "error");
+    }
+  };
+
+  const cancelCrop = () => {
+    setCropSource(null);
+    setPhotoTargetId(null);
   };
 
   const handleSave = async () => {
     try {
-      if (editing) {
-        await api.put(`/children/${editing.id}`, form);
-      } else {
-        const newChild = await api.post<Child>("/children", form);
-        if (pendingPhoto) {
-          const formData = new FormData();
-          formData.append("photo", pendingPhoto);
-          await api.upload(`/children/${newChild.id}/photo`, formData);
+      const saved = editing
+        ? await api.put<Child>(`/children/${editing.id}`, form)
+        : await api.post<Child>("/children", form);
+
+      if (pendingPhoto) {
+        try {
+          await uploadPhoto(saved.id, pendingPhoto);
+        } catch (err) {
+          // The child itself is saved by now, so closing and reporting beats
+          // leaving the dialog open over a record that already exists — a
+          // second attempt would create a duplicate.
+          notify(err instanceof Error ? err.message : "Child saved, but the photo didn't upload.", "warning");
         }
       }
-      setDialogOpen(false);
-      if (photoPreview) {
-        URL.revokeObjectURL(photoPreview);
-        setPhotoPreview(null);
-      }
-      setPendingPhoto(null);
+
+      closeDialog();
       await refreshChildren();
     } catch (err) {
       notify(err instanceof Error ? err.message : "Failed to save child.", "error");
@@ -130,26 +210,6 @@ export default function ChildrenPage() {
       await refreshChildren();
     } catch (err) {
       notify(err instanceof Error ? err.message : "Failed to delete child.", "error");
-    }
-  };
-
-  const handlePhotoClick = (childId: number) => {
-    setUploadTargetId(childId);
-    fileInputRef.current?.click();
-  };
-
-  const handlePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !uploadTargetId) return;
-    const formData = new FormData();
-    formData.append("photo", file);
-    try {
-      await api.upload(`/children/${uploadTargetId}/photo`, formData);
-      setUploadTargetId(null);
-      if (fileInputRef.current) fileInputRef.current.value = "";
-      await refreshChildren();
-    } catch (err) {
-      notify(err instanceof Error ? err.message : "Failed to upload photo.", "error");
     }
   };
 
@@ -223,7 +283,7 @@ export default function ChildrenPage() {
                     <CardContent sx={{ textAlign: "center", pt: 3, pb: 1 }}>
                       {/* Tappable avatar for photo change */}
                       <Box
-                        onClick={(e) => { e.stopPropagation(); handlePhotoClick(child.id); }}
+                        onClick={(e) => { e.stopPropagation(); pickPhotoForChild(child.id); }}
                         sx={{
                           display: "inline-block",
                           position: "relative",
@@ -377,19 +437,13 @@ export default function ChildrenPage() {
         </Grid>
       )}
 
-      <input
-        ref={fileInputRef}
+      <Box
+        component="input"
+        ref={cardInputRef}
         type="file"
-        accept="image/jpeg,image/png,image/webp,image/gif"
-        style={{ display: "none" }}
-        onChange={handlePhotoChange}
-      />
-      <input
-        ref={addPhotoRef}
-        type="file"
-        accept="image/jpeg,image/png,image/webp,image/gif"
-        style={{ display: "none" }}
-        onChange={handleAddPhotoChange}
+        accept={PHOTO_INPUT_ACCEPT}
+        sx={{ display: "none" }}
+        onChange={handleFilePicked}
       />
 
       <Fab
@@ -403,11 +457,7 @@ export default function ChildrenPage() {
 
       <Dialog
         open={dialogOpen}
-        onClose={() => {
-          setDialogOpen(false);
-          if (photoPreview) { URL.revokeObjectURL(photoPreview); setPhotoPreview(null); }
-          setPendingPhoto(null);
-        }}
+        onClose={closeDialog}
         maxWidth="sm"
         fullWidth
         fullScreen={isMobile}
@@ -418,7 +468,7 @@ export default function ChildrenPage() {
           {/* Photo picker */}
           <Box
             sx={{ textAlign: "center", mb: 2 }}
-            onClick={() => editing ? handlePhotoClick(editing.id) : addPhotoRef.current?.click()}
+            onClick={pickPhotoInDialog}
           >
             <Box
               sx={{
@@ -429,7 +479,7 @@ export default function ChildrenPage() {
               }}
             >
               <Avatar
-                src={editing ? photoUrl(editing) : (photoPreview ?? undefined)}
+                src={photoPreview ?? (editing ? photoUrl(editing) : undefined)}
                 sx={{ width: 120, height: 120, fontSize: 48, mx: "auto" }}
               >
                 {editing ? editing.first_name[0] : <PhotoCameraIcon sx={{ fontSize: 48 }} />}
@@ -453,9 +503,21 @@ export default function ChildrenPage() {
               </Box>
             </Box>
             <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>
-              {editing ? "Tap to change photo" : "Tap to add photo"}
+              {photoPreview || editing?.picture_content_type ? "Tap to change photo" : "Tap to add photo"}
             </Typography>
           </Box>
+
+          {/* Outside the tappable area above: a programmatic `click()` on this
+              input bubbles, and inside it that would re-enter the handler that
+              just fired. */}
+          <Box
+            component="input"
+            ref={dialogInputRef}
+            type="file"
+            accept={PHOTO_INPUT_ACCEPT}
+            sx={{ display: "none" }}
+            onChange={handleFilePicked}
+          />
 
           <TextField
             autoFocus
@@ -485,16 +547,14 @@ export default function ChildrenPage() {
           />
         </DialogContent>
         <DialogActions sx={{ px: 2, pb: 2 }}>
-          <Button onClick={() => {
-            setDialogOpen(false);
-            if (photoPreview) { URL.revokeObjectURL(photoPreview); setPhotoPreview(null); }
-            setPendingPhoto(null);
-          }}>Cancel</Button>
+          <Button onClick={closeDialog}>Cancel</Button>
           <Button onClick={handleSave} variant="contained" disabled={!form.first_name || !form.birth_date}>
             {editing ? "Save" : "Add"}
           </Button>
         </DialogActions>
       </Dialog>
+
+      <PhotoCropDialog file={cropSource} onCancel={cancelCrop} onConfirm={handleCropped} />
     </Box>
   );
 }
