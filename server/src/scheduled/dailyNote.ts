@@ -54,6 +54,27 @@ export const DEFAULT_NOTE_MODEL = "@cf/google/gemma-4-26b-a4b-it";
 /** The card gives this one line; anything longer gets clipped on a phone. */
 export const MAX_NOTE_LENGTH = 240;
 
+/**
+ * Token budget for the model's reply — generous, because the default model
+ * thinks before it answers.
+ *
+ * This was 120, chosen for "two sentences" as if the whole budget went to the
+ * visible answer. On a thinking model it does not: reasoning tokens come out
+ * of the same allowance, so the model spent all 120 working out what to say
+ * and returned an empty (or truncated) `content` with `finish_reason:
+ * "length"`. No exception, so it looked like a working call that produced
+ * nothing, and every note silently fell back to the template — the second
+ * cause of the same visible symptom, after the `.response`/`.choices` mixup
+ * above.
+ *
+ * Being generous here costs nothing worth counting. Billing is on tokens
+ * actually produced, not the ceiling, and at one call per child per day even
+ * a full 1,000-token reply is a fraction of a cent a year. `tidyNote` still
+ * clips what gets *stored* to MAX_NOTE_LENGTH, so a rambling model can't
+ * stretch the card either way.
+ */
+export const MAX_REPLY_TOKENS = 1000;
+
 /** Days of history the "trending" comparison averages over. */
 const BASELINE_DAYS = 7;
 
@@ -75,6 +96,18 @@ export interface DailyNote {
   note_date: string;
   body: string;
   source: "ai" | "fallback";
+  /** Why the model's reply wasn't used, when it wasn't. Absent on success.
+   *  Returned to the caller and logged, but not stored — it describes this
+   *  run, not the note. */
+  reason?: string;
+}
+
+/** One generation attempt: the text to store, whether the model wrote it, and
+ *  — when it didn't — why not. */
+export interface NoteGeneration {
+  body: string;
+  source: "ai" | "fallback";
+  reason?: string;
 }
 
 interface ChildRow {
@@ -302,11 +335,41 @@ export function buildPrompt(
  */
 interface AiTextResponse {
   response?: string;
-  choices?: { message?: { content?: string } }[];
+  choices?: { message?: { content?: string }; finish_reason?: string }[];
+  usage?: {
+    completion_tokens?: number;
+    completion_tokens_details?: { reasoning_tokens?: number };
+  };
 }
 
 function extractModelText(result: AiTextResponse): string {
   return result.response ?? result.choices?.[0]?.message?.content ?? "";
+}
+
+/**
+ * A one-line, log-safe description of what the model actually sent back, for
+ * when it sent back nothing usable.
+ *
+ * This exists because this feature has now failed twice in the same shape —
+ * the call succeeds, the reply is unusable for some reason invisible from
+ * outside, and every note quietly becomes a template one. Guessing at the
+ * cause from the outside cost two deploys. The reply's own metadata says
+ * which of `finish=length` (ran out of budget mid-thought), `reasoning=<n>`
+ * (spent the budget thinking) or an unexpected `keys=` set (a third response
+ * shape) actually happened, so the next failure names itself.
+ *
+ * Metadata only — never the reply text, which is about somebody's child.
+ */
+function describeReply(result: AiTextResponse): string {
+  const bits = [`keys=${Object.keys(result ?? {}).join("|") || "none"}`];
+  const finish = result.choices?.[0]?.finish_reason;
+  if (finish) bits.push(`finish=${finish}`);
+  if (result.usage?.completion_tokens !== undefined) {
+    bits.push(`out=${result.usage.completion_tokens}`);
+  }
+  const reasoning = result.usage?.completion_tokens_details?.reasoning_tokens;
+  if (reasoning !== undefined) bits.push(`reasoning=${reasoning}`);
+  return bits.join(" ");
 }
 
 /**
@@ -320,9 +383,14 @@ export async function generateNoteBody(
   ageLabel: string,
   day: DayStats,
   trends: Trend[],
-): Promise<{ body: string; source: "ai" | "fallback" }> {
-  const fallback = { body: fallbackNote(firstName, day, trends), source: "fallback" as const };
-  if (!env.AI) return fallback;
+): Promise<NoteGeneration> {
+  const fallbackBody = fallbackNote(firstName, day, trends);
+  const fallbackWith = (reason: string): NoteGeneration => ({
+    body: fallbackBody,
+    source: "fallback",
+    reason,
+  });
+  if (!env.AI) return fallbackWith("no AI binding");
 
   const { system, user } = buildPrompt(firstName, ageLabel, day, trends);
   try {
@@ -331,16 +399,18 @@ export async function generateNoteBody(
         { role: "system", content: system },
         { role: "user", content: user },
       ],
-      // Two sentences. The cap is a cost floor as much as a length limit.
-      max_tokens: 120,
+      max_tokens: MAX_REPLY_TOKENS,
       temperature: 0.7,
     })) as AiTextResponse;
 
-    const tidied = tidyNote(extractModelText(result));
-    return tidied ? { body: tidied, source: "ai" } : fallback;
+    const text = extractModelText(result);
+    const tidied = tidyNote(text);
+    if (tidied) return { body: tidied, source: "ai" };
+    return fallbackWith(`unusable reply (${text.length} chars) — ${describeReply(result)}`);
   } catch (error) {
-    console.error(`Daily note generation failed for ${firstName}:`, error);
-    return fallback;
+    return fallbackWith(
+      `model call threw: ${error instanceof Error ? error.message : String(error)}`,
+    );
   }
 }
 
@@ -397,7 +467,7 @@ export async function refreshDailyNotes(env: Env, now = new Date()): Promise<Dai
       }
 
       const trends = buildTrends(day, baseline);
-      const { body, source } = await generateNoteBody(
+      const { body, source, reason } = await generateNoteBody(
         env,
         child.first_name,
         ageLabel(child.birth_date, new Date(windowStart)),
@@ -414,20 +484,29 @@ export async function refreshDailyNotes(env: Env, now = new Date()): Promise<Dai
            updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')`,
       ).bind(child.id, noteDate, body, source).run();
 
-      written.push({ child_id: child.id, note_date: noteDate, body, source });
+      // Only worth saying when a model was supposed to answer. Running
+      // without a binding is a normal configuration (local dev, tests), not
+      // something to warn about on every child, every day.
+      if (reason && env.AI) {
+        console.warn(`Daily note for child ${child.id} fell back — ${reason}`);
+      }
+      written.push({ child_id: child.id, note_date: noteDate, body, source, reason });
     } catch (error) {
       // One child's note failing must not cost the others theirs.
       console.error(`Failed to write the daily note for child ${child.id}:`, error);
     }
   }
 
-  // A wrong model slug, a revoked binding, or a model retired out from under us
-  // all look identical from the card: the note still appears, just written by
-  // the template. Nothing else would ever surface that, so say it plainly.
+  // A wrong model slug, a revoked binding, a model retired out from under us,
+  // an exhausted token budget — all identical from the card, which still shows
+  // a note, just a template one. Nothing else would ever surface that, so say
+  // it plainly, and say which reasons came back rather than making the next
+  // person guess (this has been guessed wrong twice).
   if (env.AI && written.length > 0 && written.every((n) => n.source === "fallback")) {
+    const reasons = [...new Set(written.map((n) => n.reason).filter(Boolean))];
     console.warn(
-      `Every daily note fell back to the template despite an AI binding — check that ` +
-        `"${env.DAILY_NOTE_MODEL || DEFAULT_NOTE_MODEL}" is a valid Workers AI model.`,
+      `Every daily note fell back to the template despite an AI binding ` +
+        `(model "${env.DAILY_NOTE_MODEL || DEFAULT_NOTE_MODEL}"): ${reasons.join("; ")}`,
     );
   }
 

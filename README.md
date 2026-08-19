@@ -97,11 +97,25 @@ Because the volume is that low, the model is chosen on writing quality rather
 than price: the gap between the cheapest and the largest plausible candidate is
 a few cents a year, while the gap in how the sentences read is not. The default
 is Gemma 4 26B (an MoE with 4B active — fast, and markedly better prose than
-an 8B). It has "thinking mode," which changes its response shape rather than
-its cost: Workers AI answers models like this one OpenAI-chat-completions-style
-(`choices[0].message.content`, with any reasoning trace already separated into
-`.reasoning_content` beside it), not the flatter `{ response }` shape simpler
-models use. `extractModelText` in `dailyNote.ts` reads both.
+an 8B). It has "thinking mode," which has two consequences worth knowing, both
+of which broke this feature once before being handled:
+
+1. **Response shape.** Workers AI answers models like this one
+   OpenAI-chat-completions-style (`choices[0].message.content`, with any
+   reasoning trace separated into `.reasoning_content` beside it), not the
+   flatter `{ response }` shape simpler models use. `extractModelText` reads
+   both.
+2. **Token budget.** Reasoning tokens come out of the same `max_tokens`
+   allowance as the visible answer, so a budget sized for "two sentences" gets
+   spent thinking and returns empty content with `finish_reason: "length"`.
+   `MAX_REPLY_TOKENS` is deliberately generous; billing is on tokens actually
+   produced, and `tidyNote` still clips the stored note to `MAX_NOTE_LENGTH`.
+
+Both failures look identical from the outside — a working call that produces a
+template note — so `generateNoteBody` now returns a `reason` whenever it falls
+back, naming `finish_reason`, token usage and the response keys it actually
+saw. The refresh button surfaces that reason directly instead of just "0 from
+AI".
 
 There is no fallback to worry about breaking: with no `AI` binding — local dev
 and the tests have none — or on any model error, a deterministic template

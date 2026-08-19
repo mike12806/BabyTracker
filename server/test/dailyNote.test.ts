@@ -10,6 +10,7 @@ import {
   refreshDailyNotes,
   tidyNote,
   DEFAULT_NOTE_MODEL,
+  MAX_REPLY_TOKENS,
   MAX_NOTE_LENGTH,
   type DayStats,
 } from "../src/scheduled/dailyNote.js";
@@ -211,9 +212,85 @@ describe("generateNoteBody", () => {
     });
   });
 
+  it("gives a thinking model room to think and still answer", async () => {
+    // The bug this guards: max_tokens was 120, chosen as if the whole budget
+    // went to the visible answer. Reasoning tokens come out of the same
+    // allowance, so the model spent it all thinking and returned nothing.
+    const AI = { run: vi.fn(async () => ({ response: "Mikey had a steady day. You are doing well." })) };
+    await generateNoteBody(
+      { ...env, AI } as unknown as typeof env,
+      "Mikey",
+      "4 months old",
+      day({ feeds: 6 }),
+      [],
+    );
+    const options = AI.run.mock.calls[0][1] as { max_tokens: number };
+    expect(options.max_tokens).toBe(MAX_REPLY_TOKENS);
+    expect(options.max_tokens).toBeGreaterThanOrEqual(500);
+  });
+
+  it("says why it fell back when the model burns its budget thinking", async () => {
+    // Exactly what a thinking model returns when max_tokens runs out mid-thought.
+    const AI = {
+      run: vi.fn(async () => ({
+        choices: [{ message: { role: "assistant", content: "" }, finish_reason: "length" }],
+        usage: { completion_tokens: 120, completion_tokens_details: { reasoning_tokens: 120 } },
+      })),
+    };
+    const result = await generateNoteBody(
+      { ...env, AI } as unknown as typeof env,
+      "Mikey",
+      "4 months old",
+      day({ feeds: 6 }),
+      [],
+    );
+    expect(result.source).toBe("fallback");
+    // The whole point: the reason names the cause instead of leaving "0 from AI".
+    expect(result.reason).toContain("finish=length");
+    expect(result.reason).toContain("reasoning=120");
+  });
+
+  it("names an unexpected response shape rather than staying silent", async () => {
+    const AI = { run: vi.fn(async () => ({ output_text: "some third shape nobody expected" })) };
+    const result = await generateNoteBody(
+      { ...env, AI } as unknown as typeof env,
+      "Mikey",
+      "4 months old",
+      day({ feeds: 6 }),
+      [],
+    );
+    expect(result.source).toBe("fallback");
+    expect(result.reason).toContain("keys=output_text");
+  });
+
+  it("reports a thrown error's message as the reason", async () => {
+    const AI = { run: vi.fn(async () => { throw new Error("No such model"); }) };
+    const result = await generateNoteBody(
+      { ...env, AI } as unknown as typeof env,
+      "Mikey",
+      "4 months old",
+      day({ feeds: 6 }),
+      [],
+    );
+    expect(result.source).toBe("fallback");
+    expect(result.reason).toContain("No such model");
+  });
+
+  it("gives no reason at all when the model worked", async () => {
+    const AI = { run: vi.fn(async () => ({ response: "Mikey had a steady day. You are doing well." })) };
+    const result = await generateNoteBody(
+      { ...env, AI } as unknown as typeof env,
+      "Mikey",
+      "4 months old",
+      day({ feeds: 6 }),
+      [],
+    );
+    expect(result.source).toBe("ai");
+    expect(result.reason).toBeUndefined();
+  });
+
   it("falls back rather than failing when the model errors", async () => {
     const AI = { run: vi.fn(async () => { throw new Error("out of capacity"); }) };
-    vi.spyOn(console, "error").mockImplementation(() => {});
     const result = await generateNoteBody(
       { ...env, AI } as unknown as typeof env,
       "Mikey",
@@ -377,7 +454,12 @@ describe("refreshDailyNotes", () => {
     await refreshDailyNotes({ ...env, AI } as unknown as typeof env, NOW);
 
     expect(warn).toHaveBeenCalledWith(expect.stringContaining("fell back to the template"));
-    expect(warn.mock.calls[0][0]).toContain(DEFAULT_NOTE_MODEL);
+    // Two kinds of line now: one per child naming that child's reason, and one
+    // aggregate naming the model. Assert across all of them rather than
+    // pinning an order.
+    const lines = warn.mock.calls.map((c) => String(c[0]));
+    expect(lines.some((l) => l.includes(DEFAULT_NOTE_MODEL))).toBe(true);
+    expect(lines.some((l) => l.includes("No such model"))).toBe(true);
   });
 
   it("stays quiet when the model is doing its job", async () => {
