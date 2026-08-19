@@ -9,7 +9,8 @@ vi.mock("../src/api/client", () => ({
   // Reachability ping used by the stale-retry loop — reachable by default.
   pingServer: vi.fn(async () => true),
   api: { get: vi.fn(),
-    getOptional: vi.fn(async () => ({ note: null })), post: vi.fn(), put: vi.fn(), delete: vi.fn(), upload: vi.fn() },
+    getOptional: vi.fn(async () => ({ note: null })), post: vi.fn(),
+    postSlow: vi.fn(), put: vi.fn(), delete: vi.fn(), upload: vi.fn() },
   API_BASE: "/api",
 }));
 

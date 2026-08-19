@@ -25,6 +25,16 @@ export const REQUEST_TIMEOUT_MS = 12_000;
 export const PROBE_TIMEOUT_MS = 6_000;
 
 /**
+ * Deadline for a request that runs a language model server-side (ms).
+ *
+ * Generous on purpose. Nothing is blocked on it — it is a deliberate button
+ * press with a spinner — and giving up early costs the work the server has
+ * already done, since the Worker keeps going regardless of whether anyone is
+ * still listening.
+ */
+export const GENERATION_TIMEOUT_MS = 120_000;
+
+/**
  * Is this status the API's own JWT check failing, or something upstream of
  * it doing the same job?
  *
@@ -136,6 +146,21 @@ interface FetchFlags {
    * reachable — that direction is only ever good news.
    */
   optional?: boolean;
+
+  /**
+   * Override the request deadline (ms). Defaults to REQUEST_TIMEOUT_MS.
+   *
+   * That default is sized for ordinary CRUD, where anything slower than a
+   * few seconds means the connection is gone. A request that asks the server
+   * to *generate* something is a different kind of animal: the daily-note
+   * refresh runs a language model per child, and a model that thinks before
+   * it answers can legitimately take far longer than twelve seconds. Holding
+   * it to the CRUD deadline aborted the request client-side while the Worker
+   * was still working — which surfaced as "Network error" with nothing in the
+   * Cloudflare log, because the live stream only records a request once it
+   * completes.
+   */
+  timeoutMs?: number;
 }
 
 async function doFetch(
@@ -147,7 +172,7 @@ async function doFetch(
   try {
     res = await fetch(`${API_BASE}${path}`, {
       ...options,
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      signal: AbortSignal.timeout(flags.timeoutMs ?? REQUEST_TIMEOUT_MS),
     });
   } catch {
     // fetch() throws for two very different reasons: Cloudflare Access
@@ -248,6 +273,13 @@ export const api = {
 
   post: <T>(path: string, data: unknown) =>
     request<T>(path, { method: "POST", body: JSON.stringify(data) }),
+
+  /**
+   * A POST that asks the server to generate something, and so is allowed to
+   * take much longer than an ordinary write before being given up on.
+   */
+  postSlow: <T>(path: string, data: unknown, timeoutMs = GENERATION_TIMEOUT_MS) =>
+    request<T>(path, { method: "POST", body: JSON.stringify(data) }, { timeoutMs }),
 
   put: <T>(path: string, data: unknown) =>
     request<T>(path, { method: "PUT", body: JSON.stringify(data) }),

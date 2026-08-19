@@ -501,12 +501,19 @@ export async function refreshDailyNotes(env: Env, now = new Date()): Promise<Dai
 
       // The previous week, one day at a time, so the mean is a mean of days
       // rather than of one long lump — and so a partial history still works.
-      const baseline: DayStats[] = [];
-      for (let back = 1; back <= BASELINE_DAYS; back++) {
-        const start = new Date(new Date(windowStart).getTime() - back * 86400000).toISOString();
-        const end = new Date(new Date(windowEnd).getTime() - back * 86400000).toISOString();
-        baseline.push(await fetchDayStats(env, child.id, start, end, unit));
-      }
+      //
+      // Fetched together rather than in sequence: these are seven independent
+      // reads and awaiting them one after another made the whole refresh seven
+      // round trips deep for no reason, which matters when a caller is waiting
+      // on the response.
+      const baseline = await Promise.all(
+        Array.from({ length: BASELINE_DAYS }, (_, i) => {
+          const back = i + 1;
+          const start = new Date(new Date(windowStart).getTime() - back * 86400000).toISOString();
+          const end = new Date(new Date(windowEnd).getTime() - back * 86400000).toISOString();
+          return fetchDayStats(env, child.id, start, end, unit);
+        }),
+      );
 
       const trends = buildTrends(day, baseline);
       const { body, source, reason } = await generateNoteBody(

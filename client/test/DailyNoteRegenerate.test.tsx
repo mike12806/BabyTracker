@@ -7,7 +7,8 @@ import type { Child } from "../src/types/models";
 vi.mock("../src/api/client", () => ({
   pingServer: vi.fn(async () => true),
   api: { get: vi.fn(),
-    getOptional: vi.fn(async () => ({ note: null })), post: vi.fn(), put: vi.fn(), delete: vi.fn(), upload: vi.fn() },
+    getOptional: vi.fn(async () => ({ note: null })), post: vi.fn(),
+    postSlow: vi.fn(), put: vi.fn(), delete: vi.fn(), upload: vi.fn() },
   API_BASE: "/api",
 }));
 
@@ -101,7 +102,7 @@ describe("the buried daily-note regenerate action", () => {
   });
 
   it("calls the refresh endpoint and reports what it wrote, on tap", async () => {
-    mockApi.post.mockResolvedValue({
+    mockApi.postSlow.mockResolvedValue({
       written: [{ child_id: 1, source: "ai" }, { child_id: 2, source: "fallback" }],
     });
     renderLayout();
@@ -110,12 +111,12 @@ describe("the buried daily-note regenerate action", () => {
 
     fireEvent.click(screen.getAllByText("Regenerate today's note")[0]);
 
-    await waitFor(() => expect(mockApi.post).toHaveBeenCalledWith("/daily-notes/refresh", {}));
+    await waitFor(() => expect(mockApi.postSlow).toHaveBeenCalledWith("/daily-notes/refresh", {}));
     expect(await screen.findByText("Wrote 2 notes (1 from AI).")).toBeInTheDocument();
   });
 
   it("reports failure without crashing the drawer", async () => {
-    mockApi.post.mockRejectedValue(new Error("Failed to regenerate notes."));
+    mockApi.postSlow.mockRejectedValue(new Error("Failed to regenerate notes."));
     renderLayout();
     const buildLine = openDrawerAndGetBuildLine();
     for (let i = 0; i < 5; i++) fireEvent.click(buildLine);
