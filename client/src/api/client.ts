@@ -113,7 +113,36 @@ export async function pingServer(): Promise<boolean> {
   }
 }
 
-async function doFetch(path: string, options: RequestInit): Promise<Response> {
+/**
+ * Options for requests whose failure should not colour the whole app's idea
+ * of whether it is up to date.
+ */
+interface FetchFlags {
+  /**
+   * Set for a request nothing on screen depends on.
+   *
+   * Failure normally means "the data on screen is stale": it raises the
+   * banner and arms a 15-second retry loop that refetches every mounted
+   * page. That is right for the numbers, and wrong for garnish. The daily
+   * note is the case that proved it — a server-side error on that one
+   * endpoint marked the whole dashboard stale, so the retry loop refetched
+   * everything, hit the same error, and refetched again, which is what "the
+   * page reloads a few times after it loads" looked like from the outside.
+   *
+   * A `.catch()` at the call site cannot fix this: `markOffline` fires in
+   * here, before the caller ever sees the rejection.
+   *
+   * A *successful* optional request still counts as proof the server is
+   * reachable — that direction is only ever good news.
+   */
+  optional?: boolean;
+}
+
+async function doFetch(
+  path: string,
+  options: RequestInit,
+  flags: FetchFlags = {},
+): Promise<Response> {
   let res: Response;
   try {
     res = await fetch(`${API_BASE}${path}`, {
@@ -130,7 +159,7 @@ async function doFetch(path: string, options: RequestInit): Promise<Response> {
     // Either way the data on screen just failed to refresh. With no offline
     // cache, a thrown fetch is the main way staleness begins, and this is the
     // only place that sees it — flag it before deciding what to do next.
-    markOffline();
+    if (!flags.optional) markOffline();
     if (await sessionIsAlive()) {
       throw new Error("Network error — check your connection and try again.");
     }
@@ -151,8 +180,9 @@ async function doFetch(path: string, options: RequestInit): Promise<Response> {
   // nothing. Anything below 500 does prove the app can talk to the server —
   // including the 401 that starts re-auth and the 400 a rejected form gets —
   // and a refresh behind it will land.
-  if (res.status >= 500) markOffline();
-  else noteResponse(res);
+  if (res.status >= 500) {
+    if (!flags.optional) markOffline();
+  } else noteResponse(res);
   return res;
 }
 
@@ -176,15 +206,23 @@ async function errorFromResponse(res: Response): Promise<Error> {
   return new Error(`Request failed (HTTP ${res.status})`);
 }
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const res = await doFetch(path, {
-    ...options,
-    credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-      ...options.headers,
+async function request<T>(
+  path: string,
+  options: RequestInit = {},
+  flags: FetchFlags = {},
+): Promise<T> {
+  const res = await doFetch(
+    path,
+    {
+      ...options,
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+        ...options.headers,
+      },
     },
-  });
+    flags,
+  );
 
   if (isAuthFailure(res.status)) {
     triggerReauth();
@@ -200,6 +238,13 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
 export const api = {
   get: <T>(path: string) => request<T>(path),
+
+  /**
+   * A GET for something the page can do without. Its failure will not raise
+   * the stale-data banner or arm the refresh-retry loop — see `FetchFlags`.
+   * The caller still gets the rejection and must handle it.
+   */
+  getOptional: <T>(path: string) => request<T>(path, {}, { optional: true }),
 
   post: <T>(path: string, data: unknown) =>
     request<T>(path, { method: "POST", body: JSON.stringify(data) }),

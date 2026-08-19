@@ -6,7 +6,8 @@ import type { Child } from "../src/types/models";
 
 vi.mock("../src/api/client", () => ({
   pingServer: vi.fn(async () => true),
-  api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn(), upload: vi.fn() },
+  api: { get: vi.fn(),
+    getOptional: vi.fn(async () => ({ note: null })), post: vi.fn(), put: vi.fn(), delete: vi.fn(), upload: vi.fn() },
   API_BASE: "/api",
 }));
 

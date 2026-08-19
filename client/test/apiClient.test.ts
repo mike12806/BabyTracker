@@ -281,6 +281,54 @@ describe("Request deadlines and server errors", () => {
     expect(getStaleSince()).toBeNull();
   });
 
+  it("does not let an optional request's 5xx mark the screen stale", async () => {
+    // The regression this pins: the daily note is garnish, but its failure
+    // used to raise the banner, which armed the 15s retry loop, which
+    // refetched every mounted page — the "dashboard reloads a few times
+    // after it loads" symptom. A .catch() at the call site cannot prevent
+    // this; markOffline fires inside doFetch, before the caller sees it.
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 500,
+      headers: new Headers({ date: new Date().toUTCString() }),
+      json: () => Promise.resolve({ error: "Internal server error" }),
+    });
+
+    await expect(api.getOptional("/children/1/daily-note")).rejects.toThrow();
+
+    expect(getStaleSince()).toBeNull();
+  });
+
+  it("does not let an optional request's dropped connection mark the screen stale", async () => {
+    const timedOut = new DOMException("The operation was aborted.", "TimeoutError");
+    mockFetch.mockRejectedValueOnce(timedOut).mockRejectedValueOnce(timedOut);
+
+    await expect(api.getOptional("/children/1/daily-note")).rejects.toThrow();
+
+    expect(getStaleSince()).toBeNull();
+  });
+
+  it("still lets a required request mark the screen stale alongside an optional one", async () => {
+    // The opt-out is per request, not a global mute.
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 500,
+      headers: new Headers({ date: new Date().toUTCString() }),
+      json: () => Promise.resolve({ error: "boom" }),
+    });
+    await expect(api.getOptional("/children/1/daily-note")).rejects.toThrow();
+    expect(getStaleSince()).toBeNull();
+
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 500,
+      headers: new Headers({ date: new Date().toUTCString() }),
+      json: () => Promise.resolve({ error: "boom" }),
+    });
+    await expect(api.get("/feedings")).rejects.toThrow();
+    expect(getStaleSince()).not.toBeNull();
+  });
+
   it("recovers the banner state once a real response arrives", async () => {
     mockFetch.mockResolvedValueOnce({
       ok: false,

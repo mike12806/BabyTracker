@@ -11,6 +11,7 @@ vi.mock("../src/api/client", () => ({
   pingServer: vi.fn(async () => true),
   api: {
     get: vi.fn(),
+    getOptional: vi.fn(async () => ({ note: null })),
     post: vi.fn(),
     put: vi.fn(),
     delete: vi.fn(),
