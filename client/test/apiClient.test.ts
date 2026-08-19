@@ -99,6 +99,35 @@ describe("API Client", () => {
     expect(window.location.href).toBe("/api/auth/login?redirect=%2Ffeedings");
   });
 
+  it("navigates to the login route on 403 (Cloudflare Access rejecting a dead session at the edge)", async () => {
+    // Our own Worker never returns 403 — its auth failures are always 401
+    // (server/src/middleware/auth.ts). A 403 only comes from Cloudflare
+    // Access itself blocking a fetch/XHR request before it reaches the
+    // Worker, which happens for the same reason a 401 does: the session is
+    // gone. Confirmed against a real report — a child photo upload came back
+    // "Request failed (HTTP 403)" right after a PUT to the same endpoint
+    // succeeded, which is Access, not a validation failure in our own code.
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 403,
+      json: () => Promise.resolve({}),
+    });
+
+    await expect(api.get("/children")).rejects.toThrow("Unauthorized");
+    expect(window.location.href).toBe("/api/auth/login?redirect=%2Ffeedings");
+  });
+
+  it("navigates to the login route on 403 from api.upload", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 403,
+      json: () => Promise.resolve({}),
+    });
+
+    await expect(api.upload("/children/1/photo", new FormData())).rejects.toThrow("Unauthorized");
+    expect(window.location.href).toBe("/api/auth/login?redirect=%2Ffeedings");
+  });
+
   it("navigates to the login route when fetch throws (e.g. CF Access redirect blocked by CORS)", async () => {
     // The session probe is blocked the same way, confirming the session is gone.
     mockFetch.mockRejectedValue(new TypeError("Failed to fetch"));
@@ -140,6 +169,16 @@ describe("API Client", () => {
 
     mockFetch.mockResolvedValueOnce({ ok: true, status: 200, headers: new Headers() });
     await expect(pingServer()).resolves.toBe(true);
+  });
+
+  it("pingServer re-auths instead of retrying forever when Access rejects the probe with 403", async () => {
+    // Without this, an expired session would make every ping "unreachable"
+    // and the stale-data retry loop (client/src/hooks/useDataRefresh.tsx)
+    // would poll every 15s forever, never sending the user back to log in.
+    mockFetch.mockResolvedValueOnce({ ok: false, status: 403, headers: new Headers() });
+
+    await expect(pingServer()).resolves.toBe(false);
+    expect(window.location.href).toBe("/api/auth/login?redirect=%2Ffeedings");
   });
 
   it("does not re-send a failed POST while probing the session", async () => {
