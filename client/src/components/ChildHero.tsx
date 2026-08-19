@@ -5,6 +5,7 @@ import BedtimeIcon from "@mui/icons-material/Bedtime";
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 import { API_BASE } from "../api/client";
 import { boopMessage, childPhotoUrl, detailedAge, greeting, milestone } from "../utils/childMoments";
+import type { BoopLinePool } from "../utils/childMoments";
 import type { CategoryColorSet } from "../theme/categoryColors";
 import type { Child } from "../types/models";
 
@@ -61,6 +62,10 @@ interface Props {
    *  template. The sparkle only marks the former — a plain template sentence
    *  has no business claiming to be AI-written. */
   dailyNoteSource?: "ai" | "fallback" | null;
+  /** AI-written boop lines from the server pool (see boopLines.ts), merged in
+   *  behind the built-in ones. Undefined until the dashboard's one-time fetch
+   *  resolves — the card boops just fine without it. */
+  boopExtras?: BoopLinePool;
   /** Injectable for tests; defaults to the real clock. */
   now?: Date;
 }
@@ -70,7 +75,7 @@ interface Props {
  * him — a small reward for it. Everything else on this page is a number about
  * a baby; this is the baby.
  */
-export default function ChildHero({ child, napping, cat, isDark, dailyNote, dailyNoteSource, now = new Date() }: Props) {
+export default function ChildHero({ child, napping, cat, isDark, dailyNote, dailyNoteSource, boopExtras, now = new Date() }: Props) {
   const reduceMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
   const [taps, setTaps] = useState(0);
   const [boop, setBoop] = useState<string | null>(null);
@@ -107,7 +112,7 @@ export default function ChildHero({ child, napping, cat, isDark, dailyNote, dail
   const secondAccent = napping ? cat.note : cat.feed;
 
   const handleBoop = () => {
-    setBoop(boopMessage(child.first_name, taps, now));
+    setBoop(boopMessage(child.first_name, taps, now, boopExtras));
     setTaps((n) => n + 1);
     later(() => setBoop(null), BOOP_DURATION_MS);
 
