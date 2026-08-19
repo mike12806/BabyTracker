@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import {
   Alert,
@@ -57,7 +57,8 @@ import { useThemeMode } from "../hooks/useTheme";
 import { useVolumeUnit } from "../hooks/useVolumeUnit";
 import { formatRelativeTime } from "../utils/dateTime";
 import { unitLabel, VOLUME_UNITS, type VolumeUnit } from "../utils/feedingAmount";
-import { API_BASE } from "../api/client";
+import { api, API_BASE } from "../api/client";
+import { useNotification } from "../hooks/useNotification";
 import { childPhotoUrl } from "../utils/childMoments";
 import QuickLogDialog, { type QuickLogCategory } from "./QuickLogDialog";
 
@@ -96,6 +97,37 @@ export default function Layout() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [addSheetOpen, setAddSheetOpen] = useState(false);
   const [quickLogCategory, setQuickLogCategory] = useState<QuickLogCategory | null>(null);
+  // Deliberately not a visible button anywhere in the normal flow — this is a
+  // maintenance action ("regenerate today's AI note instead of waiting for
+  // the midnight cron"), not something either of us should be able to bump
+  // into by accident. Tapping the build info five times quickly reveals it
+  // for the rest of this drawer visit; it's hidden again next time the
+  // drawer opens.
+  const [buildTapCount, setBuildTapCount] = useState(0);
+  const [regeneratingNotes, setRegeneratingNotes] = useState(false);
+  const REVEAL_TAPS = 5;
+  const handleBuildTap = () => setBuildTapCount((n) => n + 1);
+  // Closing the drawer re-hides the reveal rather than leaving it unlocked
+  // for the rest of the session.
+  useEffect(() => {
+    if (!drawerOpen) setBuildTapCount(0);
+  }, [drawerOpen]);
+  const handleRegenerateNotes = async () => {
+    setRegeneratingNotes(true);
+    try {
+      const { written } = await api.post<{ written: { source: string }[] }>("/daily-notes/refresh", {});
+      notify(
+        written.length === 0
+          ? "No children to write a note for."
+          : `Wrote ${written.length} note${written.length === 1 ? "" : "s"} (${written.filter((n) => n.source === "ai").length} from AI).`,
+        "success",
+      );
+    } catch (err) {
+      notify(err instanceof Error ? err.message : "Failed to regenerate notes.", "error");
+    } finally {
+      setRegeneratingNotes(false);
+    }
+  };
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
@@ -104,6 +136,7 @@ export default function Layout() {
   const { unit: volumeUnit, setUnit: setVolumeUnit } = useVolumeUnit();
   const { staleSince } = useDataFreshness();
   const { refreshData } = useDataRefresh();
+  const { notify } = useNotification();
   const muiTheme = useTheme();
   const isMobile = useMediaQuery(muiTheme.breakpoints.down("md"));
   const isDark = muiTheme.palette.mode === "dark";
@@ -270,10 +303,29 @@ export default function Layout() {
             </Typography>
             {/* An installed app can lag a deploy by design — the reload waits
                 until it can't cost anyone a half-filled form — so this is how
-                you tell whether a device has actually picked one up. */}
-            <Typography variant="caption" color="text.secondary" noWrap>
+                you tell whether a device has actually picked one up. Tapping
+                it repeatedly reveals the buried "regenerate note" action
+                below — an ordinary label to anyone who doesn't already know
+                that, which is the point. */}
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              noWrap
+              onClick={handleBuildTap}
+              sx={{ cursor: "default", userSelect: "none" }}
+            >
               Build {__BUILD_ID__} · {new Date(__BUILD_TIME__).toLocaleString()}
             </Typography>
+            {buildTapCount >= REVEAL_TAPS && (
+              <Button
+                size="small"
+                onClick={handleRegenerateNotes}
+                disabled={regeneratingNotes}
+                sx={{ mt: 1, fontSize: 11.5, textTransform: "none", color: "text.secondary" }}
+              >
+                {regeneratingNotes ? "Regenerating…" : "Regenerate today's note"}
+              </Button>
+            )}
           </Box>
         </>
       )}
