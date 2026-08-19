@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { api, pingServer } from "../src/api/client";
+import { api, pingServer, REQUEST_TIMEOUT_MS } from "../src/api/client";
 import { getStaleSince, resetFreshness } from "../src/api/freshness";
 
 // We need to mock fetch at the global level to test the api client
@@ -32,6 +32,8 @@ describe("API Client", () => {
       headers: {
         "Content-Type": "application/json",
       },
+      // Every request carries a deadline — see REQUEST_TIMEOUT_MS.
+      signal: expect.any(AbortSignal),
     });
     expect(result).toEqual([{ id: 1 }]);
   });
@@ -52,6 +54,7 @@ describe("API Client", () => {
       headers: {
         "Content-Type": "application/json",
       },
+      signal: expect.any(AbortSignal),
     });
     expect(result).toEqual({ id: 1, first_name: "Emma" });
   });
@@ -71,6 +74,7 @@ describe("API Client", () => {
       headers: {
         "Content-Type": "application/json",
       },
+      signal: expect.any(AbortSignal),
     });
   });
 
@@ -170,5 +174,91 @@ describe("API Client", () => {
     window.location.href = "";
     await expect(api.get("/children")).rejects.toThrow("Unauthorized");
     expect(window.location.href).toBe("");
+  });
+});
+
+describe("Request deadlines and server errors", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    sessionStorage.clear();
+    resetFreshness();
+    Object.defineProperty(window, "location", {
+      writable: true,
+      value: { ...window.location, href: "", pathname: "/feedings", search: "" },
+    });
+  });
+
+  it("gives every request a deadline", async () => {
+    const timeoutSpy = vi.spyOn(AbortSignal, "timeout");
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      headers: new Headers({ date: new Date().toUTCString() }),
+      json: () => Promise.resolve([]),
+    });
+
+    await api.get("/feedings");
+
+    expect(timeoutSpy).toHaveBeenCalledWith(REQUEST_TIMEOUT_MS);
+    timeoutSpy.mockRestore();
+  });
+
+  it("treats a request abandoned at its deadline as a lost connection", async () => {
+    // What the deadline produces. Before it existed this state was
+    // unreachable — the request simply stayed pending, so nothing marked the
+    // screen stale and the retry loop never armed.
+    const timedOut = new DOMException("The operation was aborted.", "TimeoutError");
+    mockFetch.mockRejectedValueOnce(timedOut).mockRejectedValueOnce(timedOut);
+
+    await expect(api.get("/feedings")).rejects.toThrow();
+
+    expect(getStaleSince()).not.toBeNull();
+  });
+
+  it("treats a 5xx as a failed refresh, not a fresh one", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 500,
+      headers: new Headers({ date: new Date().toUTCString() }),
+      json: () => Promise.resolve({ error: "Internal server error" }),
+    });
+
+    await expect(api.get("/feedings")).rejects.toThrow();
+
+    // The server answered, but with nothing — the screen still shows whatever
+    // the last working refresh left there, so it is still stale.
+    expect(getStaleSince()).not.toBeNull();
+  });
+
+  it("clears staleness on a 4xx, which still proves the server is reachable", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 400,
+      headers: new Headers({ date: new Date().toUTCString() }),
+      json: () => Promise.resolve({ error: "start_time is required" }),
+    });
+
+    await expect(api.post("/feedings", {})).rejects.toThrow("start_time is required");
+    expect(getStaleSince()).toBeNull();
+  });
+
+  it("recovers the banner state once a real response arrives", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 503,
+      headers: new Headers({ date: new Date().toUTCString() }),
+      json: () => Promise.resolve({ error: "unavailable" }),
+    });
+    await expect(api.get("/feedings")).rejects.toThrow();
+    expect(getStaleSince()).not.toBeNull();
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      headers: new Headers({ date: new Date().toUTCString() }),
+      json: () => Promise.resolve([]),
+    });
+    await api.get("/feedings");
+    expect(getStaleSince()).toBeNull();
   });
 });

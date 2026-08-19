@@ -43,6 +43,7 @@ import type { DiaperChange } from "../types/models";
 import { isoToLocal } from "../utils/dateTime";
 import { buildCategoryColors } from "../theme/categoryColors";
 import { useEditEntryParam } from "../hooks/useEditEntryParam";
+import { useSaveGuard } from "../hooks/useSaveGuard";
 
 const KNOWN_COLOR_SWATCHES: Record<string, string> = {
   yellow: "#f9d71c",
@@ -102,6 +103,7 @@ export default function DiapersPage() {
   const { selectedChild } = useChildren();
   const { refreshKey } = useDataRefresh();
   const { notify } = useNotification();
+  const { saving, save } = useSaveGuard();
   const theme = useTheme();
   const isDark = theme.palette.mode === "dark";
   const cat = useMemo(() => buildCategoryColors(isDark), [isDark]);
@@ -157,19 +159,21 @@ export default function DiapersPage() {
       color: form.color || null,
       notes: form.notes || null,
     };
-    try {
-      if (editingEntry) {
-        await api.put(`/diaper-changes/${editingEntry.id}`, payload);
-      } else {
-        await api.post("/diaper-changes", { child_id: selectedChild.id, ...payload });
+    await save(payload, async (idempotencyKey) => {
+      try {
+        if (editingEntry) {
+          await api.put(`/diaper-changes/${editingEntry.id}`, payload);
+        } else {
+          await api.post("/diaper-changes", { child_id: selectedChild.id, ...payload, client_request_id: idempotencyKey });
+        }
+        setDialogOpen(false);
+        setEditingEntry(null);
+        setForm({ time: "", type: "wet", color: "", notes: "" });
+        await load();
+      } catch (err) {
+        notify(err instanceof Error ? err.message : "Failed to save diaper change.", "error");
       }
-      setDialogOpen(false);
-      setEditingEntry(null);
-      setForm({ time: "", type: "wet", color: "", notes: "" });
-      await load();
-    } catch (err) {
-      notify(err instanceof Error ? err.message : "Failed to save diaper change.", "error");
-    }
+    });
   };
 
   const handleDelete = async (id: number) => {
@@ -471,8 +475,8 @@ export default function DiapersPage() {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => { setDialogOpen(false); setEditingEntry(null); }}>Cancel</Button>
-          <Button onClick={handleSave} variant="contained" disabled={!form.time}>
-            Save
+          <Button onClick={handleSave} variant="contained" disabled={saving || !form.time}>
+            {saving ? "Saving…" : "Save"}
           </Button>
         </DialogActions>
       </Dialog>

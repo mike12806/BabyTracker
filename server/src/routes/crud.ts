@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import type { Env } from "../types/env.js";
+import { insertOnce, readClientRequestId } from "./idempotency.js";
 
 type AppEnv = { Bindings: Env; Variables: { userId: number; userEmail: string; userName: string } };
 
@@ -92,15 +93,27 @@ export function createChildScopedCrud(config: CrudRouteConfig) {
       return body[col];
     });
 
-    const result = await c.env.DB.prepare(
-      `INSERT INTO ${table} (${insertCols.join(", ")}) VALUES (${placeholders})`
-    )
-      .bind(...values)
-      .run();
+    // Deduplicated when the client sent a key, so a retried save — or a second
+    // tap that beat the first request home — returns the original entry rather
+    // than logging a second one.
+    const { rowId } = await insertOnce({
+      db: c.env.DB,
+      userId,
+      table,
+      clientRequestId: readClientRequestId(body),
+      insert: c.env.DB.prepare(
+        `INSERT INTO ${table} (${insertCols.join(", ")}) VALUES (${placeholders})`
+      ).bind(...values),
+    });
 
     const created = await c.env.DB.prepare(`SELECT * FROM ${table} WHERE id = ?`)
-      .bind(result.meta.last_row_id)
+      .bind(rowId)
       .first();
+
+    // The key was claimed by a create whose row has since been deleted. The
+    // create did happen, so this is not an error; there is simply nothing left
+    // to hand back, and resurrecting the entry would undo a deliberate delete.
+    if (!created) return c.json({ deleted: true });
 
     return c.json(created, 201);
   });

@@ -23,6 +23,7 @@ import { PUMPING_SIDES } from "../utils/pumping";
 import { pumpingLogUnit } from "../utils/feedingAmount";
 import { useVolumeUnit } from "../hooks/useVolumeUnit";
 import NowButton from "./NowButton";
+import { useSaveGuard } from "../hooks/useSaveGuard";
 
 export type QuickLogCategory = "feed" | "diaper" | "sleep" | "pump" | "tummy" | "note";
 
@@ -127,7 +128,7 @@ export default function QuickLogDialog({ category, onClose, onLogged }: QuickLog
   // are only stored as ml or oz, so a cc display logs millilitres.
   const defaultUnit = category === "pump" ? pumpingLogUnit(unit) : unit;
   const [form, setForm] = useState<FormState>(() => emptyForm(defaultUnit));
-  const [saving, setSaving] = useState(false);
+  const { saving, save } = useSaveGuard();
   const childId = selectedChild?.id ?? null;
 
   // What the form looked like when it opened — anything else means the user
@@ -172,78 +173,82 @@ export default function QuickLogDialog({ category, onClose, onLogged }: QuickLog
       notify("Select a child first.", "warning");
       return;
     }
-    setSaving(true);
-    try {
-      const startIso = form.time ? new Date(form.time).toISOString() : new Date().toISOString();
-      const endIso = form.end_time ? new Date(form.end_time).toISOString() : null;
+    await save({ category, form }, async (idempotencyKey) => {
+      try {
+        const startIso = form.time ? new Date(form.time).toISOString() : new Date().toISOString();
+        const endIso = form.end_time ? new Date(form.end_time).toISOString() : null;
 
-      if (category === "feed") {
-        const trackAmount = !isBreastFeeding(form.feedingType) && form.amount;
-        await api.post("/feedings", {
-          child_id: selectedChild.id,
-          type: form.feedingType,
-          start_time: startIso,
-          end_time: endIso,
-          amount: trackAmount ? parseFloat(form.amount) : null,
-          amount_unit: trackAmount ? form.amountUnit : null,
-          notes: form.notes || null,
-        });
-      } else if (category === "diaper") {
-        await api.post("/diaper-changes", {
-          child_id: selectedChild.id,
-          time: startIso,
-          type: form.diaperType,
-          color: form.color || null,
-          notes: form.notes || null,
-        });
-      } else if (category === "sleep") {
-        await api.post("/sleep", {
-          child_id: selectedChild.id,
-          start_time: startIso,
-          end_time: endIso,
-          is_nap: form.isNap ? 1 : 0,
-          notes: form.notes || null,
-        });
-      } else if (category === "pump") {
-        await api.post("/pumping", {
-          child_id: selectedChild.id,
-          start_time: startIso,
-          end_time: endIso,
-          side: form.pumpSide,
-          amount: form.amount ? parseFloat(form.amount) : null,
-          amount_unit: form.amount ? form.amountUnit : null,
-          notes: form.notes || null,
-        });
-      } else if (category === "tummy") {
-        await api.post("/tummy-time", {
-          child_id: selectedChild.id,
-          start_time: startIso,
-          end_time: endIso,
-          milestone: null,
-          notes: form.notes || null,
-        });
-      } else if (category === "note") {
-        if (!form.content.trim()) {
-          notify("Note can't be empty.", "warning");
-          setSaving(false);
-          return;
+        if (category === "feed") {
+          const trackAmount = !isBreastFeeding(form.feedingType) && form.amount;
+          await api.post("/feedings", {
+            child_id: selectedChild.id,
+            client_request_id: idempotencyKey,
+            type: form.feedingType,
+            start_time: startIso,
+            end_time: endIso,
+            amount: trackAmount ? parseFloat(form.amount) : null,
+            amount_unit: trackAmount ? form.amountUnit : null,
+            notes: form.notes || null,
+          });
+        } else if (category === "diaper") {
+          await api.post("/diaper-changes", {
+            child_id: selectedChild.id,
+            client_request_id: idempotencyKey,
+            time: startIso,
+            type: form.diaperType,
+            color: form.color || null,
+            notes: form.notes || null,
+          });
+        } else if (category === "sleep") {
+          await api.post("/sleep", {
+            child_id: selectedChild.id,
+            client_request_id: idempotencyKey,
+            start_time: startIso,
+            end_time: endIso,
+            is_nap: form.isNap ? 1 : 0,
+            notes: form.notes || null,
+          });
+        } else if (category === "pump") {
+          await api.post("/pumping", {
+            child_id: selectedChild.id,
+            client_request_id: idempotencyKey,
+            start_time: startIso,
+            end_time: endIso,
+            side: form.pumpSide,
+            amount: form.amount ? parseFloat(form.amount) : null,
+            amount_unit: form.amount ? form.amountUnit : null,
+            notes: form.notes || null,
+          });
+        } else if (category === "tummy") {
+          await api.post("/tummy-time", {
+            child_id: selectedChild.id,
+            client_request_id: idempotencyKey,
+            start_time: startIso,
+            end_time: endIso,
+            milestone: null,
+            notes: form.notes || null,
+          });
+        } else if (category === "note") {
+          if (!form.content.trim()) {
+            notify("Note can't be empty.", "warning");
+            return;
+          }
+          await api.post("/notes", {
+            child_id: selectedChild.id,
+            client_request_id: idempotencyKey,
+            time: startIso,
+            title: form.title || null,
+            content: form.content,
+          });
         }
-        await api.post("/notes", {
-          child_id: selectedChild.id,
-          time: startIso,
-          title: form.title || null,
-          content: form.content,
-        });
+        notify("Logged.", "success");
+        refreshData();
+        onLogged?.(category);
+        handleClose();
+      } catch (err) {
+        notify(err instanceof Error ? err.message : "Failed to save.", "error");
       }
-      notify("Logged.", "success");
-      refreshData();
-      onLogged?.(category);
-      handleClose();
-    } catch (err) {
-      notify(err instanceof Error ? err.message : "Failed to save.", "error");
-    } finally {
-      setSaving(false);
-    }
+    });
   };
 
   const timeField = (

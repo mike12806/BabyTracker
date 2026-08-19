@@ -34,6 +34,7 @@ import { buildCategoryColors } from "../theme/categoryColors";
 import PhotoCropDialog from "../components/PhotoCropDialog";
 import { PHOTO_INPUT_ACCEPT, describePickedFileProblem } from "../utils/imageCrop";
 import type { Child } from "../types/models";
+import { useSaveGuard } from "../hooks/useSaveGuard";
 
 function formatAge(birthDateStr: string): string {
   const [y, m, d] = birthDateStr.split("T")[0].split("-").map(Number);
@@ -59,6 +60,7 @@ export default function ChildrenPage() {
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const { children, selectedChild, selectChild, refreshChildren, defaultChildId, setDefaultChild } = useChildren();
   const { notify } = useNotification();
+  const { saving, save } = useSaveGuard();
   const isDark = theme.palette.mode === "dark";
   const cat = useMemo(() => buildCategoryColors(isDark), [isDark]);
 
@@ -180,27 +182,32 @@ export default function ChildrenPage() {
   };
 
   const handleSave = async () => {
-    try {
-      const saved = editing
-        ? await api.put<Child>(`/children/${editing.id}`, form)
-        : await api.post<Child>("/children", form);
+    await save(form, async (idempotencyKey) => {
+      try {
+        // The key rides on the create only — a PUT is already idempotent. A
+        // replayed key returns the child the first attempt made, so the photo
+        // below lands on that one rather than on a second Emma.
+        const saved = editing
+          ? await api.put<Child>(`/children/${editing.id}`, form)
+          : await api.post<Child>("/children", { ...form, client_request_id: idempotencyKey });
 
-      if (pendingPhoto) {
-        try {
-          await uploadPhoto(saved.id, pendingPhoto);
-        } catch (err) {
-          // The child itself is saved by now, so closing and reporting beats
-          // leaving the dialog open over a record that already exists — a
-          // second attempt would create a duplicate.
-          notify(err instanceof Error ? err.message : "Child saved, but the photo didn't upload.", "warning");
+        if (pendingPhoto) {
+          try {
+            await uploadPhoto(saved.id, pendingPhoto);
+          } catch (err) {
+            // The child itself is saved by now, so closing and reporting beats
+            // leaving the dialog open over a record that already exists — a
+            // second attempt would create a duplicate.
+            notify(err instanceof Error ? err.message : "Child saved, but the photo didn't upload.", "warning");
+          }
         }
-      }
 
-      closeDialog();
-      await refreshChildren();
-    } catch (err) {
-      notify(err instanceof Error ? err.message : "Failed to save child.", "error");
-    }
+        closeDialog();
+        await refreshChildren();
+      } catch (err) {
+        notify(err instanceof Error ? err.message : "Failed to save child.", "error");
+      }
+    });
   };
 
   const handleDelete = async (id: number) => {
@@ -548,8 +555,8 @@ export default function ChildrenPage() {
         </DialogContent>
         <DialogActions sx={{ px: 2, pb: 2 }}>
           <Button onClick={closeDialog}>Cancel</Button>
-          <Button onClick={handleSave} variant="contained" disabled={!form.first_name || !form.birth_date}>
-            {editing ? "Save" : "Add"}
+          <Button onClick={handleSave} variant="contained" disabled={saving || !form.first_name || !form.birth_date}>
+            {saving ? "Saving…" : editing ? "Save" : "Add"}
           </Button>
         </DialogActions>
       </Dialog>

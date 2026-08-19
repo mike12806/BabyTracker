@@ -259,6 +259,32 @@ describe("an app whose refresh failed", () => {
     expect(pingServer).not.toHaveBeenCalled();
   });
 
+  it("does not ping while the tab is in the background", async () => {
+    // A hidden tab is not waiting on anything, and the refresh behind the ping
+    // would decline to run anyway — so every tick was a request asked purely
+    // to have its answer discarded, for as long as the tab sat there.
+    renderPage(TodosPage);
+    await waitFor(() => expect(fetchCount("/todos")).toBe(1));
+
+    const hidden = vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+    await act(async () => {
+      markOffline();
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(STALE_RETRY_MS * 3);
+    });
+
+    expect(pingServer).not.toHaveBeenCalled();
+
+    // Coming back to it resumes, so nothing is stuck in the background state.
+    hidden.mockReturnValue("visible");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(STALE_RETRY_MS);
+    });
+    expect(pingServer).toHaveBeenCalled();
+    hidden.mockRestore();
+  });
+
   it("refetches the moment the connection comes back", async () => {
     renderPage(TodosPage);
     await waitFor(() => expect(fetchCount("/todos")).toBe(1));

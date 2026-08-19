@@ -45,6 +45,7 @@ import { isoToLocal } from "../utils/dateTime";
 import { buildCategoryColors } from "../theme/categoryColors";
 import type { Chip as _Chip } from "@mui/material";
 import { useEditEntryParam } from "../hooks/useEditEntryParam";
+import { useSaveGuard } from "../hooks/useSaveGuard";
 
 type FeverLevel = "normal" | "lowFever" | "highFever";
 
@@ -108,6 +109,7 @@ function dateSectionLabel(iso: string): string {
 export default function TemperaturePage() {
   const { selectedChild } = useChildren();
   const { notify } = useNotification();
+  const { saving, save } = useSaveGuard();
   const { refreshKey } = useDataRefresh();
   const theme = useTheme();
   const isDark = theme.palette.mode === "dark";
@@ -167,19 +169,21 @@ export default function TemperaturePage() {
       reading_unit: form.reading_unit,
       notes: form.notes || null,
     };
-    try {
-      if (editingEntry) {
-        await api.put(`/temperature/${editingEntry.id}`, payload);
-      } else {
-        await api.post("/temperature", { child_id: selectedChild.id, ...payload });
+    await save(payload, async (idempotencyKey) => {
+      try {
+        if (editingEntry) {
+          await api.put(`/temperature/${editingEntry.id}`, payload);
+        } else {
+          await api.post("/temperature", { child_id: selectedChild.id, ...payload, client_request_id: idempotencyKey });
+        }
+        setDialogOpen(false);
+        setEditingEntry(null);
+        setForm({ time: "", reading: "", reading_unit: "F", notes: "" });
+        await load();
+      } catch (err) {
+        notify(err instanceof Error ? err.message : "Failed to save temperature reading.", "error");
       }
-      setDialogOpen(false);
-      setEditingEntry(null);
-      setForm({ time: "", reading: "", reading_unit: "F", notes: "" });
-      await load();
-    } catch (err) {
-      notify(err instanceof Error ? err.message : "Failed to save temperature reading.", "error");
-    }
+    });
   };
 
   const handleDelete = async (id: number) => {
@@ -468,8 +472,8 @@ export default function TemperaturePage() {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => { setDialogOpen(false); setEditingEntry(null); }}>Cancel</Button>
-          <Button onClick={handleSave} variant="contained" disabled={!form.time || !form.reading}>
-            Save
+          <Button onClick={handleSave} variant="contained" disabled={saving || !form.time || !form.reading}>
+            {saving ? "Saving…" : "Save"}
           </Button>
         </DialogActions>
       </Dialog>

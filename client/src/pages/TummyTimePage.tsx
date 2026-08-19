@@ -44,6 +44,7 @@ import type { TummyTime } from "../types/models";
 import { isoToLocal } from "../utils/dateTime";
 import { buildCategoryColors } from "../theme/categoryColors";
 import { useEditEntryParam } from "../hooks/useEditEntryParam";
+import { useSaveGuard } from "../hooks/useSaveGuard";
 
 function relativeTime(iso: string): string {
   const ms = Date.now() - new Date(iso).getTime();
@@ -121,6 +122,7 @@ export default function TummyTimePage() {
   const { selectedChild } = useChildren();
   const { refreshKey } = useDataRefresh();
   const { notify } = useNotification();
+  const { saving, save } = useSaveGuard();
   const theme = useTheme();
   const isDark = theme.palette.mode === "dark";
   const cat = useMemo(() => buildCategoryColors(isDark), [isDark]);
@@ -177,19 +179,21 @@ export default function TummyTimePage() {
       milestone: form.milestone || null,
       notes: form.notes || null,
     };
-    try {
-      if (editingEntry) {
-        await api.put(`/tummy-time/${editingEntry.id}`, payload);
-      } else {
-        await api.post("/tummy-time", { child_id: selectedChild.id, ...payload });
+    await save(payload, async (idempotencyKey) => {
+      try {
+        if (editingEntry) {
+          await api.put(`/tummy-time/${editingEntry.id}`, payload);
+        } else {
+          await api.post("/tummy-time", { child_id: selectedChild.id, ...payload, client_request_id: idempotencyKey });
+        }
+        setDialogOpen(false);
+        setEditingEntry(null);
+        setForm({ start_time: "", end_time: "", milestone: "", notes: "" });
+        await load();
+      } catch (err) {
+        notify(err instanceof Error ? err.message : "Failed to save tummy time entry.", "error");
       }
-      setDialogOpen(false);
-      setEditingEntry(null);
-      setForm({ start_time: "", end_time: "", milestone: "", notes: "" });
-      await load();
-    } catch (err) {
-      notify(err instanceof Error ? err.message : "Failed to save tummy time entry.", "error");
-    }
+    });
   };
 
   const handleDelete = async (id: number) => {
@@ -486,8 +490,8 @@ export default function TummyTimePage() {
         </DialogContent>
         <DialogActions>
           <Button onClick={closeDialog}>Cancel</Button>
-          <Button onClick={handleSave} variant="contained" disabled={!form.start_time}>
-            Save
+          <Button onClick={handleSave} variant="contained" disabled={saving || !form.start_time}>
+            {saving ? "Saving…" : "Save"}
           </Button>
         </DialogActions>
       </Dialog>

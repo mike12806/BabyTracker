@@ -105,7 +105,7 @@ describe("sendDailySummary", () => {
 
     vi.setSystemTime(new Date("2024-01-15T05:00:00.000Z"));
 
-    const testEnv = { ...env, AWS_SES_ACCESS_KEY: "key", AWS_SES_SECRET_KEY: "secret", AWS_SES_REGION: "us-east-1", REPORT_FROM_EMAIL: "from@example.com" };
+    const testEnv = { ...env, EMAIL_QUEUE: undefined, AWS_SES_ACCESS_KEY: "key", AWS_SES_SECRET_KEY: "secret", AWS_SES_REGION: "us-east-1", REPORT_FROM_EMAIL: "from@example.com" };
     await sendDailySummary(testEnv as typeof env);
     return html;
   }
@@ -138,7 +138,7 @@ describe("sendDailySummary", () => {
 
     vi.setSystemTime(new Date("2024-01-15T05:00:00.000Z"));
 
-    const testEnv = { ...env, AWS_SES_ACCESS_KEY: "key", AWS_SES_SECRET_KEY: "secret", AWS_SES_REGION: "us-east-1", REPORT_FROM_EMAIL: "from@example.com" };
+    const testEnv = { ...env, EMAIL_QUEUE: undefined, AWS_SES_ACCESS_KEY: "key", AWS_SES_SECRET_KEY: "secret", AWS_SES_REGION: "us-east-1", REPORT_FROM_EMAIL: "from@example.com" };
     await sendDailySummary(testEnv as typeof env);
 
     // opted-out user should now receive the email
@@ -154,7 +154,7 @@ describe("sendDailySummary", () => {
       new Response(null, { status: 200 })
     );
 
-    const testEnv = { ...env, AWS_SES_ACCESS_KEY: "key", AWS_SES_SECRET_KEY: "secret", AWS_SES_REGION: "us-east-1", REPORT_FROM_EMAIL: "from@example.com" };
+    const testEnv = { ...env, EMAIL_QUEUE: undefined, AWS_SES_ACCESS_KEY: "key", AWS_SES_SECRET_KEY: "secret", AWS_SES_REGION: "us-east-1", REPORT_FROM_EMAIL: "from@example.com" };
     await sendDailySummary(testEnv as typeof env);
 
     expect(fetchSpy).not.toHaveBeenCalled();
@@ -176,7 +176,7 @@ describe("sendDailySummary", () => {
       new Response(null, { status: 200 })
     );
 
-    const testEnv = { ...env, AWS_SES_ACCESS_KEY: "key", AWS_SES_SECRET_KEY: "secret", AWS_SES_REGION: "us-east-1", REPORT_FROM_EMAIL: "from@example.com" };
+    const testEnv = { ...env, EMAIL_QUEUE: undefined, AWS_SES_ACCESS_KEY: "key", AWS_SES_SECRET_KEY: "secret", AWS_SES_REGION: "us-east-1", REPORT_FROM_EMAIL: "from@example.com" };
     await sendDailySummary(testEnv as typeof env);
 
     expect(fetchSpy).not.toHaveBeenCalled();
@@ -206,7 +206,7 @@ describe("sendDailySummary", () => {
     // Fix 'now' to a known cron fire time so the window is predictable
     vi.setSystemTime(new Date("2024-01-15T05:00:00.000Z"));
 
-    const testEnv = { ...env, AWS_SES_ACCESS_KEY: "key", AWS_SES_SECRET_KEY: "secret", AWS_SES_REGION: "us-east-1", REPORT_FROM_EMAIL: "from@example.com" };
+    const testEnv = { ...env, EMAIL_QUEUE: undefined, AWS_SES_ACCESS_KEY: "key", AWS_SES_SECRET_KEY: "secret", AWS_SES_REGION: "us-east-1", REPORT_FROM_EMAIL: "from@example.com" };
     await sendDailySummary(testEnv as typeof env);
 
     expect(fetchSpy).toHaveBeenCalledOnce();
@@ -242,7 +242,7 @@ describe("sendDailySummary", () => {
 
     vi.setSystemTime(new Date("2024-01-15T05:00:00.000Z"));
 
-    const testEnv = { ...env, AWS_SES_ACCESS_KEY: "key", AWS_SES_SECRET_KEY: "secret", AWS_SES_REGION: "us-east-1", REPORT_FROM_EMAIL: "from@example.com" };
+    const testEnv = { ...env, EMAIL_QUEUE: undefined, AWS_SES_ACCESS_KEY: "key", AWS_SES_SECRET_KEY: "secret", AWS_SES_REGION: "us-east-1", REPORT_FROM_EMAIL: "from@example.com" };
     await sendDailySummary(testEnv as typeof env);
 
     expect(capturedHtml).toContain("Change History");
@@ -329,7 +329,7 @@ describe("sendDailySummary", () => {
 
     vi.setSystemTime(new Date("2024-01-15T05:00:00.000Z"));
 
-    const testEnv = { ...env, AWS_SES_ACCESS_KEY: "key", AWS_SES_SECRET_KEY: "secret", AWS_SES_REGION: "us-east-1", REPORT_FROM_EMAIL: "from@example.com" };
+    const testEnv = { ...env, EMAIL_QUEUE: undefined, AWS_SES_ACCESS_KEY: "key", AWS_SES_SECRET_KEY: "secret", AWS_SES_REGION: "us-east-1", REPORT_FROM_EMAIL: "from@example.com" };
     // Should not throw even though first user fails
     await expect(sendDailySummary(testEnv as typeof env)).resolves.toBeUndefined();
 

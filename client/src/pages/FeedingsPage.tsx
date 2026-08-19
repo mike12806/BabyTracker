@@ -44,6 +44,7 @@ import { amountTotals, formatAmountTotal, formatEntryAmount, type VolumeUnit } f
 import { useVolumeUnit } from "../hooks/useVolumeUnit";
 import { buildCategoryColors } from "../theme/categoryColors";
 import { useEditEntryParam } from "../hooks/useEditEntryParam";
+import { useSaveGuard } from "../hooks/useSaveGuard";
 
 const FEEDING_TYPES = [
   { value: "breast_left", label: "Breast (Left)" },
@@ -111,6 +112,7 @@ export default function FeedingsPage() {
   const { selectedChild } = useChildren();
   const { refreshKey } = useDataRefresh();
   const { notify } = useNotification();
+  const { saving, save } = useSaveGuard();
   const { unit } = useVolumeUnit();
   const [feedings, setFeedings] = useState<Feeding[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -176,19 +178,21 @@ export default function FeedingsPage() {
       amount_unit: trackAmount ? form.amount_unit : null,
       notes: form.notes || null,
     };
-    try {
-      if (editingEntry) {
-        await api.put(`/feedings/${editingEntry.id}`, payload);
-      } else {
-        await api.post("/feedings", { child_id: selectedChild.id, ...payload });
+    await save(payload, async (idempotencyKey) => {
+      try {
+        if (editingEntry) {
+          await api.put(`/feedings/${editingEntry.id}`, payload);
+        } else {
+          await api.post("/feedings", { child_id: selectedChild.id, ...payload, client_request_id: idempotencyKey });
+        }
+        setDialogOpen(false);
+        setEditingEntry(null);
+        setForm({ type: "bottle_formula", start_time: "", end_time: "", amount: "", amount_unit: unit, notes: "" });
+        await load();
+      } catch (err) {
+        notify(err instanceof Error ? err.message : "Failed to save feeding.", "error");
       }
-      setDialogOpen(false);
-      setEditingEntry(null);
-      setForm({ type: "bottle_formula", start_time: "", end_time: "", amount: "", amount_unit: unit, notes: "" });
-      await load();
-    } catch (err) {
-      notify(err instanceof Error ? err.message : "Failed to save feeding.", "error");
-    }
+    });
   };
 
   const handleDelete = async (id: number) => {
@@ -526,8 +530,8 @@ export default function FeedingsPage() {
           >
             Cancel
           </Button>
-          <Button onClick={handleSave} variant="contained" disabled={!form.start_time}>
-            Save
+          <Button onClick={handleSave} variant="contained" disabled={saving || !form.start_time}>
+            {saving ? "Saving…" : "Save"}
           </Button>
         </DialogActions>
       </Dialog>

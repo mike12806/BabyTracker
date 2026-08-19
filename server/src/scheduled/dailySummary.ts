@@ -1,4 +1,15 @@
 import type { Env } from "../types/env.js";
+import { pruneClientRequests } from "../routes/idempotency.js";
+
+/**
+ * Queue names, as declared in `wrangler.toml`.
+ *
+ * Duplicated from the config because a Worker with more than one consumer gets
+ * one `queue()` handler for all of them and has to tell the batches apart by
+ * name. `queueNames.test.ts` fails if these and the config drift.
+ */
+export const DAILY_SUMMARY_QUEUE = "baby-tracker-daily-summary";
+export const DAILY_SUMMARY_DLQ = "baby-tracker-daily-summary-dlq";
 
 // ── HTML helpers ──────────────────────────────────────────────────────────────
 
@@ -716,6 +727,121 @@ export function computeDailyWindow(now: Date): {
   return { windowStart, windowEnd, reportDateLabel };
 }
 
+/**
+ * One user's report, as it travels through the queue.
+ *
+ * The window travels with it rather than being recomputed on arrival. A
+ * delivery that retries past midnight would otherwise quietly report a
+ * different day than the one it was queued for — and the retry exists to
+ * deliver *that* report, not a newer one.
+ */
+export interface DailySummaryJob {
+  userId: number;
+  email: string;
+  name: string;
+  volumeUnit: VolumeUnit;
+  windowStart: string;
+  windowEnd: string;
+  reportDateLabel: string;
+}
+
+export interface DailySummaryOutcome {
+  sent: boolean;
+  /** Why nothing was sent, when nothing was. */
+  reason?: "no-children" | "no-activity";
+}
+
+function readVolumeUnit(value: string | null | undefined): VolumeUnit {
+  return value === "oz" || value === "cc" || value === "ml" ? value : DEFAULT_VOLUME_UNIT;
+}
+
+/**
+ * Build and send one user's summary.
+ *
+ * Throws if the send fails, which is the point: as a queue consumer that is
+ * what asks for the message to be retried. Called directly, it is the caller's
+ * to catch.
+ */
+export async function deliverDailySummary(
+  env: Env,
+  job: DailySummaryJob,
+): Promise<DailySummaryOutcome> {
+  const { windowStart, windowEnd, reportDateLabel, volumeUnit: unit } = job;
+
+  const { results: children } = await env.DB.prepare(`
+    SELECT c.id, c.first_name, c.last_name, c.birth_date
+    FROM children c
+    JOIN user_children uc ON uc.child_id = c.id
+    WHERE uc.user_id = ?
+    ORDER BY c.first_name
+  `).bind(job.userId).all<ChildRow>();
+
+  if (children.length === 0) return { sent: false, reason: "no-children" };
+
+  const childData = await Promise.all(
+    children.map(async (child) => ({
+      child,
+      data: await fetchChildData(env, child.id, windowStart, windowEnd),
+    })),
+  );
+
+  // Skip email if there is no activity at all across all children
+  const hasActivity = childData.some(({ data }) =>
+    data.feedings.length > 0 ||
+    data.diapers.length > 0 ||
+    data.sleepSessions.length > 0 ||
+    data.tummyTimes.length > 0 ||
+    data.pumping.length > 0 ||
+    data.temperatures.length > 0 ||
+    data.notes.length > 0
+  );
+
+  if (!hasActivity) {
+    console.log(`No activity for ${job.email} on ${reportDateLabel}, skipping email`);
+    return { sent: false, reason: "no-activity" };
+  }
+
+  const childSections = childData.map(({ child, data }) =>
+    buildChildSection(
+      child,
+      data.feedings,
+      data.diapers,
+      data.sleepSessions,
+      data.tummyTimes,
+      data.pumping,
+      data.temperatures,
+      data.notes,
+      unit,
+    )
+  );
+
+  const historyEntries = await fetchActivityHistory(env, job.userId, windowStart, windowEnd, unit);
+  const historySection = buildHistorySection(historyEntries);
+
+  const html = buildEmailHtml(job.name, reportDateLabel, childSections, historySection);
+  const subject = `Baby Tracker: Daily Summary – ${reportDateLabel}`;
+
+  await sendEmail(env, job.email, subject, html);
+  console.log(`Daily summary sent to ${job.email}`);
+  return { sent: true };
+}
+
+/**
+ * The daily cron: work out who gets a report, and hand each one off.
+ *
+ * Rendering and sending used to happen right here, inside the cron, and a
+ * failure was caught, logged, and dropped. SES throttles and it has bad
+ * minutes; cron triggers do not re-run. So a summary lost that way was lost
+ * for good, and the invocation still reported success.
+ *
+ * Queued, each user's report is a message that survives a failed send: the
+ * consumer asks for it back, and after `max_retries` it lands in the dead
+ * letter queue instead of vanishing. The queue also gets the per-user work out
+ * of one invocation's budget.
+ *
+ * Without the binding — local dev, and the tests — it sends inline exactly as
+ * it did before. The change is where retries come from, not what is sent.
+ */
 export async function sendDailySummary(env: Env): Promise<void> {
   const now = new Date();
   const { windowStart, windowEnd, reportDateLabel } = computeDailyWindow(now);
@@ -728,69 +854,100 @@ export async function sendDailySummary(env: Env): Promise<void> {
     LEFT JOIN user_settings s ON s.user_id = u.id
   `).all<UserRow>();
 
-  for (const user of users) {
-    const unit: VolumeUnit =
-      user.volume_unit === "oz" || user.volume_unit === "cc" || user.volume_unit === "ml"
-        ? user.volume_unit
-        : DEFAULT_VOLUME_UNIT;
-    try {
-      const { results: children } = await env.DB.prepare(`
-        SELECT c.id, c.first_name, c.last_name, c.birth_date
-        FROM children c
-        JOIN user_children uc ON uc.child_id = c.id
-        WHERE uc.user_id = ?
-        ORDER BY c.first_name
-      `).bind(user.id).all<ChildRow>();
+  const jobs: DailySummaryJob[] = users.map((user) => ({
+    userId: user.id,
+    email: user.email,
+    name: user.name,
+    volumeUnit: readVolumeUnit(user.volume_unit),
+    windowStart,
+    windowEnd,
+    reportDateLabel,
+  }));
 
-      if (children.length === 0) continue;
-
-      const childData = await Promise.all(
-        children.map(async (child) => ({
-          child,
-          data: await fetchChildData(env, child.id, windowStart, windowEnd),
-        })),
-      );
-
-      // Skip email if there is no activity at all across all children
-      const hasActivity = childData.some(({ data }) =>
-        data.feedings.length > 0 ||
-        data.diapers.length > 0 ||
-        data.sleepSessions.length > 0 ||
-        data.tummyTimes.length > 0 ||
-        data.pumping.length > 0 ||
-        data.temperatures.length > 0 ||
-        data.notes.length > 0
-      );
-
-      if (!hasActivity) {
-        console.log(`No activity for ${user.email} on ${reportDateLabel}, skipping email`);
-        continue;
+  const queue = env.EMAIL_QUEUE;
+  if (queue) {
+    // One message per user, not one for the batch: a send that fails for one
+    // reader must not drag the others back through a retry that would deliver
+    // their report twice.
+    for (const job of jobs) {
+      try {
+        await queue.send(job);
+      } catch (error) {
+        console.error(`Failed to enqueue daily summary for ${job.email}:`, error);
       }
-
-      const childSections = childData.map(({ child, data }) =>
-        buildChildSection(
-          child,
-          data.feedings,
-          data.diapers,
-          data.sleepSessions,
-          data.tummyTimes,
-          data.pumping,
-          data.temperatures,
-          data.notes,
-          unit,
-        )
-      );
-
-      const historyEntries = await fetchActivityHistory(env, user.id, windowStart, windowEnd, unit);
-      const historySection = buildHistorySection(historyEntries);
-
-      const html = buildEmailHtml(user.name, reportDateLabel, childSections, historySection);
-      const subject = `Baby Tracker: Daily Summary – ${reportDateLabel}`;
-
-      await sendEmail(env, user.email, subject, html);
-      console.log(`Daily summary sent to ${user.email}`);
-    } catch (error) {
-      console.error(`Failed to send daily summary to ${user.email}:`, error);
+    }
+  } else {
+    for (const job of jobs) {
+      try {
+        await deliverDailySummary(env, job);
+      } catch (error) {
+        console.error(`Failed to send daily summary to ${job.email}:`, error);
+      }
     }
   }
+
+  // Piggy-backing on the one job that already runs daily. Idempotency keys are
+  // only ever consulted in the minutes after they are issued, so without this
+  // the table grows forever for no gain.
+  try {
+    const pruned = await pruneClientRequests(env.DB);
+    if (pruned > 0) console.log(`Pruned ${pruned} expired idempotency keys`);
+  } catch (error) {
+    console.error("Failed to prune idempotency keys:", error);
+  }
+}
+
+/**
+ * Tell the operator that a reader's summary was given up on.
+ *
+ * The dead letter queue is where a report goes after `max_retries`, and until
+ * now nothing looked in it — the message would sit there for its retention
+ * period and expire unseen, which is only marginally better than the drop it
+ * replaced. This is the part that makes it a real backstop.
+ *
+ * It reports over the same channel that just failed, which is worth being
+ * honest about: if SES is down outright, this does not arrive either. It earns
+ * its place on the ordinary failures — a bounce, a suppression, a throttle
+ * against one address — where the rest of SES is fine and only that one report
+ * did not make it.
+ */
+export async function alertDeadLetteredSummary(
+  env: Env,
+  job: DailySummaryJob,
+  attempts: number,
+): Promise<void> {
+  const to = env.ALERT_EMAIL ?? env.REPORT_FROM_EMAIL;
+  if (!to) {
+    // Nowhere to send it. Still worth a log line — the report is gone either
+    // way, and this is the only trace of it left.
+    console.error(
+      `Daily summary for ${job.email} (${job.reportDateLabel}) was dead-lettered, and no ALERT_EMAIL or REPORT_FROM_EMAIL is set to report it to`,
+    );
+    return;
+  }
+
+  const html = `<!DOCTYPE html>
+<html><body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#333">
+  <h2 style="margin:0 0 12px">A daily summary could not be delivered</h2>
+  <p style="margin:0 0 16px">
+    Baby Tracker gave up on one report after ${esc(String(attempts))} attempt${attempts === 1 ? "" : "s"}.
+    Nothing else was affected — other readers' summaries are sent independently.
+  </p>
+  <table cellpadding="6" style="border-collapse:collapse;font-size:14px">
+    <tr><td style="color:#888">Reader</td><td>${esc(job.name)} &lt;${esc(job.email)}&gt;</td></tr>
+    <tr><td style="color:#888">Report</td><td>${esc(job.reportDateLabel)}</td></tr>
+    <tr><td style="color:#888">Window</td><td>${esc(job.windowStart)} – ${esc(job.windowEnd)}</td></tr>
+  </table>
+  <p style="margin:16px 0 0;color:#888;font-size:13px">
+    The data itself is safe — this is only the emailed summary. The Worker logs
+    for the send that failed will say why.
+  </p>
+</body></html>`;
+
+  await sendEmail(
+    env,
+    to,
+    `Baby Tracker: daily summary not delivered – ${job.reportDateLabel}`,
+    html,
+  );
 }
