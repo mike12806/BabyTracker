@@ -24,6 +24,24 @@ export const REQUEST_TIMEOUT_MS = 12_000;
  */
 export const PROBE_TIMEOUT_MS = 6_000;
 
+/**
+ * Is this status the API's own JWT check failing, or something upstream of
+ * it doing the same job?
+ *
+ * Our Worker never returns 403 — every auth rejection it makes is a 401 (see
+ * `server/src/middleware/auth.ts`). Cloudflare Access does return 403,
+ * though, and for exactly the equivalent reason: for a page navigation an
+ * expired session gets redirected to the login flow, but for a `fetch`/XHR
+ * request — which is everything this client sends — Access answers 403
+ * directly instead. So a 403 from this API can only be Access rejecting a
+ * dead session at the edge before the request ever reached the Worker, and
+ * belongs in the same bucket as our own 401: re-authenticate, don't report it
+ * as a request failure.
+ */
+function isAuthFailure(status: number): boolean {
+  return status === 401 || status === 403;
+}
+
 function triggerReauth(): void {
   // Navigate (don't reload) to an /api/* URL: the service worker serves
   // cached HTML for normal navigations, so a reload never reaches Cloudflare
@@ -80,8 +98,15 @@ export async function pingServer(): Promise<boolean> {
       credentials: "include",
       signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
     });
-    // A 401 is an expired Access session, not reachability; the refresh's own
-    // requests will hit the same wall and start the re-auth flow.
+    // An expired session (401 from our Worker, or 403 from Access rejecting
+    // it before that) isn't a reachability problem — it needs re-auth, not an
+    // endless "can't refresh" retry. Left unhandled, this ping would report
+    // "unreachable" forever and the stale-data retry loop would poll every
+    // 15s without ever sending the user back to log in.
+    if (isAuthFailure(res.status)) {
+      triggerReauth();
+      return false;
+    }
     return res.ok && res.headers?.get(FROM_CACHE_HEADER) !== "1";
   } catch {
     return false;
@@ -161,7 +186,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     },
   });
 
-  if (res.status === 401) {
+  if (isAuthFailure(res.status)) {
     triggerReauth();
     throw new Error("Unauthorized");
   }
@@ -191,7 +216,7 @@ export const api = {
       body: formData,
     });
 
-    if (res.status === 401) {
+    if (isAuthFailure(res.status)) {
       triggerReauth();
       throw new Error("Unauthorized");
     }
