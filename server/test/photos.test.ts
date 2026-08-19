@@ -78,14 +78,38 @@ describe("Child Photo API (R2)", () => {
     expect(body.error).toContain("Invalid file type");
   });
 
+  it("POST /api/children/:id/photo accepts a phone-sized photo", async () => {
+    // The cap used to be 2 MB, below what any phone camera produces, so every
+    // real upload came back "File too large".
+    const formData = new FormData();
+    formData.append("photo", createTestImage("image/jpeg", 4 * 1024 * 1024));
+
+    const res = await api.postForm("/api/children/1/photo", formData);
+    expect(res.status).toBe(200);
+  });
+
   it("POST /api/children/:id/photo rejects oversized files", async () => {
     const formData = new FormData();
-    formData.append("photo", createTestImage("image/png", 3 * 1024 * 1024));
+    formData.append("photo", createTestImage("image/png", 11 * 1024 * 1024));
 
     const res = await api.postForm("/api/children/1/photo", formData);
     expect(res.status).toBe(400);
     const body = (await res.json()) as { error: string };
     expect(body.error).toContain("too large");
+    // The message names both the size sent and the limit, so the user can see
+    // how far over they are.
+    expect(body.error).toContain("11 MB");
+    expect(body.error).toContain("10 MB");
+  });
+
+  it("POST /api/children/:id/photo rejects an empty file", async () => {
+    const formData = new FormData();
+    formData.append("photo", createTestImage("image/png", 0));
+
+    const res = await api.postForm("/api/children/1/photo", formData);
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toContain("empty");
   });
 
   it("returns 404 for photo on non-existent child", async () => {
