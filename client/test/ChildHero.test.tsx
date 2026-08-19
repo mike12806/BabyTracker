@@ -86,6 +86,16 @@ describe("ChildHero", () => {
     ).toBeInTheDocument();
   });
 
+  it("marks an AI-written note with the sparkle icon", () => {
+    renderHero({ dailyNote: "Mikey had a steady day.", dailyNoteSource: "ai" });
+    expect(screen.getByTitle("Written by AI")).toBeInTheDocument();
+  });
+
+  it("does not mark the fallback template as AI-written", () => {
+    renderHero({ dailyNote: "Mikey had a steady day.", dailyNoteSource: "fallback" });
+    expect(screen.queryByTitle("Written by AI")).not.toBeInTheDocument();
+  });
+
   it("is a complete card with no note yet", () => {
     renderHero({ dailyNote: null });
     expect(screen.getByText("Otto")).toBeInTheDocument();

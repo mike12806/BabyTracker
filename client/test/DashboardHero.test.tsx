@@ -65,14 +65,26 @@ describe("Dashboard – the hero card", () => {
     expect(photo.getAttribute("src")).toContain("/api/children/1/photo");
   });
 
-  it("shows the note the server wrote", async () => {
+  it("shows the note the server wrote, marked as AI-written", async () => {
     mockApi.get.mockImplementation((url: string) => {
-      if (url.includes("/daily-note")) return Promise.resolve({ note: { body: NOTE } });
+      if (url.includes("/daily-note")) return Promise.resolve({ note: { body: NOTE, source: "ai" } });
       return Promise.resolve([]);
     });
 
     render(<Dashboard />, { wrapper: Wrapper });
     expect(await screen.findByText(NOTE)).toBeInTheDocument();
+    expect(screen.getByTitle("Written by AI")).toBeInTheDocument();
+  });
+
+  it("does not mark a fallback-template note as AI-written", async () => {
+    mockApi.get.mockImplementation((url: string) => {
+      if (url.includes("/daily-note")) return Promise.resolve({ note: { body: NOTE, source: "fallback" } });
+      return Promise.resolve([]);
+    });
+
+    render(<Dashboard />, { wrapper: Wrapper });
+    expect(await screen.findByText(NOTE)).toBeInTheDocument();
+    expect(screen.queryByTitle("Written by AI")).not.toBeInTheDocument();
   });
 
   it("reads the note once per load, never per render", async () => {

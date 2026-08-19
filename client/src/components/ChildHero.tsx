@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Box, ButtonBase, Typography, useMediaQuery } from "@mui/material";
 import { keyframes } from "@emotion/react";
 import BedtimeIcon from "@mui/icons-material/Bedtime";
+import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 import { API_BASE } from "../api/client";
 import { boopMessage, childPhotoUrl, detailedAge, greeting, milestone } from "../utils/childMoments";
 import type { CategoryColorSet } from "../theme/categoryColors";
@@ -56,6 +57,10 @@ interface Props {
   /** Yesterday's blurb, written once a day by the server. Absent until the
    *  first cron run, and simply not rendered when there is none. */
   dailyNote?: string | null;
+  /** Whether that blurb came from the model or the deterministic fallback
+   *  template. The sparkle only marks the former — a plain template sentence
+   *  has no business claiming to be AI-written. */
+  dailyNoteSource?: "ai" | "fallback" | null;
   /** Injectable for tests; defaults to the real clock. */
   now?: Date;
 }
@@ -65,7 +70,7 @@ interface Props {
  * him — a small reward for it. Everything else on this page is a number about
  * a baby; this is the baby.
  */
-export default function ChildHero({ child, napping, cat, isDark, dailyNote, now = new Date() }: Props) {
+export default function ChildHero({ child, napping, cat, isDark, dailyNote, dailyNoteSource, now = new Date() }: Props) {
   const reduceMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
   const [taps, setTaps] = useState(0);
   const [boop, setBoop] = useState<string | null>(null);
@@ -280,22 +285,29 @@ export default function ChildHero({ child, napping, cat, isDark, dailyNote, now 
           {boop ?? age}
         </Typography>
         {dailyNote && !boop && (
-          <Typography
-            sx={{
-              fontSize: { xs: 12, sm: 12.5 },
-              color: "text.secondary",
-              lineHeight: 1.35,
-              mt: 0.5,
-              // Two lines on a phone, then ellipsis — the card must not grow
-              // to fit whatever the model felt like writing.
-              display: "-webkit-box",
-              WebkitLineClamp: 3,
-              WebkitBoxOrient: "vertical",
-              overflow: "hidden",
-            }}
-          >
-            {dailyNote}
-          </Typography>
+          <Box sx={{ display: "flex", alignItems: "flex-start", gap: 0.5, mt: 0.5 }}>
+            {dailyNoteSource === "ai" && (
+              <AutoAwesomeIcon
+                titleAccess="Written by AI"
+                sx={{ fontSize: 13, color: cat.tummy.solid, opacity: 0.85, mt: "1px", flexShrink: 0 }}
+              />
+            )}
+            <Typography
+              sx={{
+                fontSize: { xs: 12, sm: 12.5 },
+                color: "text.secondary",
+                lineHeight: 1.35,
+                // Two lines on a phone, then ellipsis — the card must not grow
+                // to fit whatever the model felt like writing.
+                display: "-webkit-box",
+                WebkitLineClamp: 3,
+                WebkitBoxOrient: "vertical",
+                overflow: "hidden",
+              }}
+            >
+              {dailyNote}
+            </Typography>
+          </Box>
         )}
         {today && !boop && (
           <Box

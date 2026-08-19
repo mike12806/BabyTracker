@@ -96,8 +96,12 @@ paid rates.
 Because the volume is that low, the model is chosen on writing quality rather
 than price: the gap between the cheapest and the largest plausible candidate is
 a few cents a year, while the gap in how the sentences read is not. The default
-is Gemma 4 26B (an MoE with 4B active — fast, and not a reasoning model, so
-there is no thinking trace to strip).
+is Gemma 4 26B (an MoE with 4B active — fast, and markedly better prose than
+an 8B). It has "thinking mode," which changes its response shape rather than
+its cost: Workers AI answers models like this one OpenAI-chat-completions-style
+(`choices[0].message.content`, with any reasoning trace already separated into
+`.reasoning_content` beside it), not the flatter `{ response }` shape simpler
+models use. `extractModelText` in `dailyNote.ts` reads both.
 
 There is no fallback to worry about breaking: with no `AI` binding — local dev
 and the tests have none — or on any model error, a deterministic template
@@ -105,7 +109,12 @@ writes the same true sentences in a fixed voice, and the row records which
 wrote it (`source` is `ai` or `fallback`, so a run of fallbacks is how you spot
 a misconfigured binding).
 
-The note is text-only. No photo is ever sent to a model.
+The note is text-only. No photo is ever sent to a model. Feeding amounts in it
+are always in ounces, regardless of any reader's own mL/oz display
+preference — it's one row shared by everyone who reads it, so it can't
+actually be per-user. A small sparkle icon sits next to the note on the
+dashboard, but only when `source` is `ai`; the fallback template gets no
+sparkle, since it isn't AI-written.
 
 To change the model, set `DAILY_NOTE_MODEL` in `server/wrangler.toml`.
 

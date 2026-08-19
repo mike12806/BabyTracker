@@ -178,6 +178,39 @@ describe("generateNoteBody", () => {
     });
   });
 
+  it("reads the reply from a model that answers in the chat-completions shape", async () => {
+    // gemma-4-26b-a4b-it — the shipped default — answers this way, not with
+    // a flat `response` string. A model with "reasoning" also separates its
+    // thinking trace into `reasoning_content`, which must be ignored: it is
+    // scratch work, not the note.
+    const AI = {
+      run: vi.fn(async () => ({
+        choices: [
+          {
+            message: {
+              role: "assistant",
+              content: "Mikey ate well and slept through. You two are doing great.",
+              reasoning_content: "The user wants two sentences about yesterday's feeds and sleep...",
+            },
+            finish_reason: "stop",
+          },
+        ],
+        usage: { prompt_tokens: 300, completion_tokens: 40 },
+      })),
+    };
+    const result = await generateNoteBody(
+      { ...env, AI } as unknown as typeof env,
+      "Mikey",
+      "4 months old",
+      day({ feeds: 6 }),
+      [],
+    );
+    expect(result).toEqual({
+      source: "ai",
+      body: "Mikey ate well and slept through. You two are doing great.",
+    });
+  });
+
   it("falls back rather than failing when the model errors", async () => {
     const AI = { run: vi.fn(async () => { throw new Error("out of capacity"); }) };
     vi.spyOn(console, "error").mockImplementation(() => {});
@@ -306,6 +339,17 @@ describe("refreshDailyNotes", () => {
     ).all();
     expect(results).toHaveLength(2);
     expect(results[0]).toMatchObject({ child_id: 1, note_date: "2024-01-14", source: "fallback" });
+  });
+
+  it("talks in ounces regardless of any reader's own display setting", async () => {
+    // A 100 mL feed logged is ~3.4 oz. If a household setting leaked in here,
+    // this would say mL instead, or 100 instead of 3.4.
+    await env.DB.batch([
+      env.DB.prepare("INSERT INTO users (id, email, name) VALUES (1, 'a@example.com', 'A')"),
+      env.DB.prepare("INSERT INTO user_settings (user_id, volume_unit) VALUES (1, 'ml')"),
+    ]);
+    const written = await refreshDailyNotes({ ...env, AI: undefined } as typeof env, NOW);
+    expect(written.find((n) => n.child_id === 1)?.body).toContain("oz");
   });
 
   it("calls the model once per child, not once per reader", async () => {
