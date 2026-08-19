@@ -18,6 +18,7 @@ import { settings } from "../src/routes/settings.js";
 import { medications } from "../src/routes/medications.js";
 import { activity } from "../src/routes/activity.js";
 import { todos } from "../src/routes/todos.js";
+import { dailyNotes } from "../src/routes/dailyNotes.js";
 import type { MiddlewareHandler } from "hono";
 import migration0001 from "../migrations/0001_initial_schema.sql?raw";
 import migration0002 from "../migrations/0002_add_picture_blob.sql?raw";
@@ -89,6 +90,7 @@ export function createTestApp() {
   app.route("/api/medications", medications);
   app.route("/api/activity", activity);
   app.route("/api/todos", todos);
+  app.route("/api/daily-notes", dailyNotes);
 
   return app;
 }
