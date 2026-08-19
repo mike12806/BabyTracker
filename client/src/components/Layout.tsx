@@ -115,12 +115,21 @@ export default function Layout() {
   const handleRegenerateNotes = async () => {
     setRegeneratingNotes(true);
     try {
-      const { written } = await api.post<{ written: { source: string }[] }>("/daily-notes/refresh", {});
+      const { written } = await api.post<{ written: { source: string; reason?: string }[] }>(
+        "/daily-notes/refresh",
+        {},
+      );
+      const fromAi = written.filter((n) => n.source === "ai").length;
+      // When nothing came from the model, say why rather than just "0 from
+      // AI" — that number alone sent us guessing at the cause twice.
+      const why = [...new Set(written.map((n) => n.reason).filter(Boolean))].join("; ");
       notify(
         written.length === 0
           ? "No children to write a note for."
-          : `Wrote ${written.length} note${written.length === 1 ? "" : "s"} (${written.filter((n) => n.source === "ai").length} from AI).`,
-        "success",
+          : fromAi === 0 && why
+            ? `Wrote ${written.length} note${written.length === 1 ? "" : "s"}, none from AI — ${why}`
+            : `Wrote ${written.length} note${written.length === 1 ? "" : "s"} (${fromAi} from AI).`,
+        fromAi === 0 && written.length > 0 ? "warning" : "success",
       );
     } catch (err) {
       notify(err instanceof Error ? err.message : "Failed to regenerate notes.", "error");
