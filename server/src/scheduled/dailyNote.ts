@@ -16,8 +16,25 @@
 import type { Env } from "../types/env.js";
 import { computeDailyWindow, volumeTotal, type AmountRow, type VolumeUnit } from "./dailySummary.js";
 
-/** Small, fast, and free-plan eligible — this is two sentences of prose. */
-export const DEFAULT_NOTE_MODEL = "@cf/meta/llama-3.1-8b-instruct-fast";
+/**
+ * The model that writes the note.
+ *
+ * Picked on writing quality, not price. At one generation per child per day
+ * (~350 input tokens, ~55 out) every plausible candidate on Workers AI costs
+ * between one and ten cents a *year* and uses well under 1% of the 10,000
+ * Neuron daily free allocation — so cost cannot sensibly decide this, and an
+ * 8B model is exactly where warm two-sentence prose turns into "Great job,
+ * keep it up!". Gemma 4 26B is an MoE (4B active), so it is fast and cheap
+ * while writing markedly better than an 8B, and it is not a reasoning model —
+ * nothing here benefits from a thinking trace we would only have to strip.
+ *
+ * Note the exact slug: Cloudflare's prose sometimes shortens these, but this
+ * is the form the model catalog and pricing table use. Getting it wrong is a
+ * quiet failure — every call throws, every note falls back to the template,
+ * and the card keeps working — so `refreshDailyNotes` logs loudly when a whole
+ * run falls back despite a binding being present.
+ */
+export const DEFAULT_NOTE_MODEL = "@cf/google/gemma-4-26b-a4b-it";
 
 /** The card gives this one line; anything longer gets clipped on a phone. */
 export const MAX_NOTE_LENGTH = 240;
@@ -374,6 +391,16 @@ export async function refreshDailyNotes(env: Env, now = new Date()): Promise<Dai
       // One child's note failing must not cost the others theirs.
       console.error(`Failed to write the daily note for child ${child.id}:`, error);
     }
+  }
+
+  // A wrong model slug, a revoked binding, or a model retired out from under us
+  // all look identical from the card: the note still appears, just written by
+  // the template. Nothing else would ever surface that, so say it plainly.
+  if (env.AI && written.length > 0 && written.every((n) => n.source === "fallback")) {
+    console.warn(
+      `Every daily note fell back to the template despite an AI binding — check that ` +
+        `"${env.DAILY_NOTE_MODEL || DEFAULT_NOTE_MODEL}" is a valid Workers AI model.`,
+    );
   }
 
   return written;

@@ -88,9 +88,16 @@ asked only to write the sentences around them.
 
 Cost is bounded by design. Generation happens once per child per day from the
 existing cron and is cached in a `child_daily_notes` row, so reads are one
-indexed D1 lookup and opening the app never reaches the model. At Workers AI's
-$0.011 per 1,000 Neurons with a 10,000 Neuron daily free allocation, a
-household's worth of notes sits inside the free tier.
+indexed D1 lookup and opening the app never reaches the model. At roughly 350
+input and 55 output tokens per call, that is well under 1% of Workers AI's
+10,000 Neuron daily free allocation — under a nickel a year per child even at
+paid rates.
+
+Because the volume is that low, the model is chosen on writing quality rather
+than price: the gap between the cheapest and the largest plausible candidate is
+a few cents a year, while the gap in how the sentences read is not. The default
+is Gemma 4 26B (an MoE with 4B active — fast, and not a reasoning model, so
+there is no thinking trace to strip).
 
 There is no fallback to worry about breaking: with no `AI` binding — local dev
 and the tests have none — or on any model error, a deterministic template

@@ -9,6 +9,7 @@ import {
   generateNoteBody,
   refreshDailyNotes,
   tidyNote,
+  DEFAULT_NOTE_MODEL,
   MAX_NOTE_LENGTH,
   type DayStats,
 } from "../src/scheduled/dailyNote.js";
@@ -203,6 +204,21 @@ describe("generateNoteBody", () => {
     expect(result.source).toBe("fallback");
   });
 
+  it("defaults to the configured model when nothing overrides it", async () => {
+    const AI = { run: vi.fn(async () => ({ response: "Mikey had a steady day. You are doing well." })) };
+    await generateNoteBody(
+      { ...env, AI } as unknown as typeof env,
+      "Mikey",
+      "4 months old",
+      day({ feeds: 6 }),
+      [],
+    );
+    expect(AI.run.mock.calls[0][0]).toBe(DEFAULT_NOTE_MODEL);
+    // A slug Workers AI does not recognise fails every call and falls back
+    // forever, silently — so pin the shape the model catalog actually uses.
+    expect(DEFAULT_NOTE_MODEL).toMatch(/^@cf\/[a-z0-9-]+\/[a-z0-9.-]+$/);
+  });
+
   it("honours a configured model override", async () => {
     const AI = { run: vi.fn(async () => ({ response: "Mikey had a steady day. You are doing well." })) };
     await generateNoteBody(
@@ -306,6 +322,33 @@ describe("refreshDailyNotes", () => {
       "SELECT COUNT(*) AS n FROM child_daily_notes WHERE child_id = 1",
     ).first<{ n: number }>();
     expect(row?.n).toBe(1);
+  });
+
+  it("says so loudly when every note fell back despite a binding", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    // What a wrong model slug looks like from here.
+    const AI = { run: vi.fn(async () => { throw new Error("No such model"); }) };
+
+    await refreshDailyNotes({ ...env, AI } as unknown as typeof env, NOW);
+
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("fell back to the template"));
+    expect(warn.mock.calls[0][0]).toContain(DEFAULT_NOTE_MODEL);
+  });
+
+  it("stays quiet when the model is doing its job", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const AI = { run: vi.fn(async () => ({ response: "Mikey had a steady day yesterday. You are doing this well." })) };
+
+    await refreshDailyNotes({ ...env, AI } as unknown as typeof env, NOW);
+
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it("does not warn when there is simply no binding to use", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    await refreshDailyNotes({ ...env, AI: undefined } as typeof env, NOW);
+    expect(warn).not.toHaveBeenCalled();
   });
 
   it("still writes the other children's notes when one child fails", async () => {

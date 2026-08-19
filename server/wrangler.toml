@@ -67,7 +67,7 @@ CF_ACCESS_AUD = "5a28edb4368d3cfc1971089b60cc3a4444d93fd54d256e55bf9736fd6c8c4ad
 AWS_SES_REGION = "us-east-1"
 # Override to write the daily note with a different Workers AI model.
 # Defaults to DEFAULT_NOTE_MODEL in src/scheduled/dailyNote.ts.
-# DAILY_NOTE_MODEL = "@cf/meta/llama-3.1-8b-instruct-fast"
+# DAILY_NOTE_MODEL = "@cf/google/gemma-4-26b-a4b-it"
 
 # For local dev, create server/.dev.vars to override:
 #   CLIENT_URL=http://localhost:5173
