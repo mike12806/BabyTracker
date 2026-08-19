@@ -50,6 +50,30 @@ max_batch_timeout = 30
 max_retries = 3
 retry_delay = 300
 
+# Daily note generation. The cron writes each child's template note and
+# enqueues the model call; the consumer replaces it with the AI version when
+# one arrives. A cron trigger does not re-run, so without this a single
+# transient model failure ("out of capacity" is a routine Workers AI answer)
+# cost that child their real note for the whole day.
+#
+# No dead letter queue on purpose, unlike the summary email: a note that
+# exhausts its retries has already left a correct fallback on the card and
+# recorded source = 'fallback' in the row, so a queue of unread messages would
+# add nothing the database does not already say.
+[[queues.producers]]
+queue = "baby-tracker-daily-note"
+binding = "NOTE_QUEUE"
+
+[[queues.consumers]]
+queue = "baby-tracker-daily-note"
+# One child per message; a batch is only ever a convenience.
+max_batch_size = 10
+max_batch_timeout = 30
+max_retries = 3
+# A minute between attempts. Capacity blips clear on that scale, and the note
+# only needs to land while it is still the morning it describes.
+retry_delay = 60
+
 # Workers AI, for the dashboard's daily note. One generation per child per day
 # from the cron below, cached in D1 — a page load never reaches the model, so
 # the cost does not scale with how often the app is opened.

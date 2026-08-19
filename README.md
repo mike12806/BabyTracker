@@ -21,6 +21,7 @@ A baby tracking application inspired by [Baby Buddy](https://github.com/babybudd
 | Object Storage | R2 | Cloudflare R2 |
 | Auth | Cloudflare Access | JWT validation |
 | Email delivery | Cloudflare Queues + SES | Retried, with a dead letter queue |
+| Daily note generation | Cloudflare Queues | Retried; template note written up front |
 | Daily note | Workers AI | One generation per child per day, cached in D1 |
 
 ## Getting Started
@@ -130,6 +131,22 @@ actually be per-user. A small sparkle icon sits next to the note on the
 dashboard, but only when `source` is `ai`; the fallback template gets no
 sparkle, since it isn't AI-written.
 
+The cron does not generate the note itself. It writes each child's template
+note immediately — so the card always has something true on it — and enqueues
+the model call on `baby-tracker-daily-note`; the consumer replaces the row when
+a real note arrives. That exists for retries: a cron trigger does not re-run,
+so before this a single transient model failure (Workers AI answers "out of
+capacity" often enough to plan for) cost that child their real note for the
+whole day.
+
+There is deliberately no dead letter queue behind it, unlike the summary email.
+A note that exhausts its retries has already left a correct, readable fallback
+on the card and recorded `source = 'fallback'` in the row, so a queue of unread
+messages would add nothing the database does not already say.
+
+The manual refresh button stays synchronous, because a human is waiting on it
+and wants the reason when the model declines.
+
 To change the model, set `DAILY_NOTE_MODEL` in `server/wrangler.toml`.
 
 ## Deployment
@@ -146,6 +163,7 @@ npx wrangler r2 bucket create baby-tracker-photos
 # Queues for daily summary delivery (the deploy workflow also creates these)
 npx wrangler queues create baby-tracker-daily-summary
 npx wrangler queues create baby-tracker-daily-summary-dlq
+npx wrangler queues create baby-tracker-daily-note
 ```
 
 Queues require the Workers Paid plan, and the API token used by CI needs

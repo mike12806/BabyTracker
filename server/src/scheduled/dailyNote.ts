@@ -51,6 +51,9 @@ import { computeDailyWindow, volumeTotal, type AmountRow, type VolumeUnit } from
  */
 export const DEFAULT_NOTE_MODEL = "@cf/google/gemma-4-26b-a4b-it";
 
+/** Queue carrying one note-generation job per child. */
+export const DAILY_NOTE_QUEUE = "baby-tracker-daily-note";
+
 /**
  * The models to try, in order, until one writes a usable note.
  *
@@ -115,6 +118,24 @@ export interface DayStats {
   longestSleepMinutes: number;
   sleepSessions: number;
   tummyMinutes: number;
+}
+
+/**
+ * One child's note-generation job, as it travels through the queue.
+ *
+ * The figures travel with it rather than being recomputed on arrival, for the
+ * same reason the daily summary carries its window: a retry that runs minutes
+ * later must produce the note that was queued, not a subtly different one
+ * measured against a moved clock. It also means a retry costs one model call
+ * and no D1 reads at all.
+ */
+export interface DailyNoteJob {
+  childId: number;
+  firstName: string;
+  ageLabel: string;
+  noteDate: string;
+  day: DayStats;
+  trends: Trend[];
 }
 
 export interface DailyNote {
@@ -484,7 +505,11 @@ const NOTE_VOLUME_UNIT: VolumeUnit = "oz";
  * the summary email, and safe to run again — the unique index on
  * (child_id, note_date) turns a second run into an update.
  */
-export async function refreshDailyNotes(env: Env, now = new Date()): Promise<DailyNote[]> {
+/**
+ * Gather what each child's note needs: the day being described, and the week
+ * behind it to compare against. Pure reads — no model, no writes.
+ */
+export async function collectNoteJobs(env: Env, now = new Date()): Promise<DailyNoteJob[]> {
   const { windowStart, windowEnd } = computeDailyWindow(now);
   const noteDate = windowStart.slice(0, 10);
   const unit = NOTE_VOLUME_UNIT;
@@ -493,8 +518,7 @@ export async function refreshDailyNotes(env: Env, now = new Date()): Promise<Dai
     "SELECT id, first_name, birth_date FROM children ORDER BY id",
   ).all<ChildRow>();
 
-  const written: DailyNote[] = [];
-
+  const jobs: DailyNoteJob[] = [];
   for (const child of children) {
     try {
       const day = await fetchDayStats(env, child.id, windowStart, windowEnd, unit);
@@ -515,34 +539,83 @@ export async function refreshDailyNotes(env: Env, now = new Date()): Promise<Dai
         }),
       );
 
-      const trends = buildTrends(day, baseline);
-      const { body, source, reason } = await generateNoteBody(
-        env,
-        child.first_name,
-        ageLabel(child.birth_date, new Date(windowStart)),
+      jobs.push({
+        childId: child.id,
+        firstName: child.first_name,
+        ageLabel: ageLabel(child.birth_date, new Date(windowStart)),
+        noteDate,
         day,
-        trends,
-      );
+        trends: buildTrends(day, baseline),
+      });
+    } catch (error) {
+      // One child's reads failing must not cost the others their note.
+      console.error(`Failed to gather the daily note figures for child ${child.id}:`, error);
+    }
+  }
+  return jobs;
+}
 
-      await env.DB.prepare(
-        `INSERT INTO child_daily_notes (child_id, note_date, body, source)
-         VALUES (?, ?, ?, ?)
-         ON CONFLICT(child_id, note_date) DO UPDATE SET
-           body = excluded.body,
-           source = excluded.source,
-           updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')`,
-      ).bind(child.id, noteDate, body, source).run();
+/** Upsert one child's note. A second run for the same day updates in place. */
+async function storeNote(
+  env: Env,
+  childId: number,
+  noteDate: string,
+  body: string,
+  source: "ai" | "fallback",
+): Promise<void> {
+  await env.DB.prepare(
+    `INSERT INTO child_daily_notes (child_id, note_date, body, source)
+     VALUES (?, ?, ?, ?)
+     ON CONFLICT(child_id, note_date) DO UPDATE SET
+       body = excluded.body,
+       source = excluded.source,
+       updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')`,
+  ).bind(childId, noteDate, body, source).run();
+}
 
-      // Only worth saying when a model was supposed to answer. Running
-      // without a binding is a normal configuration (local dev, tests), not
-      // something to warn about on every child, every day.
-      if (reason && env.AI) {
-        console.warn(`Daily note for child ${child.id} fell back — ${reason}`);
-      }
-      written.push({ child_id: child.id, note_date: noteDate, body, source, reason });
+/** Write the deterministic note straight away, before any model is asked.
+ *  The card is never empty, and the AI version lands on top of it later. */
+export async function storeFallbackNote(env: Env, job: DailyNoteJob): Promise<void> {
+  await storeNote(env, job.childId, job.noteDate, fallbackNote(job.firstName, job.day, job.trends), "fallback");
+}
+
+/** Ask the model for one child's note and store whatever comes back. */
+export async function writeNoteForJob(env: Env, job: DailyNoteJob): Promise<DailyNote> {
+  const { body, source, reason } = await generateNoteBody(
+    env,
+    job.firstName,
+    job.ageLabel,
+    job.day,
+    job.trends,
+  );
+  await storeNote(env, job.childId, job.noteDate, body, source);
+
+  // Only worth saying when a model was supposed to answer. Running without a
+  // binding is a normal configuration (local dev, tests), not something to
+  // warn about on every child, every day.
+  if (reason && env.AI) {
+    console.warn(`Daily note for child ${job.childId} fell back — ${reason}`);
+  }
+  return { child_id: job.childId, note_date: job.noteDate, body, source, reason };
+}
+
+/**
+ * Write today's note for every child, start to finish, in this invocation.
+ *
+ * The path the manual refresh button takes — a human is waiting and wants the
+ * answer, including the reason when the model declines to give one — and the
+ * fallback for any environment without the queue binding.
+ */
+export async function refreshDailyNotes(env: Env, now = new Date()): Promise<DailyNote[]> {
+  const jobs = await collectNoteJobs(env, now);
+  const written: DailyNote[] = [];
+
+  for (const job of jobs) {
+    try {
+      written.push(await writeNoteForJob(env, job));
     } catch (error) {
       // One child's note failing must not cost the others theirs.
-      console.error(`Failed to write the daily note for child ${child.id}:`, error);
+      console.error(`Failed to write the daily note for child ${job.childId}:`, error);
     }
   }
 
@@ -559,5 +632,46 @@ export async function refreshDailyNotes(env: Env, now = new Date()): Promise<Dai
     );
   }
 
+  return written;
+}
+
+/**
+ * The cron's path: write every child's template note now, and queue the model
+ * call as an upgrade to land on top of it.
+ *
+ * Split this way for one reason — retries. A cron trigger does not re-run, so
+ * before this a single transient model failure (Workers AI answers 429 /
+ * "out of capacity" often enough to plan for) cost that child their real note
+ * for the whole day. On the queue the same failure is retried with backoff.
+ *
+ * Writing the template note *first* is what makes that safe to be slow about:
+ * the card always has something true on it from the moment the cron runs, and
+ * the model's version replaces it whenever it arrives. There is deliberately
+ * no dead letter queue behind this, unlike the summary email — a note that
+ * exhausts its retries has already left a correct, readable fallback in place
+ * and recorded `source = 'fallback'` in the row, so a queue of unread
+ * messages would add nothing the database does not already say.
+ */
+export async function enqueueDailyNotes(env: Env, now = new Date()): Promise<DailyNote[]> {
+  const queue = env.NOTE_QUEUE;
+  if (!queue) return refreshDailyNotes(env, now);
+
+  const jobs = await collectNoteJobs(env, now);
+  const written: DailyNote[] = [];
+
+  for (const job of jobs) {
+    try {
+      await storeFallbackNote(env, job);
+      await queue.send(job);
+      written.push({
+        child_id: job.childId,
+        note_date: job.noteDate,
+        body: fallbackNote(job.firstName, job.day, job.trends),
+        source: "fallback",
+      });
+    } catch (error) {
+      console.error(`Failed to queue the daily note for child ${job.childId}:`, error);
+    }
+  }
   return written;
 }

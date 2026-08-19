@@ -1,4 +1,5 @@
 import type { DailySummaryJob } from "../scheduled/dailySummary.js";
+import type { DailyNoteJob } from "../scheduled/dailyNote.js";
 
 export interface Env {
   DB: D1Database;
@@ -30,6 +31,13 @@ export interface Env {
    * have no binding, and fall back to the deterministic note. See
    * `generateNoteBody`.
    */
+  /**
+   * Daily note generation queue.
+   *
+   * Optional for the same reason EMAIL_QUEUE is: local dev and the tests have
+   * no queue, and fall back to generating inline. See `enqueueDailyNotes`.
+   */
+  NOTE_QUEUE?: Queue<DailyNoteJob>;
   AI?: Ai;
   /** Overrides the model the daily note is written with. */
   DAILY_NOTE_MODEL?: string;

@@ -77,6 +77,7 @@ export default function ChildHero({ child, napping, cat, isDark, dailyNote, dail
   const [particles, setParticles] = useState<Particle[]>([]);
   const [squishing, setSquishing] = useState(false);
   const [photoFailed, setPhotoFailed] = useState(false);
+  const [noteExpanded, setNoteExpanded] = useState(false);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const nextParticleId = useRef(0);
 
@@ -292,17 +293,31 @@ export default function ChildHero({ child, napping, cat, isDark, dailyNote, dail
                 sx={{ fontSize: 13, color: cat.tummy.solid, opacity: 0.85, mt: "1px", flexShrink: 0 }}
               />
             )}
+            {/* Tap to read the rest. The clamp keeps the card a predictable
+                height, but on a narrow phone a note near the length cap runs
+                past three lines — and clipping it with no way to see the end
+                left the last sentence, which is the encouraging one, unread. */}
             <Typography
+              component="button"
+              type="button"
+              onClick={() => setNoteExpanded((open) => !open)}
+              aria-expanded={noteExpanded}
+              aria-label={noteExpanded ? "Collapse the daily note" : "Read the whole daily note"}
               sx={{
                 fontSize: { xs: 12, sm: 12.5 },
                 color: "text.secondary",
                 lineHeight: 1.35,
-                // Two lines on a phone, then ellipsis — the card must not grow
-                // to fit whatever the model felt like writing.
+                textAlign: "left",
+                p: 0,
+                m: 0,
+                border: 0,
+                background: "none",
+                font: "inherit",
+                cursor: "pointer",
                 display: "-webkit-box",
-                WebkitLineClamp: 3,
                 WebkitBoxOrient: "vertical",
                 overflow: "hidden",
+                ...(noteExpanded ? {} : { WebkitLineClamp: 3 }),
               }}
             >
               {dailyNote}

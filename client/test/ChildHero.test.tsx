@@ -96,6 +96,29 @@ describe("ChildHero", () => {
     expect(screen.queryByTitle("Written by AI")).not.toBeInTheDocument();
   });
 
+  it("lets a clipped note be opened, and closed again", () => {
+    const long =
+      "Yesterday Nolan had 9 feedings, totalling 24.5 ounces, and 9 diaper changes. " +
+      "Keep up the good work, it sounds like you're finding a routine that works for you both.";
+    renderHero({ dailyNote: long, dailyNoteSource: "ai" });
+
+    // Clamped by default, so the card stays a predictable height...
+    const note = screen.getByRole("button", { name: /read the whole daily note/i });
+    expect(note).toHaveAttribute("aria-expanded", "false");
+
+    // ...but the end of it is reachable, which it wasn't when the clamp had
+    // no way past it.
+    fireEvent.click(note);
+    expect(
+      screen.getByRole("button", { name: /collapse the daily note/i }),
+    ).toHaveAttribute("aria-expanded", "true");
+
+    fireEvent.click(screen.getByRole("button", { name: /collapse the daily note/i }));
+    expect(
+      screen.getByRole("button", { name: /read the whole daily note/i }),
+    ).toHaveAttribute("aria-expanded", "false");
+  });
+
   it("is a complete card with no note yet", () => {
     renderHero({ dailyNote: null });
     expect(screen.getByText("Otto")).toBeInTheDocument();
