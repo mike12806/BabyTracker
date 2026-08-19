@@ -34,6 +34,7 @@ import { api, API_BASE } from "../api/client";
 import { useChildren } from "../hooks/useChildren";
 import { useDataRefresh } from "../hooks/useDataRefresh";
 import { useNotification } from "../hooks/useNotification";
+import ChildHero from "../components/ChildHero";
 import NoChildPlaceholder from "../components/NoChildPlaceholder";
 import QuickLogDialog, { type QuickLogCategory } from "../components/QuickLogDialog";
 import { buildCategoryColors, type CategoryKey } from "../theme/categoryColors";
@@ -104,25 +105,6 @@ function isTodoOverdue(todo: Todo): boolean {
   return due < today;
 }
 
-function formatAge(birthDate: string): string {
-  const birth = new Date(birthDate);
-  const now = new Date();
-  const diffMs = now.getTime() - birth.getTime();
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-  const diffWeeks = Math.floor(diffDays / 7);
-  if (diffWeeks < 8) {
-    if (diffWeeks < 1) return diffDays === 1 ? "1 day" : `${diffDays} days`;
-    return diffWeeks === 1 ? "1 week" : `${diffWeeks} weeks`;
-  }
-  let months = (now.getFullYear() - birth.getFullYear()) * 12 + (now.getMonth() - birth.getMonth());
-  if (now.getDate() < birth.getDate()) months--;
-  if (months < 12) return months === 1 ? "1 mo" : `${months} mo`;
-  const years = Math.floor(months / 12);
-  const remMonths = months % 12;
-  if (remMonths === 0) return years === 1 ? "1 year" : `${years} years`;
-  return `${years}y ${remMonths}m`;
-}
-
 type CatIcons = { [K in CategoryKey]?: React.ReactElement };
 const CAT_ICONS: CatIcons = {
   feed: <RestaurantIcon sx={{ fontSize: 18 }} />,
@@ -165,6 +147,7 @@ export default function Dashboard() {
   const [notes, setNotes] = useState<Note[]>([]);
   const [medications, setMedications] = useState<Medication[]>([]);
   const [todos, setTodos] = useState<Todo[]>([]);
+  const [dailyNote, setDailyNote] = useState<string | null>(null);
 
   const [quickLogCategory, setQuickLogCategory] = useState<QuickLogCategory | null>(null);
   // Ids ticked off from this page but not yet gone from `todos`. The snapshot only
@@ -194,10 +177,13 @@ export default function Dashboard() {
     if (!selectedChild) return;
     const childId = selectedChild.id;
     let cancelled = false;
+    // Drop the outgoing child's note straight away rather than leaving it under
+    // the new child's face until the refetch lands.
+    setDailyNote(null);
 
     (async () => {
       try {
-        const [f, d, s, t, tt, p, temp, n, m, td] = await Promise.all([
+        const [f, d, s, t, tt, p, temp, n, m, td, note] = await Promise.all([
           api.get<Feeding[]>(`/feedings?child_id=${childId}&limit=500`),
           api.get<DiaperChange[]>(`/diaper-changes?child_id=${childId}&limit=500`),
           api.get<SleepEntry[]>(`/sleep?child_id=${childId}&limit=500`),
@@ -210,6 +196,16 @@ export default function Dashboard() {
           api.get<Note[]>(`/notes?child_id=${childId}&limit=50`),
           api.get<Medication[]>(`/medications?child_id=${childId}&limit=50`),
           api.get<Todo[]>(`/todos?child_id=${childId}&limit=200`),
+          // Written once a day by the cron and cached server-side, so this is
+          // a plain row read — opening the dashboard never costs a generation.
+          //
+          // Caught rather than awaited alongside the rest: the note is the one
+          // thing on this page nobody needs, and a server that 404s it (an
+          // older deploy, a failed migration) must not take the numbers down
+          // with it.
+          api
+            .get<{ note: { body: string } | null }>(`/children/${childId}/daily-note`)
+            .catch(() => ({ note: null })),
         ]);
         if (cancelled) return;
         setFeedings(f);
@@ -222,6 +218,7 @@ export default function Dashboard() {
         setNotes(n);
         setMedications(m);
         setTodos(td);
+        setDailyNote(note.note?.body ?? null);
       } catch (err) {
         if (!cancelled) notify(err instanceof Error ? err.message : "Failed to load data.", "error");
       }
@@ -375,14 +372,20 @@ export default function Dashboard() {
   allEvents.sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime());
   recentActivity.push(...allEvents.slice(0, cutoff));
 
-  const now = new Date();
-  const dayName = now.toLocaleDateString(undefined, { weekday: "long" });
-  const timeStr = now.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
-
   const prioCatKey = (p: string): CategoryKey => p === "high" ? "temp" : p === "medium" ? "diaper" : "note";
 
   return (
     <Box>
+      {/* Him, first — before any of the numbers about him. */}
+      <ChildHero
+        key={selectedChild.id}
+        child={selectedChild}
+        napping={!!activeSleep}
+        cat={cat}
+        isDark={isDark}
+        dailyNote={dailyNote}
+      />
+
       {/* Live status banner */}
       {activeSleep && (
         <Box

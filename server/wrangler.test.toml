@@ -1,0 +1,18 @@
+# Test-only Worker config for the vitest pool.
+#
+# It exists to leave out the `[ai]` binding. Workers AI has no local emulation,
+# so a config that declares it makes the pool open a *remote* proxy session
+# against a real Cloudflare account — which needs a CLOUDFLARE_API_TOKEN and
+# would turn every server test, not just the ones about the daily note, into a
+# billed network call. The tests exercise the AI path with an injected stub
+# instead (see test/dailyNote.test.ts), which is both free and deterministic.
+#
+# Queue bindings are left out for the same reason they are never read here: the
+# tests that need one pass their own. D1 and R2 come from vitest.config.ts.
+name = "baby-tracker-api-test"
+main = "src/index.ts"
+compatibility_date = "2024-12-01"
+
+[vars]
+CF_ACCESS_TEAM_DOMAIN = "test.cloudflareaccess.com"
+CF_ACCESS_AUD = "test-aud"

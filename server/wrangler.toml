@@ -50,6 +50,12 @@ max_batch_timeout = 30
 max_retries = 3
 retry_delay = 300
 
+# Workers AI, for the dashboard's daily note. One generation per child per day
+# from the cron below, cached in D1 — a page load never reaches the model, so
+# the cost does not scale with how often the app is opened.
+[ai]
+binding = "AI"
+
 [triggers]
 # Fires at 05:00 UTC daily = midnight Eastern Standard Time.
 # During EDT (UTC-4) this fires at 1:00 AM ET — close enough for a daily summary.
@@ -59,6 +65,9 @@ crons = ["0 5 * * *"]
 CF_ACCESS_TEAM_DOMAIN = "mfaherty.cloudflareaccess.com"
 CF_ACCESS_AUD = "5a28edb4368d3cfc1971089b60cc3a4444d93fd54d256e55bf9736fd6c8c4ad1"
 AWS_SES_REGION = "us-east-1"
+# Override to write the daily note with a different Workers AI model.
+# Defaults to DEFAULT_NOTE_MODEL in src/scheduled/dailyNote.ts.
+# DAILY_NOTE_MODEL = "@cf/google/gemma-4-26b-a4b-it"
 
 # For local dev, create server/.dev.vars to override:
 #   CLIENT_URL=http://localhost:5173

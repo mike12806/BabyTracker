@@ -7,6 +7,7 @@ A baby tracking application inspired by [Baby Buddy](https://github.com/babybudd
 - **Multi-child support** — track multiple children, each linked to one or more users
 - **Comprehensive tracking** — feedings, diaper changes, sleep, tummy time, pumping, growth, temperature, notes, and timers
 - **Photo uploads** — child profile photos stored securely in Cloudflare R2
+- **Daily note** — a short blurb on the dashboard about how yesterday went and how the week is trending, written once a day by Workers AI and cached in D1
 - **Secure by default** — authentication via Cloudflare Access (no custom login UI needed)
 - **Edge-native** — runs entirely on Cloudflare (Pages, Workers, D1, R2)
 
@@ -20,6 +21,7 @@ A baby tracking application inspired by [Baby Buddy](https://github.com/babybudd
 | Object Storage | R2 | Cloudflare R2 |
 | Auth | Cloudflare Access | JWT validation |
 | Email delivery | Cloudflare Queues + SES | Retried, with a dead letter queue |
+| Daily note | Workers AI | One generation per child per day, cached in D1 |
 
 ## Getting Started
 
@@ -72,6 +74,40 @@ npm run test:client
 npm run build:client
 npm run build:server
 ```
+
+## The daily note
+
+The dashboard's hero card carries a two-sentence note about the previous day —
+what was logged, how it compares to that child's own last week, and a line of
+encouragement.
+
+The figures in it are computed in SQL, never by the model: an LLM asked to add
+up feed counts will occasionally get it wrong, and a note that misreports how
+much a baby ate is worse than no note. The model is handed finished numbers and
+asked only to write the sentences around them.
+
+Cost is bounded by design. Generation happens once per child per day from the
+existing cron and is cached in a `child_daily_notes` row, so reads are one
+indexed D1 lookup and opening the app never reaches the model. At roughly 350
+input and 55 output tokens per call, that is well under 1% of Workers AI's
+10,000 Neuron daily free allocation — under a nickel a year per child even at
+paid rates.
+
+Because the volume is that low, the model is chosen on writing quality rather
+than price: the gap between the cheapest and the largest plausible candidate is
+a few cents a year, while the gap in how the sentences read is not. The default
+is Gemma 4 26B (an MoE with 4B active — fast, and not a reasoning model, so
+there is no thinking trace to strip).
+
+There is no fallback to worry about breaking: with no `AI` binding — local dev
+and the tests have none — or on any model error, a deterministic template
+writes the same true sentences in a fixed voice, and the row records which
+wrote it (`source` is `ai` or `fallback`, so a run of fallbacks is how you spot
+a misconfigured binding).
+
+The note is text-only. No photo is ever sent to a model.
+
+To change the model, set `DAILY_NOTE_MODEL` in `server/wrangler.toml`.
 
 ## Deployment
 

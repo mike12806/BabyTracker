@@ -33,6 +33,7 @@ import { FAB_BOTTOM_OFFSET } from "../components/Layout";
 import { buildCategoryColors } from "../theme/categoryColors";
 import PhotoCropDialog from "../components/PhotoCropDialog";
 import { PHOTO_INPUT_ACCEPT, describePickedFileProblem } from "../utils/imageCrop";
+import { childPhotoUrl } from "../utils/childMoments";
 import type { Child } from "../types/models";
 import { useSaveGuard } from "../hooks/useSaveGuard";
 
@@ -228,10 +229,7 @@ export default function ChildrenPage() {
     }
   };
 
-  const photoUrl = (child: Child) =>
-    child.picture_content_type
-      ? `${API_BASE}/children/${child.id}/photo?v=${encodeURIComponent(child.updated_at)}`
-      : undefined;
+  const photoUrl = (child: Child) => childPhotoUrl(child, API_BASE) ?? undefined;
 
   // Gradient colors per card index
   const gradients = [
