@@ -206,7 +206,9 @@ export default function Dashboard() {
           // older deploy, a failed migration) must not take the numbers down
           // with it.
           api
-            .get<{ note: { body: string; source: "ai" | "fallback" } | null }>(`/children/${childId}/daily-note`)
+            .getOptional<{ note: { body: string; source: "ai" | "fallback" } | null }>(
+              `/children/${childId}/daily-note`,
+            )
             .catch(() => ({ note: null })),
         ]);
         if (cancelled) return;

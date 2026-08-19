@@ -87,6 +87,23 @@ describe("response freshness", () => {
     expect(getStaleSince()).not.toBeNull();
   });
 
+  it("clears staleness on a fresh reply even when the device claims to be offline", () => {
+    // The bug this pins: `navigator.onLine === false` is reported wrongly by
+    // installed PWAs, VPNs and captive portals. When it was allowed to veto a
+    // fresh reply, a phone reporting it could never leave the stale state —
+    // every request succeeded, every one re-flagged the screen, and the retry
+    // loop refetched every page every 15 seconds forever.
+    // A running app: an earlier live reply has already calibrated the clock.
+    noteResponse(response(NOW));
+    markOffline();
+    expect(getStaleSince()).not.toBeNull();
+
+    setOnline(false);
+    noteResponse(response(NOW));
+
+    expect(getStaleSince()).toBeNull();
+  });
+
   it("keeps quiet when a reply carries no Date header at all", () => {
     // The dev server doesn't always set one; guessing an age from nothing
     // would put a false banner in front of the user.

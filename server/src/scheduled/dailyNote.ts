@@ -51,6 +51,32 @@ import { computeDailyWindow, volumeTotal, type AmountRow, type VolumeUnit } from
  */
 export const DEFAULT_NOTE_MODEL = "@cf/google/gemma-4-26b-a4b-it";
 
+/**
+ * The models to try, in order, until one writes a usable note.
+ *
+ * There is a chain rather than a single model because this feature has now
+ * failed three times in a row in the same *shape* — the call comes back, the
+ * note is a template one, and the cause is invisible from outside the
+ * account. Each time the cause was different (wrong reply field, then a
+ * token budget the thinking mode ate), and each fix needed a deploy and a
+ * day to confirm. Whatever is wrong now, a second model that fails
+ * differently is likelier to produce a note than a fourth guess at the
+ * first one.
+ *
+ * The second entry is deliberately the *unlike* choice, not the next-best
+ * one: an older, smaller, non-thinking Llama that answers in the flat
+ * `{ response }` shape. If the primary is out of capacity, rejected on this
+ * account, or doing something else thinking-mode-shaped, this one is
+ * unlikely to share the problem.
+ *
+ * Every attempt's reason is recorded either way, so a chain that succeeds on
+ * the second model still says exactly what the first one did wrong.
+ */
+export const NOTE_MODEL_CHAIN = [
+  DEFAULT_NOTE_MODEL,
+  "@cf/meta/llama-3.1-8b-instruct-fp8-fast",
+];
+
 /** The card gives this one line; anything longer gets clipped on a phone. */
 export const MAX_NOTE_LENGTH = 240;
 
@@ -393,25 +419,41 @@ export async function generateNoteBody(
   if (!env.AI) return fallbackWith("no AI binding");
 
   const { system, user } = buildPrompt(firstName, ageLabel, day, trends);
-  try {
-    const result = (await env.AI.run(env.DAILY_NOTE_MODEL || DEFAULT_NOTE_MODEL, {
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: user },
-      ],
-      max_tokens: MAX_REPLY_TOKENS,
-      temperature: 0.7,
-    })) as AiTextResponse;
+  // An explicit override replaces the chain entirely — if someone names a
+  // model, that is the model they want, not a first preference.
+  const models = env.DAILY_NOTE_MODEL ? [env.DAILY_NOTE_MODEL] : NOTE_MODEL_CHAIN;
+  const failures: string[] = [];
 
-    const text = extractModelText(result);
-    const tidied = tidyNote(text);
-    if (tidied) return { body: tidied, source: "ai" };
-    return fallbackWith(`unusable reply (${text.length} chars) — ${describeReply(result)}`);
-  } catch (error) {
-    return fallbackWith(
-      `model call threw: ${error instanceof Error ? error.message : String(error)}`,
-    );
+  for (const model of models) {
+    try {
+      const result = (await env.AI.run(model, {
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: user },
+        ],
+        max_tokens: MAX_REPLY_TOKENS,
+        temperature: 0.7,
+      })) as AiTextResponse;
+
+      const text = extractModelText(result);
+      const tidied = tidyNote(text);
+      if (tidied) {
+        // A note from a later model is still a real note — but say which, and
+        // what the earlier ones did, so a silently-degraded chain is visible
+        // rather than looking like everything is fine.
+        return failures.length > 0
+          ? { body: tidied, source: "ai", reason: `wrote with ${model} after: ${failures.join("; ")}` }
+          : { body: tidied, source: "ai" };
+      }
+      failures.push(`${model}: unusable reply (${text.length} chars) — ${describeReply(result)}`);
+    } catch (error) {
+      failures.push(
+        `${model}: threw ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   }
+
+  return fallbackWith(failures.join("; "));
 }
 
 /** Whole months old, phrased the way a parent would say it. */
@@ -459,12 +501,19 @@ export async function refreshDailyNotes(env: Env, now = new Date()): Promise<Dai
 
       // The previous week, one day at a time, so the mean is a mean of days
       // rather than of one long lump — and so a partial history still works.
-      const baseline: DayStats[] = [];
-      for (let back = 1; back <= BASELINE_DAYS; back++) {
-        const start = new Date(new Date(windowStart).getTime() - back * 86400000).toISOString();
-        const end = new Date(new Date(windowEnd).getTime() - back * 86400000).toISOString();
-        baseline.push(await fetchDayStats(env, child.id, start, end, unit));
-      }
+      //
+      // Fetched together rather than in sequence: these are seven independent
+      // reads and awaiting them one after another made the whole refresh seven
+      // round trips deep for no reason, which matters when a caller is waiting
+      // on the response.
+      const baseline = await Promise.all(
+        Array.from({ length: BASELINE_DAYS }, (_, i) => {
+          const back = i + 1;
+          const start = new Date(new Date(windowStart).getTime() - back * 86400000).toISOString();
+          const end = new Date(new Date(windowEnd).getTime() - back * 86400000).toISOString();
+          return fetchDayStats(env, child.id, start, end, unit);
+        }),
+      );
 
       const trends = buildTrends(day, baseline);
       const { body, source, reason } = await generateNoteBody(

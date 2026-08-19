@@ -10,6 +10,7 @@ import {
   refreshDailyNotes,
   tidyNote,
   DEFAULT_NOTE_MODEL,
+  NOTE_MODEL_CHAIN,
   MAX_REPLY_TOKENS,
   MAX_NOTE_LENGTH,
   type DayStats,
@@ -289,6 +290,76 @@ describe("generateNoteBody", () => {
     expect(result.reason).toBeUndefined();
   });
 
+  it("tries the next model when the first one fails, and says so", async () => {
+    // Why the chain exists: three separate causes have produced the identical
+    // "template note, no visible error" symptom. A second model that fails
+    // differently beats a fourth guess at the first one.
+    const AI = {
+      run: vi.fn(async (model: string) =>
+        model === NOTE_MODEL_CHAIN[0]
+          ? { choices: [{ message: { content: "" }, finish_reason: "length" }] }
+          : { response: "Mikey had a steady day. You are doing this well." },
+      ),
+    };
+    const result = await generateNoteBody(
+      { ...env, AI } as unknown as typeof env,
+      "Mikey",
+      "4 months old",
+      day({ feeds: 6 }),
+      [],
+    );
+    expect(result.source).toBe("ai");
+    expect(result.body).toBe("Mikey had a steady day. You are doing this well.");
+    // A silently-degraded chain must not look like everything is fine.
+    expect(result.reason).toContain(NOTE_MODEL_CHAIN[1]);
+    expect(result.reason).toContain("finish=length");
+    expect(AI.run).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not call a second model when the first one works", async () => {
+    const AI = { run: vi.fn(async () => ({ response: "Mikey had a steady day. You are doing well." })) };
+    const result = await generateNoteBody(
+      { ...env, AI } as unknown as typeof env,
+      "Mikey",
+      "4 months old",
+      day({ feeds: 6 }),
+      [],
+    );
+    expect(AI.run).toHaveBeenCalledTimes(1);
+    expect(result.reason).toBeUndefined();
+  });
+
+  it("reports every model's failure when the whole chain fails", async () => {
+    const AI = {
+      run: vi.fn(async (model: string) => {
+        throw new Error(`no capacity for ${model}`);
+      }),
+    };
+    const result = await generateNoteBody(
+      { ...env, AI } as unknown as typeof env,
+      "Mikey",
+      "4 months old",
+      day({ feeds: 6 }),
+      [],
+    );
+    expect(result.source).toBe("fallback");
+    for (const model of NOTE_MODEL_CHAIN) expect(result.reason).toContain(model);
+  });
+
+  it("uses only the named model when one is configured, not the chain", async () => {
+    const AI = { run: vi.fn(async () => { throw new Error("nope"); }) };
+    await generateNoteBody(
+      { ...env, AI, DAILY_NOTE_MODEL: "@cf/some/other-model" } as unknown as typeof env,
+      "Mikey",
+      "4 months old",
+      day({ feeds: 6 }),
+      [],
+    );
+    // An explicit override is a decision, not a first preference.
+    expect(AI.run).toHaveBeenCalledTimes(1);
+    expect(AI.run.mock.calls[0][0]).toBe("@cf/some/other-model");
+  });
+
   it("falls back rather than failing when the model errors", async () => {
     const AI = { run: vi.fn(async () => { throw new Error("out of capacity"); }) };
     const result = await generateNoteBody(
@@ -479,19 +550,21 @@ describe("refreshDailyNotes", () => {
 
   it("still writes the other children's notes when one child fails", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
-    let calls = 0;
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    // Keyed on which child's prompt this is, not on call order: the model
+    // chain means one child can legitimately take more than one call.
     const AI = {
-      run: vi.fn(async () => {
-        calls++;
-        if (calls === 1) throw new Error("model down for this one");
+      run: vi.fn(async (_model: string, opts: { messages: { content: string }[] }) => {
+        const prompt = opts.messages.map((m) => m.content).join(" ");
+        if (prompt.includes("Mikey")) throw new Error("model down for this one");
         return { response: "Sam had a steady day yesterday. You are doing this well." };
       }),
     };
     const written = await refreshDailyNotes({ ...env, AI } as unknown as typeof env, NOW);
-    // The first child falls back rather than being skipped, so both get a note.
+    // The failing child falls back rather than being skipped, so both get a note.
     expect(written).toHaveLength(2);
-    expect(written[0].source).toBe("fallback");
-    expect(written[1].source).toBe("ai");
+    expect(written.find((n) => n.child_id === 1)?.source).toBe("fallback");
+    expect(written.find((n) => n.child_id === 2)?.source).toBe("ai");
   });
 });
 

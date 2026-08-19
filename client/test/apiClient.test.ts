@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { api, pingServer, REQUEST_TIMEOUT_MS } from "../src/api/client";
+import { api, pingServer, REQUEST_TIMEOUT_MS, GENERATION_TIMEOUT_MS } from "../src/api/client";
 import { getStaleSince, resetFreshness } from "../src/api/freshness";
 
 // We need to mock fetch at the global level to test the api client
@@ -279,6 +279,74 @@ describe("Request deadlines and server errors", () => {
 
     await expect(api.post("/feedings", {})).rejects.toThrow("start_time is required");
     expect(getStaleSince()).toBeNull();
+  });
+
+  it("gives a generation request far longer than the CRUD deadline", async () => {
+    // The bug this pins: the note refresh runs a model per child, which can
+    // legitimately outlast 12s. Aborting it client-side surfaced as "Network
+    // error" with nothing in the Cloudflare log — the Worker was still working,
+    // and the live log only records a request once it completes.
+    const timeoutSpy = vi.spyOn(AbortSignal, "timeout");
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      headers: new Headers({ date: new Date().toUTCString() }),
+      json: () => Promise.resolve({ written: [] }),
+    });
+
+    await api.postSlow("/daily-notes/refresh", {});
+
+    expect(timeoutSpy).toHaveBeenCalledWith(GENERATION_TIMEOUT_MS);
+    expect(GENERATION_TIMEOUT_MS).toBeGreaterThan(REQUEST_TIMEOUT_MS);
+    timeoutSpy.mockRestore();
+  });
+
+  it("does not let an optional request's 5xx mark the screen stale", async () => {
+    // The regression this pins: the daily note is garnish, but its failure
+    // used to raise the banner, which armed the 15s retry loop, which
+    // refetched every mounted page — the "dashboard reloads a few times
+    // after it loads" symptom. A .catch() at the call site cannot prevent
+    // this; markOffline fires inside doFetch, before the caller sees it.
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 500,
+      headers: new Headers({ date: new Date().toUTCString() }),
+      json: () => Promise.resolve({ error: "Internal server error" }),
+    });
+
+    await expect(api.getOptional("/children/1/daily-note")).rejects.toThrow();
+
+    expect(getStaleSince()).toBeNull();
+  });
+
+  it("does not let an optional request's dropped connection mark the screen stale", async () => {
+    const timedOut = new DOMException("The operation was aborted.", "TimeoutError");
+    mockFetch.mockRejectedValueOnce(timedOut).mockRejectedValueOnce(timedOut);
+
+    await expect(api.getOptional("/children/1/daily-note")).rejects.toThrow();
+
+    expect(getStaleSince()).toBeNull();
+  });
+
+  it("still lets a required request mark the screen stale alongside an optional one", async () => {
+    // The opt-out is per request, not a global mute.
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 500,
+      headers: new Headers({ date: new Date().toUTCString() }),
+      json: () => Promise.resolve({ error: "boom" }),
+    });
+    await expect(api.getOptional("/children/1/daily-note")).rejects.toThrow();
+    expect(getStaleSince()).toBeNull();
+
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 500,
+      headers: new Headers({ date: new Date().toUTCString() }),
+      json: () => Promise.resolve({ error: "boom" }),
+    });
+    await expect(api.get("/feedings")).rejects.toThrow();
+    expect(getStaleSince()).not.toBeNull();
   });
 
   it("recovers the banner state once a real response arrives", async () => {

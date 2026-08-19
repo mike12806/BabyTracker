@@ -115,7 +115,9 @@ export default function Layout() {
   const handleRegenerateNotes = async () => {
     setRegeneratingNotes(true);
     try {
-      const { written } = await api.post<{ written: { source: string; reason?: string }[] }>(
+      // postSlow, not post: this runs a model per child server-side and the
+      // ordinary 12s CRUD deadline aborted it mid-generation.
+      const { written } = await api.postSlow<{ written: { source: string; reason?: string }[] }>(
         "/daily-notes/refresh",
         {},
       );

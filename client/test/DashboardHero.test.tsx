@@ -7,7 +7,9 @@ import type { Child } from "../src/types/models";
 
 vi.mock("../src/api/client", () => ({
   pingServer: vi.fn(async () => true),
-  api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn(), upload: vi.fn() },
+  api: { get: vi.fn(),
+    getOptional: vi.fn(async () => ({ note: null })), post: vi.fn(),
+    postSlow: vi.fn(), put: vi.fn(), delete: vi.fn(), upload: vi.fn() },
   API_BASE: "/api",
 }));
 
@@ -66,10 +68,8 @@ describe("Dashboard – the hero card", () => {
   });
 
   it("shows the note the server wrote, marked as AI-written", async () => {
-    mockApi.get.mockImplementation((url: string) => {
-      if (url.includes("/daily-note")) return Promise.resolve({ note: { body: NOTE, source: "ai" } });
-      return Promise.resolve([]);
-    });
+    mockApi.get.mockResolvedValue([]);
+    mockApi.getOptional.mockResolvedValue({ note: { body: NOTE, source: "ai" } });
 
     render(<Dashboard />, { wrapper: Wrapper });
     expect(await screen.findByText(NOTE)).toBeInTheDocument();
@@ -77,10 +77,8 @@ describe("Dashboard – the hero card", () => {
   });
 
   it("does not mark a fallback-template note as AI-written", async () => {
-    mockApi.get.mockImplementation((url: string) => {
-      if (url.includes("/daily-note")) return Promise.resolve({ note: { body: NOTE, source: "fallback" } });
-      return Promise.resolve([]);
-    });
+    mockApi.get.mockResolvedValue([]);
+    mockApi.getOptional.mockResolvedValue({ note: { body: NOTE, source: "fallback" } });
 
     render(<Dashboard />, { wrapper: Wrapper });
     expect(await screen.findByText(NOTE)).toBeInTheDocument();
@@ -92,17 +90,15 @@ describe("Dashboard – the hero card", () => {
     render(<Dashboard />, { wrapper: Wrapper });
 
     await waitFor(() => expect(mockApi.get).toHaveBeenCalled());
-    const noteCalls = mockApi.get.mock.calls.filter(([url]) =>
+    const noteCalls = mockApi.getOptional.mock.calls.filter(([url]) =>
       String(url).includes("/daily-note"),
     );
     expect(noteCalls).toHaveLength(1);
   });
 
   it("still renders the page when the note request fails", async () => {
-    mockApi.get.mockImplementation((url: string) => {
-      if (url.includes("/daily-note")) return Promise.reject(new Error("404"));
-      return Promise.resolve([]);
-    });
+    mockApi.get.mockResolvedValue([]);
+    mockApi.getOptional.mockRejectedValue(new Error("404"));
 
     render(<Dashboard />, { wrapper: Wrapper });
 
