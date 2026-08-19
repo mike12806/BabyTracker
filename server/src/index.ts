@@ -9,7 +9,8 @@ import {
   DAILY_SUMMARY_DLQ,
 } from "./scheduled/dailySummary.js";
 import type { DailySummaryJob } from "./scheduled/dailySummary.js";
-import { refreshDailyNotes } from "./scheduled/dailyNote.js";
+import { enqueueDailyNotes, writeNoteForJob, DAILY_NOTE_QUEUE } from "./scheduled/dailyNote.js";
+import type { DailyNoteJob } from "./scheduled/dailyNote.js";
 import { auth } from "./routes/auth.js";
 import { children } from "./routes/children.js";
 import { feedings } from "./routes/feedings.js";
@@ -75,9 +76,14 @@ export default {
 
     // Separately waited on, so a model outage cannot cost anyone their summary
     // email — and a bad SES day cannot cost the dashboard its note.
+    //
+    // This only writes each child's template note and queues the model call;
+    // the generation itself happens in the consumer below, where a transient
+    // failure gets retried instead of costing that child their note for the
+    // day.
     ctx.waitUntil(
-      refreshDailyNotes(env).catch((err) =>
-        console.error("Daily note refresh failed:", err)
+      enqueueDailyNotes(env).catch((err) =>
+        console.error("Daily note enqueue failed:", err)
       )
     );
   },
@@ -92,11 +98,33 @@ export default {
    * failed, and a duplicate summary in someone's inbox is the failure this is
    * meant to avoid creating.
    */
-  async queue(batch: MessageBatch<DailySummaryJob>, env: Env): Promise<void> {
+  async queue(batch: MessageBatch<DailySummaryJob | DailyNoteJob>, env: Env): Promise<void> {
+    // Generating one child's note. A failure here is retried rather than
+    // dropped — the template note is already on the card, so a retry is an
+    // upgrade that can afford to be late, and there is no dead letter queue
+    // behind it because the row already records that the model didn't answer.
+    if (batch.queue === DAILY_NOTE_QUEUE) {
+      for (const message of batch.messages) {
+        const job = message.body as DailyNoteJob;
+        try {
+          const note = await writeNoteForJob(env, job);
+          // A template note means the model declined; retry rather than ack,
+          // since "out of capacity" is exactly the transient case this queue
+          // exists for. `writeNoteForJob` has already logged the reason.
+          if (note.source === "ai") message.ack();
+          else message.retry();
+        } catch (err) {
+          console.error(`Daily note generation failed for child ${job?.childId}:`, err);
+          message.retry();
+        }
+      }
+      return;
+    }
+
     if (batch.queue === DAILY_SUMMARY_DLQ) {
       for (const message of batch.messages) {
         try {
-          await alertDeadLetteredSummary(env, message.body, message.attempts);
+          await alertDeadLetteredSummary(env, message.body as DailySummaryJob, message.attempts);
           message.ack();
         } catch (err) {
           // The alert goes over the same channel that just failed, so this is
@@ -105,7 +133,7 @@ export default {
           // this one, so a message that exhausts its attempts is discarded and
           // the log line below is the last word on it.
           console.error(
-            `Could not report the dead-lettered summary for ${message.body?.email}:`,
+            `Could not report the dead-lettered summary for ${(message.body as DailySummaryJob)?.email}:`,
             err,
           );
           message.retry();
@@ -116,12 +144,12 @@ export default {
 
     for (const message of batch.messages) {
       try {
-        await deliverDailySummary(env, message.body);
+        await deliverDailySummary(env, message.body as DailySummaryJob);
         message.ack();
       } catch (err) {
         // Retried `max_retries` times, then dead-lettered — and the branch
         // above turns that into an email rather than a message nobody sees.
-        console.error(`Daily summary delivery failed for ${message.body?.email}:`, err);
+        console.error(`Daily summary delivery failed for ${(message.body as DailySummaryJob)?.email}:`, err);
         message.retry();
       }
     }

@@ -77,7 +77,7 @@ jobs:
       # Worker with a binding that goes nowhere.
       - name: Create queues
         run: |
-          for QUEUE in baby-tracker-daily-summary baby-tracker-daily-summary-dlq; do
+          for QUEUE in baby-tracker-daily-summary baby-tracker-daily-summary-dlq baby-tracker-daily-note; do
             if npx wrangler queues create "$QUEUE"; then
               echo "Created $QUEUE"
             else

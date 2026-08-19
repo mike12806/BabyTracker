@@ -8,6 +8,9 @@ import {
   fetchDayStats,
   generateNoteBody,
   refreshDailyNotes,
+  enqueueDailyNotes,
+  writeNoteForJob,
+  collectNoteJobs,
   tidyNote,
   DEFAULT_NOTE_MODEL,
   NOTE_MODEL_CHAIN,
@@ -565,6 +568,124 @@ describe("refreshDailyNotes", () => {
     expect(written).toHaveLength(2);
     expect(written.find((n) => n.child_id === 1)?.source).toBe("fallback");
     expect(written.find((n) => n.child_id === 2)?.source).toBe("ai");
+  });
+});
+
+describe("enqueueDailyNotes", () => {
+  beforeEach(async () => {
+    await applyMigrations(env.DB);
+    await env.DB.batch([
+      env.DB.prepare("INSERT INTO children (id, first_name, last_name, birth_date) VALUES (1, 'Mikey', 'F', '2023-09-01')"),
+      env.DB.prepare("INSERT INTO children (id, first_name, last_name, birth_date) VALUES (2, 'Sam', 'F', '2023-09-01')"),
+      env.DB.prepare("INSERT INTO feedings (child_id, type, start_time, amount, amount_unit) VALUES (1, 'bottle_formula', '2024-01-14T10:00:00.000Z', 100, 'ml')"),
+    ]);
+  });
+
+  afterEach(() => vi.restoreAllMocks());
+
+  const NOW = new Date("2024-01-15T05:00:00.000Z");
+
+  it("leaves a readable note on the card before any model is asked", async () => {
+    const send = vi.fn(async () => {});
+    const AI = { run: vi.fn(async () => ({ response: "should not be called here" })) };
+
+    await enqueueDailyNotes({ ...env, NOTE_QUEUE: { send }, AI } as unknown as typeof env, NOW);
+
+    // The card is never empty while the queue works through the backlog.
+    const { results } = await env.DB.prepare(
+      "SELECT child_id, source, body FROM child_daily_notes ORDER BY child_id",
+    ).all<{ child_id: number; source: string; body: string }>();
+    expect(results).toHaveLength(2);
+    expect(results.every((r) => r.source === "fallback")).toBe(true);
+    expect(results[0].body).toContain("1 feed");
+    // Generation is the consumer's job, not the cron's.
+    expect(AI.run).not.toHaveBeenCalled();
+  });
+
+  it("queues one job per child, carrying the figures with it", async () => {
+    const send = vi.fn(async () => {});
+    await enqueueDailyNotes({ ...env, NOTE_QUEUE: { send } } as unknown as typeof env, NOW);
+
+    expect(send).toHaveBeenCalledTimes(2);
+    const job = send.mock.calls[0][0] as { childId: number; noteDate: string; day: DayStats };
+    expect(job.childId).toBe(1);
+    expect(job.noteDate).toBe("2024-01-14");
+    // Carried, not recomputed: a retry must describe the day it was queued for.
+    expect(job.day.feeds).toBe(1);
+  });
+
+  it("generates inline when there is no queue binding", async () => {
+    const AI = { run: vi.fn(async () => ({ response: "Mikey had a steady day. You are doing this well." })) };
+    const written = await enqueueDailyNotes(
+      { ...env, NOTE_QUEUE: undefined, AI } as unknown as typeof env,
+      NOW,
+    );
+    expect(written).toHaveLength(2);
+    expect(written.every((n) => n.source === "ai")).toBe(true);
+    expect(AI.run).toHaveBeenCalledTimes(2);
+  });
+
+  it("still queues the other children when one child's send fails", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const send = vi.fn(async (job: { childId: number }) => {
+      if (job.childId === 1) throw new Error("queue unavailable");
+    });
+    const written = await enqueueDailyNotes({ ...env, NOTE_QUEUE: { send } } as unknown as typeof env, NOW);
+    expect(written).toHaveLength(1);
+    expect(written[0].child_id).toBe(2);
+  });
+});
+
+describe("writeNoteForJob", () => {
+  beforeEach(async () => {
+    await applyMigrations(env.DB);
+    await env.DB.prepare(
+      "INSERT INTO children (id, first_name, last_name, birth_date) VALUES (1, 'Mikey', 'F', '2023-09-01')",
+    ).run();
+  });
+
+  afterEach(() => vi.restoreAllMocks());
+
+  const job = {
+    childId: 1,
+    firstName: "Mikey",
+    ageLabel: "4 months old",
+    noteDate: "2024-01-14",
+    day: day({ feeds: 6 }),
+    trends: [],
+  };
+
+  it("replaces the template note with the model's when one arrives", async () => {
+    await env.DB.prepare(
+      "INSERT INTO child_daily_notes (child_id, note_date, body, source) VALUES (1, '2024-01-14', 'template text', 'fallback')",
+    ).run();
+
+    const AI = { run: vi.fn(async () => ({ response: "Mikey had a steady day. You are doing this well." })) };
+    const note = await writeNoteForJob({ ...env, AI } as unknown as typeof env, job);
+
+    expect(note.source).toBe("ai");
+    const row = await env.DB.prepare(
+      "SELECT body, source FROM child_daily_notes WHERE child_id = 1",
+    ).first<{ body: string; source: string }>();
+    expect(row).toMatchObject({ source: "ai", body: "Mikey had a steady day. You are doing this well." });
+  });
+
+  it("reports a fallback so the consumer knows to retry", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const AI = { run: vi.fn(async () => { throw new Error("out of capacity"); }) };
+    const note = await writeNoteForJob({ ...env, AI } as unknown as typeof env, job);
+    expect(note.source).toBe("fallback");
+    expect(note.reason).toContain("out of capacity");
+  });
+});
+
+describe("collectNoteJobs", () => {
+  beforeEach(async () => {
+    await applyMigrations(env.DB);
+  });
+
+  it("returns nothing at all when there are no children", async () => {
+    expect(await collectNoteJobs(env, new Date("2024-01-15T05:00:00.000Z"))).toEqual([]);
   });
 });
 
