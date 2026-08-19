@@ -113,7 +113,17 @@ const TREND_THRESHOLD = 0.15;
 export interface DayStats {
   feeds: number;
   feedVolume: { value: number; unit: string } | null;
+  /** Formula alone, in the note's unit — parents track this one separately
+   *  from the feed total, since it's the number a bottle gets topped up by. */
+  formulaOz: number;
   diapers: number;
+  wetDiapers: number;
+  /** "Solid" and "both" diapers — the ones that answer "did they poop". */
+  poopDiapers: number;
+  /** Days since the last poop diaper, counted from the end of this window.
+   *  Only meaningful when `poopDiapers` is 0 — null means none has ever been
+   *  logged. */
+  daysSinceLastPoop: number | null;
   sleepMinutes: number;
   longestSleepMinutes: number;
   sleepSessions: number;
@@ -179,6 +189,16 @@ function clippedMinutes(row: WindowRow, start: string, end: string): number {
   return Math.max(0, (until - from) / 60000);
 }
 
+interface FeedingAmountRow extends AmountRow {
+  type: string;
+}
+
+interface DiaperTypeRow {
+  type: string;
+}
+
+const POOP_DIAPER_TYPES = ["solid", "both"];
+
 export async function fetchDayStats(
   env: Env,
   childId: number,
@@ -186,13 +206,18 @@ export async function fetchDayStats(
   end: string,
   unit: VolumeUnit,
 ): Promise<DayStats> {
-  const [feedings, diapers, sleepSessions, tummyTimes] = await Promise.all([
+  const [feedings, diapers, lastPoop, sleepSessions, tummyTimes] = await Promise.all([
     env.DB.prepare(
-      "SELECT amount, amount_unit FROM feedings WHERE child_id = ? AND start_time >= ? AND start_time < ?",
-    ).bind(childId, start, end).all<AmountRow>(),
+      "SELECT type, amount, amount_unit FROM feedings WHERE child_id = ? AND start_time >= ? AND start_time < ?",
+    ).bind(childId, start, end).all<FeedingAmountRow>(),
     env.DB.prepare(
-      "SELECT COUNT(*) AS n FROM diaper_changes WHERE child_id = ? AND time >= ? AND time < ?",
-    ).bind(childId, start, end).first<{ n: number }>(),
+      "SELECT type FROM diaper_changes WHERE child_id = ? AND time >= ? AND time < ?",
+    ).bind(childId, start, end).all<DiaperTypeRow>(),
+    // The most recent poop diaper up to the end of this window, regardless of
+    // how far back — only used when nothing above answers "did they poop".
+    env.DB.prepare(
+      "SELECT time FROM diaper_changes WHERE child_id = ? AND type IN ('solid', 'both') AND time < ? ORDER BY time DESC LIMIT 1",
+    ).bind(childId, end).first<{ time: string }>(),
     env.DB.prepare(
       "SELECT start_time, end_time FROM sleep WHERE child_id = ? AND start_time < ? AND (end_time IS NULL OR end_time > ?)",
     ).bind(childId, end, start).all<WindowRow>(),
@@ -203,10 +228,29 @@ export async function fetchDayStats(
 
   const sleepMins = sleepSessions.results.map((s) => clippedMinutes(s, start, end));
 
+  const formulaRows = feedings.results.filter((f) => f.type === "bottle_formula");
+  const formulaTotal = volumeTotal(formulaRows, "oz");
+
+  const wetDiapers = diapers.results.filter((d) => d.type === "wet" || d.type === "both").length;
+  const poopDiapers = diapers.results.filter((d) => POOP_DIAPER_TYPES.includes(d.type)).length;
+
+  // `lastPoop` only ever resolves to something strictly before `start` when
+  // `poopDiapers` is 0 — a poop inside this window would already have made it
+  // the most recent one at or before `end`, so this can't collide with "0
+  // days ago" meaning something different from "pooped today".
+  const daysSinceLastPoop =
+    poopDiapers > 0 || !lastPoop
+      ? null
+      : Math.floor((new Date(end).getTime() - new Date(lastPoop.time).getTime()) / 86400000);
+
   return {
     feeds: feedings.results.length,
     feedVolume: volumeTotal(feedings.results, unit),
-    diapers: diapers?.n ?? 0,
+    formulaOz: formulaTotal?.value ?? 0,
+    diapers: diapers.results.length,
+    wetDiapers,
+    poopDiapers,
+    daysSinceLastPoop,
     sleepMinutes: Math.round(sleepMins.reduce((a, b) => a + b, 0)),
     longestSleepMinutes: Math.round(sleepMins.length > 0 ? Math.max(...sleepMins) : 0),
     sleepSessions: sleepMins.filter((m) => m > 0).length,
@@ -291,6 +335,15 @@ export function buildTrends(day: DayStats, baseline: DayStats[]): Trend[] {
     });
   }
 
+  const avgFormula = mean((s) => s.formulaOz);
+  if (avgFormula > 0 || day.formulaOz > 0) {
+    trends.push({
+      metric: "formula",
+      direction: direction(day.formulaOz, avgFormula),
+      phrase: `${round1(day.formulaOz)} oz of formula, against ${round1(avgFormula)} oz a day over the last week`,
+    });
+  }
+
   return trends;
 }
 
@@ -311,8 +364,11 @@ export function fallbackNote(firstName: string, day: DayStats, trends: Trend[]):
         : `${day.feeds} feeds`,
     );
   }
+  if (day.formulaOz > 0) parts.push(`${round1(day.formulaOz)} oz of formula`);
   if (day.sleepMinutes > 0) parts.push(`${hoursLabel(day.sleepMinutes)} of sleep`);
   if (day.diapers > 0) parts.push(`${day.diapers} diapers`);
+  if (day.poopDiapers > 0) parts.push(`${day.poopDiapers} poopy`);
+  else if (day.daysSinceLastPoop != null) parts.push(`last poop ${day.daysSinceLastPoop}d ago`);
   if (day.tummyMinutes > 0) parts.push(`${hoursLabel(day.tummyMinutes)} of tummy time`);
 
   const sleepTrend = trends.find((t) => t.metric === "longest stretch" || t.metric === "sleep");
@@ -345,11 +401,20 @@ export function buildPrompt(
   day: DayStats,
   trends: Trend[],
 ): { system: string; user: string } {
+  const poopFact =
+    day.poopDiapers > 0
+      ? `Pooped yesterday (${day.poopDiapers}×).`
+      : day.daysSinceLastPoop != null
+        ? `Last poop: ${day.daysSinceLastPoop} day${day.daysSinceLastPoop === 1 ? "" : "s"} ago.`
+        : "No poop ever logged.";
+
   const facts = [
     `Baby: ${firstName}, ${ageLabel}`,
     `Feeds yesterday: ${day.feeds}${day.feedVolume ? ` (${round1(day.feedVolume.value)} ${day.feedVolume.unit} total)` : ""}`,
+    `Formula yesterday: ${day.formulaOz > 0 ? `${round1(day.formulaOz)} oz` : "none"}`,
     `Sleep yesterday: ${hoursLabel(day.sleepMinutes)} across ${day.sleepSessions} sessions, longest ${hoursLabel(day.longestSleepMinutes)}`,
-    `Diapers yesterday: ${day.diapers}`,
+    `Diapers yesterday: ${day.diapers} (${day.wetDiapers} wet, ${day.poopDiapers} poopy)`,
+    poopFact,
     `Tummy time yesterday: ${hoursLabel(day.tummyMinutes)}`,
     ...trends.map((t) => `Trend (${t.metric}, ${t.direction}): ${t.phrase}`),
   ].join("\n");

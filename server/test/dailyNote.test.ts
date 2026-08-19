@@ -23,7 +23,11 @@ import { applyMigrations, createTestApp, testRequest } from "./helpers";
 const ZERO: DayStats = {
   feeds: 0,
   feedVolume: null,
+  formulaOz: 0,
   diapers: 0,
+  wetDiapers: 0,
+  poopDiapers: 0,
+  daysSinceLastPoop: null,
   sleepMinutes: 0,
   longestSleepMinutes: 0,
   sleepSessions: 0,
@@ -102,6 +106,14 @@ describe("buildTrends", () => {
       "6 feeds, against 4.5 a day over the last week",
     );
   });
+
+  it("tracks whether formula intake is rising or falling", () => {
+    const up = buildTrends(day({ formulaOz: 20 }), [day({ formulaOz: 12 }), day({ formulaOz: 12 })]);
+    expect(up.find((t) => t.metric === "formula")?.direction).toBe("up");
+
+    const down = buildTrends(day({ formulaOz: 8 }), [day({ formulaOz: 16 }), day({ formulaOz: 16 })]);
+    expect(down.find((t) => t.metric === "formula")?.direction).toBe("down");
+  });
 });
 
 describe("fallbackNote", () => {
@@ -116,6 +128,25 @@ describe("fallbackNote", () => {
     const note = fallbackNote("Mikey", ZERO, []);
     expect(note).toContain("Nothing logged");
     expect(note).not.toMatch(/0 feeds/);
+  });
+
+  it("mentions formula ounces and poop status when they're logged", () => {
+    const note = fallbackNote(
+      "Mikey",
+      day({ feeds: 4, formulaOz: 12, diapers: 5, poopDiapers: 2 }),
+      [],
+    );
+    expect(note).toContain("12 oz of formula");
+    expect(note).toContain("2 poopy");
+  });
+
+  it("says how long it's been since the last poop when yesterday had none", () => {
+    const note = fallbackNote(
+      "Mikey",
+      day({ feeds: 4, diapers: 5, poopDiapers: 0, daysSinceLastPoop: 2 }),
+      [],
+    );
+    expect(note).toContain("last poop 2d ago");
   });
 
   it("reads the sleep trend when there is one", () => {
@@ -148,6 +179,28 @@ describe("buildPrompt", () => {
   it("rules out medical advice", () => {
     const { system } = buildPrompt("Mikey", "4 months old", ZERO, []);
     expect(system).toMatch(/never give medical/i);
+  });
+
+  it("hands the model formula ounces and the poop diaper breakdown", () => {
+    const { user } = buildPrompt(
+      "Mikey",
+      "4 months old",
+      day({ diapers: 5, wetDiapers: 3, poopDiapers: 2, formulaOz: 9 }),
+      [],
+    );
+    expect(user).toContain("Formula yesterday: 9 oz");
+    expect(user).toContain("Diapers yesterday: 5 (3 wet, 2 poopy)");
+    expect(user).toContain("Pooped yesterday (2×)");
+  });
+
+  it("says how long it's been since the last poop when yesterday had none", () => {
+    const { user } = buildPrompt(
+      "Mikey",
+      "4 months old",
+      day({ poopDiapers: 0, daysSinceLastPoop: 3 }),
+      [],
+    );
+    expect(user).toContain("Last poop: 3 days ago");
   });
 });
 
@@ -439,6 +492,40 @@ describe("fetchDayStats", () => {
     expect(stats.feeds).toBe(2);
     expect(stats.feedVolume).toEqual({ value: 220, unit: "mL" });
     expect(stats.diapers).toBe(1);
+    // 220 mL of formula, restated in ounces regardless of the display unit.
+    expect(stats.formulaOz).toBeCloseTo(7.4, 1);
+  });
+
+  it("breaks diapers down into wet and poopy, and answers 'when did they last poop'", async () => {
+    await env.DB.batch([
+      env.DB.prepare("INSERT INTO diaper_changes (child_id, time, type) VALUES (1, '2024-01-14T08:00:00.000Z', 'wet')"),
+      env.DB.prepare("INSERT INTO diaper_changes (child_id, time, type) VALUES (1, '2024-01-14T12:00:00.000Z', 'solid')"),
+      env.DB.prepare("INSERT INTO diaper_changes (child_id, time, type) VALUES (1, '2024-01-14T18:00:00.000Z', 'both')"),
+    ]);
+
+    const stats = await fetchDayStats(env, 1, "2024-01-14T05:00:00.000Z", "2024-01-15T05:00:00.000Z", "ml");
+    expect(stats.diapers).toBe(3);
+    expect(stats.wetDiapers).toBe(2); // 'wet' + 'both'
+    expect(stats.poopDiapers).toBe(2); // 'solid' + 'both'
+    // Pooped yesterday, so there's nothing to count back to.
+    expect(stats.daysSinceLastPoop).toBeNull();
+  });
+
+  it("counts back to the last poop when there wasn't one yesterday", async () => {
+    await env.DB.batch([
+      env.DB.prepare("INSERT INTO diaper_changes (child_id, time, type) VALUES (1, '2024-01-12T12:00:00.000Z', 'solid')"),
+      env.DB.prepare("INSERT INTO diaper_changes (child_id, time, type) VALUES (1, '2024-01-14T08:00:00.000Z', 'wet')"),
+    ]);
+
+    const stats = await fetchDayStats(env, 1, "2024-01-14T05:00:00.000Z", "2024-01-15T05:00:00.000Z", "ml");
+    expect(stats.poopDiapers).toBe(0);
+    expect(stats.daysSinceLastPoop).toBe(2);
+  });
+
+  it("says the last poop is unknown when none has ever been logged", async () => {
+    const stats = await fetchDayStats(env, 1, "2024-01-14T05:00:00.000Z", "2024-01-15T05:00:00.000Z", "ml");
+    expect(stats.poopDiapers).toBe(0);
+    expect(stats.daysSinceLastPoop).toBeNull();
   });
 
   it("credits a nap that runs past midnight to each day it covers", async () => {

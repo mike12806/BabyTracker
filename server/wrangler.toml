@@ -81,9 +81,13 @@ retry_delay = 60
 binding = "AI"
 
 [triggers]
-# Fires at 05:00 UTC daily = midnight Eastern Standard Time.
-# During EDT (UTC-4) this fires at 1:00 AM ET — close enough for a daily summary.
-crons = ["0 5 * * *"]
+# Two crons, both after midnight Eastern so each covers the prior full ET day,
+# and staggered so the note is written before the email that includes it:
+#   05:00 UTC = 12:00 AM EST (1:00 AM EDT) — writes/queues the daily note.
+#   05:15 UTC = 12:15 AM EST (1:15 AM EDT) — sends the summary email, 15
+#   minutes later so the note queue has time to finish before it's read.
+# `scheduled()` in src/index.ts tells the two apart by `event.cron`.
+crons = ["0 5 * * *", "15 5 * * *"]
 
 [vars]
 CF_ACCESS_TEAM_DOMAIN = "mfaherty.cloudflareaccess.com"

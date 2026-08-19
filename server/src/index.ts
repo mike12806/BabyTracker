@@ -64,26 +64,34 @@ app.onError((err, c) => {
   return c.json({ error: "Internal server error" }, 500);
 });
 
+/**
+ * The note cron, exactly as it appears in `wrangler.toml`. The email cron
+ * fires 15 minutes later so the note (queued here) has landed in
+ * `child_daily_notes` before the summary reads it — anything else that
+ * fires `scheduled()` is treated as the email cron.
+ */
+const NOTE_CRON = "0 5 * * *";
+
 export default {
   fetch: app.fetch,
 
-  async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
+  async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
+    if (event.cron === NOTE_CRON) {
+      // Only writes each child's template note and queues the model call here;
+      // the generation itself happens in the consumer below, where a transient
+      // failure gets retried instead of costing that child their note for the
+      // day.
+      ctx.waitUntil(
+        enqueueDailyNotes(env).catch((err) =>
+          console.error("Daily note enqueue failed:", err)
+        )
+      );
+      return;
+    }
+
     ctx.waitUntil(
       sendDailySummary(env).catch((err) =>
         console.error("Daily summary failed:", err)
-      )
-    );
-
-    // Separately waited on, so a model outage cannot cost anyone their summary
-    // email — and a bad SES day cannot cost the dashboard its note.
-    //
-    // This only writes each child's template note and queues the model call;
-    // the generation itself happens in the consumer below, where a transient
-    // failure gets retried instead of costing that child their note for the
-    // day.
-    ctx.waitUntil(
-      enqueueDailyNotes(env).catch((err) =>
-        console.error("Daily note enqueue failed:", err)
       )
     );
   },
