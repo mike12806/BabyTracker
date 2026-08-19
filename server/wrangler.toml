@@ -74,6 +74,26 @@ max_retries = 3
 # only needs to land while it is still the morning it describes.
 retry_delay = 60
 
+# Boop line generation. The weekly cron enqueues one job per mood (day/night)
+# and the consumer generates and stores that mood's new lines — same shape as
+# the daily note queue above, so a transient Workers AI failure gets retried
+# instead of costing that week's lines outright.
+#
+# No dead letter queue, also like the daily note: a mood that exhausts its
+# retries just keeps whatever lines it already had, which is a fine outcome
+# for something this low-stakes.
+[[queues.producers]]
+queue = "baby-tracker-boop-lines"
+binding = "BOOP_LINES_QUEUE"
+
+[[queues.consumers]]
+queue = "baby-tracker-boop-lines"
+# Two jobs total (one per mood) — a batch is only ever a convenience.
+max_batch_size = 10
+max_batch_timeout = 30
+max_retries = 3
+retry_delay = 300
+
 # Workers AI, for the dashboard's daily note. One generation per child per day
 # from the cron below, cached in D1 — a page load never reaches the model, so
 # the cost does not scale with how often the app is opened.
@@ -81,13 +101,18 @@ retry_delay = 60
 binding = "AI"
 
 [triggers]
-# Two crons, both after midnight Eastern so each covers the prior full ET day,
-# and staggered so the note is written before the email that includes it:
+# Three crons. The first two, both after midnight Eastern so each covers the
+# prior full ET day, staggered so the note is written before the email that
+# includes it:
 #   05:00 UTC = 12:00 AM EST (1:00 AM EDT) — writes/queues the daily note.
 #   05:15 UTC = 12:15 AM EST (1:15 AM EDT) — sends the summary email, 15
 #   minutes later so the note queue has time to finish before it's read.
-# `scheduled()` in src/index.ts tells the two apart by `event.cron`.
-crons = ["0 5 * * *", "15 5 * * *"]
+# The third tops up the boop-line pool (see scheduled/boopLines.ts) — weekly
+# rather than daily, and off-hour and off the other two's minute so it never
+# competes with them for the same invocation:
+#   04:30 UTC on Sundays.
+# `scheduled()` in src/index.ts tells the three apart by `event.cron`.
+crons = ["0 5 * * *", "15 5 * * *", "30 4 * * 0"]
 
 [vars]
 CF_ACCESS_TEAM_DOMAIN = "mfaherty.cloudflareaccess.com"
@@ -96,6 +121,9 @@ AWS_SES_REGION = "us-east-1"
 # Override to write the daily note with a different Workers AI model.
 # Defaults to DEFAULT_NOTE_MODEL in src/scheduled/dailyNote.ts.
 # DAILY_NOTE_MODEL = "@cf/google/gemma-4-26b-a4b-it"
+# Override to write new boop lines with a different Workers AI model.
+# Defaults to DEFAULT_BOOP_LINE_MODEL in src/scheduled/boopLines.ts.
+# BOOP_LINES_MODEL = "@cf/google/gemma-4-26b-a4b-it"
 
 # For local dev, create server/.dev.vars to override:
 #   CLIENT_URL=http://localhost:5173

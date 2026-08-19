@@ -11,6 +11,8 @@ import {
 import type { DailySummaryJob } from "./scheduled/dailySummary.js";
 import { enqueueDailyNotes, writeNoteForJob, DAILY_NOTE_QUEUE } from "./scheduled/dailyNote.js";
 import type { DailyNoteJob } from "./scheduled/dailyNote.js";
+import { enqueueBoopLineRefresh, refreshMood, BOOP_LINES_QUEUE } from "./scheduled/boopLines.js";
+import type { BoopLineJob } from "./scheduled/boopLines.js";
 import { auth } from "./routes/auth.js";
 import { children } from "./routes/children.js";
 import { feedings } from "./routes/feedings.js";
@@ -27,6 +29,7 @@ import { medications } from "./routes/medications.js";
 import { activity } from "./routes/activity.js";
 import { todos } from "./routes/todos.js";
 import { dailyNotes } from "./routes/dailyNotes.js";
+import { boopLines } from "./routes/boopLines.js";
 
 type AppEnv = { Bindings: Env; Variables: { userId: number; userEmail: string; userName: string } };
 
@@ -57,6 +60,7 @@ app.route("/api/medications", medications);
 app.route("/api/activity", activity);
 app.route("/api/todos", todos);
 app.route("/api/daily-notes", dailyNotes);
+app.route("/api/boop-lines", boopLines);
 
 // Global error handler
 app.onError((err, c) => {
@@ -68,9 +72,21 @@ app.onError((err, c) => {
  * The note cron, exactly as it appears in `wrangler.toml`. The email cron
  * fires 15 minutes later so the note (queued here) has landed in
  * `child_daily_notes` before the summary reads it — anything else that
- * fires `scheduled()` is treated as the email cron.
+ * fires `scheduled()` is treated as the email cron, except BOOP_LINES_CRON
+ * below.
  */
 const NOTE_CRON = "0 5 * * *";
+
+/**
+ * The boop-line cron — see scheduled/boopLines.ts.
+ *
+ * Weekly, not daily: the daily note has to be daily because it describes
+ * yesterday, but there's no equivalent reason for the boop pool to turn over
+ * that often — a handful of new lines a week is already more variety than
+ * anyone taps through. Off-hour and off the other two crons' minute so it
+ * never competes with them for the same invocation.
+ */
+const BOOP_LINES_CRON = "30 4 * * 0";
 
 export default {
   fetch: app.fetch,
@@ -84,6 +100,17 @@ export default {
       ctx.waitUntil(
         enqueueDailyNotes(env).catch((err) =>
           console.error("Daily note enqueue failed:", err)
+        )
+      );
+      return;
+    }
+
+    if (event.cron === BOOP_LINES_CRON) {
+      // Queues one refresh job per mood; the actual generation happens in
+      // the consumer below, same split as the daily note above.
+      ctx.waitUntil(
+        enqueueBoopLineRefresh(env).catch((err) =>
+          console.error("Boop line enqueue failed:", err)
         )
       );
       return;
@@ -106,7 +133,7 @@ export default {
    * failed, and a duplicate summary in someone's inbox is the failure this is
    * meant to avoid creating.
    */
-  async queue(batch: MessageBatch<DailySummaryJob | DailyNoteJob>, env: Env): Promise<void> {
+  async queue(batch: MessageBatch<DailySummaryJob | DailyNoteJob | BoopLineJob>, env: Env): Promise<void> {
     // Generating one child's note. A failure here is retried rather than
     // dropped — the template note is already on the card, so a retry is an
     // upgrade that can afford to be late, and there is no dead letter queue
@@ -123,6 +150,24 @@ export default {
           else message.retry();
         } catch (err) {
           console.error(`Daily note generation failed for child ${job?.childId}:`, err);
+          message.retry();
+        }
+      }
+      return;
+    }
+
+    if (batch.queue === BOOP_LINES_QUEUE) {
+      for (const message of batch.messages) {
+        const job = message.body as BoopLineJob;
+        try {
+          const { added, reason } = await refreshMood(env, job.mood);
+          // Zero new lines usually means a transient model failure (out of
+          // capacity, a bad reply) — retry, same as the daily note queue.
+          // `refreshMood` has already logged the reason.
+          if (added > 0 || !reason) message.ack();
+          else message.retry();
+        } catch (err) {
+          console.error(`Boop line generation failed for "${job?.mood}":`, err);
           message.retry();
         }
       }

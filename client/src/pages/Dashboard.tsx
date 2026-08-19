@@ -38,6 +38,7 @@ import ChildHero from "../components/ChildHero";
 import NoChildPlaceholder from "../components/NoChildPlaceholder";
 import QuickLogDialog, { type QuickLogCategory } from "../components/QuickLogDialog";
 import { buildCategoryColors, type CategoryKey } from "../theme/categoryColors";
+import type { BoopLinePool } from "../utils/childMoments";
 import { editEntryPath } from "../utils/activityLinks";
 import { formatRelativeTime } from "../utils/dateTime";
 import { sideLabel } from "../utils/pumping";
@@ -149,6 +150,11 @@ export default function Dashboard() {
   const [todos, setTodos] = useState<Todo[]>([]);
   const [dailyNote, setDailyNote] = useState<string | null>(null);
   const [dailyNoteSource, setDailyNoteSource] = useState<"ai" | "fallback" | null>(null);
+  // The AI-written boop lines (see server/src/scheduled/boopLines.ts) — not
+  // per-child, so fetched once for the session rather than on every child
+  // switch or refresh. Absent until the first cron run, and the hero card
+  // works fine on just its own built-in lines until then.
+  const [boopExtras, setBoopExtras] = useState<BoopLinePool | undefined>(undefined);
 
   const [quickLogCategory, setQuickLogCategory] = useState<QuickLogCategory | null>(null);
   // Ids ticked off from this page but not yet gone from `todos`. The snapshot only
@@ -169,6 +175,17 @@ export default function Dashboard() {
       notify(err instanceof Error ? err.message : "Failed to update todo.", "error");
     }
   };
+
+  // Once per session, not per child — the pool isn't scoped to any one baby.
+  // Caught rather than awaited: an older deploy or an empty table must not
+  // stop the rest of the dashboard from loading, and the built-in lines in
+  // childMoments.ts already cover the case where this never arrives.
+  useEffect(() => {
+    api
+      .getOptional<BoopLinePool>("/boop-lines")
+      .then((pool) => pool && setBoopExtras(pool))
+      .catch(() => {});
+  }, []);
 
   // Refetches on mount, when the child changes, and whenever `refreshKey` is
   // bumped — logging an entry from anywhere in the app (including the bottom-nav
@@ -390,6 +407,7 @@ export default function Dashboard() {
         isDark={isDark}
         dailyNote={dailyNote}
         dailyNoteSource={dailyNoteSource}
+        boopExtras={boopExtras}
       />
 
       {/* Live status banner */}

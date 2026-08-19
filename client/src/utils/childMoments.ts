@@ -135,11 +135,25 @@ export function milestone(birthDate: string, now: Date): Milestone | null {
   return null;
 }
 
+/** New lines a low-frequency server cron writes into the boop_lines table
+ *  (see server/src/scheduled/boopLines.ts) so the joke doesn't go stale after
+ *  the thousandth tap. Optional everywhere: an empty or missing pool just
+ *  means `boopMessage` cycles through the built-ins below on their own. */
+export interface BoopLinePool {
+  day: string[];
+  night: string[];
+}
+
 /**
  * The lines that cycle when the photo gets tapped. Ordinary, small, and true
  * to the hour — the joke is that the app has an opinion at all.
+ *
+ * These built-ins are the permanent fallback and always come first, so the
+ * feature works identically with no server pool at all (offline, a fresh
+ * deploy before the first cron run). Any AI-written lines for the current
+ * mood are appended after them.
  */
-export function boopMessage(firstName: string, tapCount: number, now: Date): string {
+export function boopMessage(firstName: string, tapCount: number, now: Date, extra?: BoopLinePool): string {
   const hour = now.getHours();
   const nocturnal = hour < 5 || hour >= 22;
   const lines = nocturnal
@@ -149,6 +163,7 @@ export function boopMessage(firstName: string, tapCount: number, now: Date): str
         "Shh. We're both tired.",
         "That's a 3am boop.",
         "Still the cutest at this hour.",
+        ...(extra?.night ?? []),
       ]
     : [
         "Boop.",
@@ -157,6 +172,7 @@ export function boopMessage(firstName: string, tapCount: number, now: Date): str
         "Certified good baby.",
         `Somebody loves ${firstName}.`,
         "Boop received.",
+        ...(extra?.day ?? []),
       ];
   return lines[tapCount % lines.length];
 }
