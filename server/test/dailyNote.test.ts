@@ -417,3 +417,38 @@ describe("GET /api/children/:id/daily-note", () => {
     expect(res.status).toBe(404);
   });
 });
+
+describe("POST /api/daily-notes/refresh", () => {
+  let api: ReturnType<typeof testRequest>;
+
+  beforeEach(async () => {
+    const app = createTestApp();
+    await applyMigrations(env.DB);
+    api = testRequest(app, env.DB);
+    await env.DB.prepare(
+      "INSERT INTO children (id, first_name, last_name, birth_date) VALUES (1, 'Mikey', 'F', '2023-09-01')",
+    ).run();
+  });
+
+  it("writes today's note on demand, without waiting for the cron", async () => {
+    const res = await api.post("/api/daily-notes/refresh", {});
+    expect(res.status).toBe(200);
+
+    const json = await res.json<{ written: { child_id: number; source: string }[] }>();
+    expect(json.written).toHaveLength(1);
+    expect(json.written[0]).toMatchObject({ child_id: 1 });
+
+    const note = await api.get("/api/children/1/daily-note");
+    expect((await note.json<{ note: { body: string } | null }>()).note?.body).toBeTruthy();
+  });
+
+  it("is safe to call twice — the second call updates in place, not duplicates", async () => {
+    await api.post("/api/daily-notes/refresh", {});
+    await api.post("/api/daily-notes/refresh", {});
+
+    const { n } = (await env.DB.prepare(
+      "SELECT COUNT(*) AS n FROM child_daily_notes WHERE child_id = 1",
+    ).first<{ n: number }>())!;
+    expect(n).toBe(1);
+  });
+});
