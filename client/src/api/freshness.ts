@@ -53,9 +53,11 @@ function setStaleSince(value: number | null): void {
  * the server is reachable, which is exactly what clears the banner.
  */
 export function noteResponse(res: Response): void {
-  // `navigator.onLine === false` is only ever reported when the device truly
-  // has no connection, so a request that still "succeeded" then can't have
-  // come from the server.
+  // Only consulted where nothing better is available — see below. It is not
+  // trustworthy on its own: `navigator.onLine === false` is documented as
+  // "definitely offline", but in practice installed PWAs, VPNs and captive
+  // portals all report it while the network works fine, and a phone that
+  // reports it wrongly used to pin this app in the stale state forever.
   const offline = typeof navigator !== "undefined" && navigator.onLine === false;
 
   // Headers are optional-chained rather than assumed: this sits on the path of
@@ -81,13 +83,31 @@ export function noteResponse(res: Response): void {
   }
 
   const now = Date.now();
+  // Whether a *previous* reply already calibrated the clock. The first sample
+  // of a session is absorbed wholesale into the skew estimate, so on a cold
+  // start even a 45-minute-old cached reply measures as brand new — age is
+  // not evidence of anything yet.
+  const hadCalibration = clockSkewMs !== null;
   const sample = servedAt - now;
   if (clockSkewMs === null || sample > clockSkewMs) clockSkewMs = sample;
 
   const generatedAt = servedAt - clockSkewMs; // in local-clock terms
   const age = now - generatedAt;
 
-  if (age < STALE_AFTER_MS && !offline) {
+  // Once the clock is calibrated, a recent `Date` on a non-cached reply is
+  // positive proof the server was reachable a moment ago — better evidence
+  // than any flag, so it is not second-guessed by one.
+  //
+  // This used to require `!offline` unconditionally, which meant a device
+  // wrongly reporting itself offline could never clear the banner however
+  // many requests succeeded: every reply landed here, failed the `!offline`
+  // half, and re-flagged the screen as stale. The retry loop then pinged
+  // every 15 seconds forever, refetching every mounted page each time it got
+  // an answer — which is what "the page reloads a few times" looked like.
+  //
+  // Before calibration the hint still gets its say, because `age` cannot yet
+  // contradict it.
+  if (age < STALE_AFTER_MS && (hadCalibration || !offline)) {
     setStaleSince(null);
     return;
   }
