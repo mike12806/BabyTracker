@@ -52,7 +52,7 @@ export type VolumeUnit = "ml" | "oz" | "cc";
 
 export const DEFAULT_VOLUME_UNIT: VolumeUnit = "ml";
 
-interface AmountRow {
+export interface AmountRow {
   amount: number | null;
   amount_unit: string | null;
 }
@@ -87,7 +87,7 @@ function formatAmount(entry: AmountRow, display: VolumeUnit): string | null {
  * own totals so an email and a screen never disagree. Grams are a mass and are
  * left out. Returns null when nothing was measured by volume.
  */
-function volumeTotal(entries: AmountRow[], display: VolumeUnit): { value: number; unit: string } | null {
+export function volumeTotal(entries: AmountRow[], display: VolumeUnit): { value: number; unit: string } | null {
   let total = 0;
   let count = 0;
   for (const e of entries) {

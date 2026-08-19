@@ -9,6 +9,7 @@ import {
   DAILY_SUMMARY_DLQ,
 } from "./scheduled/dailySummary.js";
 import type { DailySummaryJob } from "./scheduled/dailySummary.js";
+import { refreshDailyNotes } from "./scheduled/dailyNote.js";
 import { auth } from "./routes/auth.js";
 import { children } from "./routes/children.js";
 import { feedings } from "./routes/feedings.js";
@@ -67,6 +68,14 @@ export default {
     ctx.waitUntil(
       sendDailySummary(env).catch((err) =>
         console.error("Daily summary failed:", err)
+      )
+    );
+
+    // Separately waited on, so a model outage cannot cost anyone their summary
+    // email — and a bad SES day cannot cost the dashboard its note.
+    ctx.waitUntil(
+      refreshDailyNotes(env).catch((err) =>
+        console.error("Daily note refresh failed:", err)
       )
     );
   },

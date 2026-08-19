@@ -58,6 +58,7 @@ import { useVolumeUnit } from "../hooks/useVolumeUnit";
 import { formatRelativeTime } from "../utils/dateTime";
 import { unitLabel, VOLUME_UNITS, type VolumeUnit } from "../utils/feedingAmount";
 import { API_BASE } from "../api/client";
+import { childPhotoUrl } from "../utils/childMoments";
 import QuickLogDialog, { type QuickLogCategory } from "./QuickLogDialog";
 
 const DRAWER_WIDTH = 240;
@@ -185,7 +186,7 @@ export default function Layout() {
               <MenuItem key={child.id} value={child.id}>
                 <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                   <Avatar
-                    src={child.picture_content_type ? `${API_BASE}/children/${child.id}/photo?v=${encodeURIComponent(child.updated_at)}` : undefined}
+                    src={childPhotoUrl(child, API_BASE) ?? undefined}
                     sx={{ width: 24, height: 24, fontSize: 12 }}
                   >
                     {child.first_name[0]}
@@ -329,7 +330,7 @@ export default function Layout() {
           >
             {selectedChild && (
               <Avatar
-                src={selectedChild.picture_content_type ? `${API_BASE}/children/${selectedChild.id}/photo?v=${encodeURIComponent(selectedChild.updated_at)}` : undefined}
+                src={childPhotoUrl(selectedChild, API_BASE) ?? undefined}
                 sx={{ width: 28, height: 28, fontSize: 12 }}
               >
                 {selectedChild.first_name[0]}

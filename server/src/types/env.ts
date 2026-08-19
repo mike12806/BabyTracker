@@ -23,4 +23,14 @@ export interface Env {
    * have no queue, and fall back to sending inline. See `sendDailySummary`.
    */
   EMAIL_QUEUE?: Queue<DailySummaryJob>;
+  /**
+   * Workers AI, for the dashboard's daily note.
+   *
+   * Optional so the Worker still runs without it — local dev and the tests
+   * have no binding, and fall back to the deterministic note. See
+   * `generateNoteBody`.
+   */
+  AI?: Ai;
+  /** Overrides the model the daily note is written with. */
+  DAILY_NOTE_MODEL?: string;
 }

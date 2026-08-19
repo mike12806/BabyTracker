@@ -213,6 +213,40 @@ children.post("/:id/photo", async (c) => {
   return c.json({ ok: true });
 });
 
+// GET /api/children/:id/daily-note — the cached blurb for the dashboard hero.
+//
+// A read, never a generation: the note is written once a day by the cron, so
+// however often the app is opened, this costs one indexed D1 lookup. Notes
+// older than a few days are not returned — a cron that missed a run should
+// leave the card blank rather than describing last Tuesday as "yesterday".
+const DAILY_NOTE_MAX_AGE_DAYS = 3;
+
+children.get("/:id/daily-note", async (c) => {
+  const childId = parseInt(c.req.param("id"), 10);
+
+  const exists = await c.env.DB.prepare("SELECT 1 FROM children WHERE id = ?")
+    .bind(childId)
+    .first();
+
+  if (!exists) {
+    return c.json({ error: "Child not found" }, 404);
+  }
+
+  const oldest = new Date(Date.now() - DAILY_NOTE_MAX_AGE_DAYS * 86400000)
+    .toISOString()
+    .slice(0, 10);
+
+  const note = await c.env.DB.prepare(
+    `SELECT note_date, body, source FROM child_daily_notes
+     WHERE child_id = ? AND note_date >= ?
+     ORDER BY note_date DESC LIMIT 1`
+  )
+    .bind(childId, oldest)
+    .first<{ note_date: string; body: string; source: string }>();
+
+  return c.json({ note: note ?? null });
+});
+
 // GET /api/children/:id/photo — serve the photo from R2
 children.get("/:id/photo", async (c) => {
   const childId = parseInt(c.req.param("id"), 10);

@@ -33,6 +33,7 @@ import migration0011 from "../migrations/0011_add_volume_unit_setting.sql?raw";
 import migration0012 from "../migrations/0012_add_clinic_weight_readings.sql?raw";
 import migration0013 from "../migrations/0013_add_diaper_type_none.sql?raw";
 import migration0014 from "../migrations/0014_add_client_requests.sql?raw";
+import migration0015 from "../migrations/0015_add_daily_notes.sql?raw";
 
 type AppEnv = { Bindings: Env; Variables: { userId: number; userEmail: string; userName: string } };
 
@@ -112,6 +113,7 @@ export async function execScript(db: D1Database, script: string) {
 export async function applyMigrations(db: D1Database) {
   // Drop all tables first to ensure clean state between tests
   const dropSQL = `
+    DROP TABLE IF EXISTS child_daily_notes;
     DROP TABLE IF EXISTS client_requests;
     DROP TABLE IF EXISTS todos;
     DROP TABLE IF EXISTS user_settings;
@@ -131,7 +133,7 @@ export async function applyMigrations(db: D1Database) {
   `;
 
   // Execute the real migration files in order to keep test schema in sync
-  const migrations = [migration0001, migration0002, migration0003, migration0004, migration0005, migration0006, migration0007, migration0008, migration0009, migration0010, migration0011, migration0012, migration0013, migration0014];
+  const migrations = [migration0001, migration0002, migration0003, migration0004, migration0005, migration0006, migration0007, migration0008, migration0009, migration0010, migration0011, migration0012, migration0013, migration0014, migration0015];
 
   await execScript(db, dropSQL + migrations.join("\n"));
 }

@@ -4,7 +4,7 @@ import { cloudflareTest } from "@cloudflare/vitest-pool-workers";
 export default defineConfig({
   plugins: [
     cloudflareTest({
-      wrangler: { configPath: "./wrangler.toml" },
+      wrangler: { configPath: "./wrangler.test.toml" },
       miniflare: {
         d1Databases: { DB: "test-db" },
         r2Buckets: { PHOTOS: "test-photos" },
