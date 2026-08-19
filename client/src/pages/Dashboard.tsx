@@ -148,6 +148,7 @@ export default function Dashboard() {
   const [medications, setMedications] = useState<Medication[]>([]);
   const [todos, setTodos] = useState<Todo[]>([]);
   const [dailyNote, setDailyNote] = useState<string | null>(null);
+  const [dailyNoteSource, setDailyNoteSource] = useState<"ai" | "fallback" | null>(null);
 
   const [quickLogCategory, setQuickLogCategory] = useState<QuickLogCategory | null>(null);
   // Ids ticked off from this page but not yet gone from `todos`. The snapshot only
@@ -180,6 +181,7 @@ export default function Dashboard() {
     // Drop the outgoing child's note straight away rather than leaving it under
     // the new child's face until the refetch lands.
     setDailyNote(null);
+    setDailyNoteSource(null);
 
     (async () => {
       try {
@@ -204,7 +206,7 @@ export default function Dashboard() {
           // older deploy, a failed migration) must not take the numbers down
           // with it.
           api
-            .get<{ note: { body: string } | null }>(`/children/${childId}/daily-note`)
+            .get<{ note: { body: string; source: "ai" | "fallback" } | null }>(`/children/${childId}/daily-note`)
             .catch(() => ({ note: null })),
         ]);
         if (cancelled) return;
@@ -219,6 +221,7 @@ export default function Dashboard() {
         setMedications(m);
         setTodos(td);
         setDailyNote(note.note?.body ?? null);
+        setDailyNoteSource(note.note?.source ?? null);
       } catch (err) {
         if (!cancelled) notify(err instanceof Error ? err.message : "Failed to load data.", "error");
       }
@@ -384,6 +387,7 @@ export default function Dashboard() {
         cat={cat}
         isDark={isDark}
         dailyNote={dailyNote}
+        dailyNoteSource={dailyNoteSource}
       />
 
       {/* Live status banner */}

@@ -25,14 +25,29 @@ import { computeDailyWindow, volumeTotal, type AmountRow, type VolumeUnit } from
  * Neuron daily free allocation — so cost cannot sensibly decide this, and an
  * 8B model is exactly where warm two-sentence prose turns into "Great job,
  * keep it up!". Gemma 4 26B is an MoE (4B active), so it is fast and cheap
- * while writing markedly better than an 8B, and it is not a reasoning model —
- * nothing here benefits from a thinking trace we would only have to strip.
+ * while writing markedly better than an 8B.
+ *
+ * It does have "thinking mode" — despite an earlier version of this comment
+ * claiming otherwise — but that is handled, not avoided: Workers AI answers
+ * models like this one in the OpenAI chat-completions shape, with the
+ * finished reply in `choices[0].message.content` and any reasoning trace
+ * already separated into `.reasoning_content` beside it. `extractModelText`
+ * below reads `.content` (falling back to the older `.response` shape for
+ * simpler models), so nothing here needed to strip a trace by hand — it just
+ * needed to read the right field, which the first version of this file
+ * didn't: it only ever read `.response`, which this model never sets, so
+ * every note fell back to the template from the day this shipped until that
+ * was noticed and fixed.
  *
  * Note the exact slug: Cloudflare's prose sometimes shortens these, but this
  * is the form the model catalog and pricing table use. Getting it wrong is a
  * quiet failure — every call throws, every note falls back to the template,
  * and the card keeps working — so `refreshDailyNotes` logs loudly when a whole
- * run falls back despite a binding being present.
+ * run falls back despite a binding being present. That warning covers the
+ * `.response`-vs-`.choices` bug above too — it doesn't care why every note
+ * fell back, only that they all did — so it should have been visible in
+ * Workers Logs from the first cron run after this shipped, if anyone had
+ * gone looking.
  */
 export const DEFAULT_NOTE_MODEL = "@cf/google/gemma-4-26b-a4b-it";
 
@@ -273,8 +288,25 @@ export function buildPrompt(
   };
 }
 
+/**
+ * Workers AI does not return one response shape. Simpler text-generation
+ * models answer `{ response: string }`; models with function calling or a
+ * "thinking mode" — including the default model here, `gemma-4-26b-a4b-it` —
+ * answer in the OpenAI chat-completions shape instead, `{ choices: [{
+ * message: { content, reasoning_content? } }] }`, with the reasoning trace
+ * (if any) already separated out into `reasoning_content` and the finished
+ * answer in `content`. Reading only `.response` from a model that actually
+ * returns `.choices` finds nothing, `tidyNote` correctly calls that "no
+ * usable reply", and every note falls back to the template — silently
+ * correct in its own terms, silently wrong about why.
+ */
 interface AiTextResponse {
   response?: string;
+  choices?: { message?: { content?: string } }[];
+}
+
+function extractModelText(result: AiTextResponse): string {
+  return result.response ?? result.choices?.[0]?.message?.content ?? "";
 }
 
 /**
@@ -304,7 +336,7 @@ export async function generateNoteBody(
       temperature: 0.7,
     })) as AiTextResponse;
 
-    const tidied = tidyNote(result?.response ?? "");
+    const tidied = tidyNote(extractModelText(result));
     return tidied ? { body: tidied, source: "ai" } : fallback;
   } catch (error) {
     console.error(`Daily note generation failed for ${firstName}:`, error);
@@ -326,18 +358,14 @@ export function ageLabel(birthDate: string, on: Date): string {
 }
 
 /**
- * The unit the note speaks in. The blurb is one row shared by everyone who
- * reads it, so it cannot be per-user like the email is — take the unit most of
- * the household has chosen and let the minority read a converted number.
+ * The unit the note speaks in. Fixed at oz rather than following each
+ * reader's own display setting (unlike the dashboard totals, or the daily
+ * summary email, which is per-user): the note is one row shared by everyone
+ * who reads it, so it cannot actually be per-user, and oz is what gets said
+ * out loud in this household regardless of what any one person's toggle is
+ * set to.
  */
-async function householdUnit(env: Env): Promise<VolumeUnit> {
-  const row = await env.DB.prepare(
-    `SELECT volume_unit FROM user_settings
-     WHERE volume_unit IN ('ml', 'oz', 'cc')
-     GROUP BY volume_unit ORDER BY COUNT(*) DESC, volume_unit LIMIT 1`,
-  ).first<{ volume_unit: VolumeUnit }>();
-  return row?.volume_unit ?? "ml";
-}
+const NOTE_VOLUME_UNIT: VolumeUnit = "oz";
 
 /**
  * Write today's note for every child. Called once a day from the cron, beside
@@ -347,7 +375,7 @@ async function householdUnit(env: Env): Promise<VolumeUnit> {
 export async function refreshDailyNotes(env: Env, now = new Date()): Promise<DailyNote[]> {
   const { windowStart, windowEnd } = computeDailyWindow(now);
   const noteDate = windowStart.slice(0, 10);
-  const unit = await householdUnit(env);
+  const unit = NOTE_VOLUME_UNIT;
 
   const { results: children } = await env.DB.prepare(
     "SELECT id, first_name, birth_date FROM children ORDER BY id",
