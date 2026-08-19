@@ -124,6 +124,9 @@ interface PumpingRow { start_time: string; end_time: string | null; side: string
 interface TemperatureRow { time: string; reading: number; reading_unit: string }
 interface NoteRow { time: string; title: string | null; content: string }
 interface HistoryEntryRow { activity_type: string; event_time: string; detail: string; child_name: string; logged_by: string }
+/** The cron's AI-written blurb for this child's day, from `child_daily_notes`
+ *  — the same row the dashboard card reads (see dailyNote.ts). */
+interface DailyNoteRow { body: string; source: string }
 
 const PUMPING_SIDE_LABELS: Record<string, string> = {
   left: "left breast",
@@ -146,8 +149,9 @@ async function fetchChildData(
   pumping: PumpingRow[];
   temperatures: TemperatureRow[];
   notes: NoteRow[];
+  dailyNote: DailyNoteRow | null;
 }> {
-  const [feedings, diapers, sleepSessions, tummyTimes, pumping, temperatures, notes] =
+  const [feedings, diapers, sleepSessions, tummyTimes, pumping, temperatures, notes, dailyNote] =
     await Promise.all([
       env.DB.prepare(
         "SELECT type, start_time, end_time, amount, amount_unit FROM feedings WHERE child_id = ? AND start_time >= ? AND start_time < ? ORDER BY start_time"
@@ -170,6 +174,12 @@ async function fetchChildData(
       env.DB.prepare(
         "SELECT time, title, content FROM notes WHERE child_id = ? AND time >= ? AND time < ? ORDER BY time"
       ).bind(childId, start, end).all<NoteRow>(),
+      // Same row the dashboard card reads, keyed by the ET calendar date this
+      // window describes — `start` is that date's midnight, so its first 10
+      // characters are the `note_date` the cron wrote it under.
+      env.DB.prepare(
+        "SELECT body, source FROM child_daily_notes WHERE child_id = ? AND note_date = ?"
+      ).bind(childId, start.slice(0, 10)).first<DailyNoteRow>(),
     ]);
 
   return {
@@ -180,6 +190,7 @@ async function fetchChildData(
     pumping: pumping.results,
     temperatures: temperatures.results,
     notes: notes.results,
+    dailyNote: dailyNote ?? null,
   };
 }
 
@@ -315,6 +326,19 @@ function noData(): string {
   return `<tr><td style="padding:2px 0 10px 12px;font-size:13px;color:#aaa;font-style:italic">None recorded</td></tr>`;
 }
 
+/** The AI (or fallback) daily note, as its own highlighted row at the top of
+ *  the child's card — the same text the dashboard shows, read before anyone
+ *  scrolls to the raw logs below it. */
+function noteRow(note: DailyNoteRow | null): string {
+  if (!note || !note.body) return "";
+  const sparkle = note.source === "ai" ? "&#10024; " : "";
+  return `<tr><td style="padding:0 0 16px">
+    <div style="background:#fff8e1;border:1px solid #ffe082;border-radius:6px;padding:10px 12px;font-size:13px;color:#5d4037;line-height:1.5">
+      ${sparkle}${esc(note.body)}
+    </div>
+  </td></tr>`;
+}
+
 function buildChildSection(
   child: ChildRow,
   feedings: FeedingRow[],
@@ -324,11 +348,12 @@ function buildChildSection(
   pumping: PumpingRow[],
   temperatures: TemperatureRow[],
   notes: NoteRow[],
+  dailyNote: DailyNoteRow | null,
   unit: VolumeUnit,
 ): string {
   const name = esc([child.first_name, child.last_name].filter(Boolean).join(" "));
   const age = esc(childAge(child.birth_date));
-  const rows: string[] = [];
+  const rows: string[] = [noteRow(dailyNote)];
 
   // Feedings
   rows.push(sectionHeader("🍼", `Feedings (${feedings.length})`));
@@ -811,6 +836,7 @@ export async function deliverDailySummary(
       data.pumping,
       data.temperatures,
       data.notes,
+      data.dailyNote,
       unit,
     )
   );

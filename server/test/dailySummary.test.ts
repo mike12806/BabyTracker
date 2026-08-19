@@ -305,6 +305,52 @@ describe("sendDailySummary", () => {
     expect(capturedHtml).not.toContain("59.147 ml");
   });
 
+  it("puts the child's AI daily note at the top of their card", async () => {
+    await env.DB.prepare(
+      "INSERT INTO users (id, email, name) VALUES (1, 'parent@example.com', 'Test Parent')"
+    ).run();
+    await env.DB.prepare(
+      "INSERT INTO children (id, first_name, last_name, birth_date) VALUES (1, 'Baby', 'Test', '2024-01-01')"
+    ).run();
+    await env.DB.prepare(
+      "INSERT INTO user_children (user_id, child_id) VALUES (1, 1)"
+    ).run();
+    await env.DB.prepare(
+      "INSERT INTO diaper_changes (child_id, time, type) VALUES (1, '2024-01-14T12:00:00.000Z', 'wet')"
+    ).run();
+    // The note the cron would have already written for this same ET day, by
+    // the time the (later-firing) summary cron reads it.
+    await env.DB.prepare(
+      "INSERT INTO child_daily_notes (child_id, note_date, body, source) VALUES (1, '2024-01-14', 'Baby had a steady day yesterday.', 'ai')"
+    ).run();
+
+    const capturedHtml = await captureSummaryHtml();
+
+    expect(capturedHtml).toContain("Baby had a steady day yesterday.");
+    // "At the top" — the note appears before the detailed sections it summarizes.
+    expect(capturedHtml.indexOf("Baby had a steady day yesterday.")).toBeLessThan(
+      capturedHtml.indexOf("Feedings"),
+    );
+  });
+
+  it("sends the email even when no note has been generated yet", async () => {
+    await env.DB.prepare(
+      "INSERT INTO users (id, email, name) VALUES (1, 'parent@example.com', 'Test Parent')"
+    ).run();
+    await env.DB.prepare(
+      "INSERT INTO children (id, first_name, last_name, birth_date) VALUES (1, 'Baby', 'Test', '2024-01-01')"
+    ).run();
+    await env.DB.prepare(
+      "INSERT INTO user_children (user_id, child_id) VALUES (1, 1)"
+    ).run();
+    await env.DB.prepare(
+      "INSERT INTO diaper_changes (child_id, time, type) VALUES (1, '2024-01-14T12:00:00.000Z', 'wet')"
+    ).run();
+
+    const capturedHtml = await captureSummaryHtml();
+    expect(capturedHtml).toContain("Feedings");
+  });
+
   it("continues to remaining users when one fails", async () => {
     // Two users: first one will cause an error, second should still get an email
     await env.DB.prepare(
