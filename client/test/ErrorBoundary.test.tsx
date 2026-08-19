@@ -9,15 +9,24 @@ function Boom(): never {
   throw new Error("grouped is not a function");
 }
 
+function BoomWithMessage({ message }: { message: string }): never {
+  throw new Error(message);
+}
+
 let consoleError: ReturnType<typeof vi.spyOn>;
+let reloadSpy: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   // React logs the caught error itself; silence it so a passing run is quiet.
   consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+  sessionStorage.clear();
+  reloadSpy = vi.fn();
+  vi.stubGlobal("location", { ...window.location, reload: reloadSpy });
 });
 
 afterEach(() => {
   consoleError.mockRestore();
+  vi.unstubAllGlobals();
 });
 
 function renderBoundary(children: React.ReactNode, scope?: string) {
@@ -66,5 +75,37 @@ describe("ErrorBoundary", () => {
       expect.objectContaining({ message: "grouped is not a function" }),
       expect.any(String),
     );
+  });
+
+  it("reloads instead of showing the crash card for a stale chunk load", () => {
+    renderBoundary(
+      <BoomWithMessage message="'text/html' is not a valid JavaScript MIME type." />,
+    );
+
+    expect(reloadSpy).toHaveBeenCalledTimes(1);
+    expect(screen.getByText("Updating to the latest version…")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Reload" })).not.toBeInTheDocument();
+  });
+
+  it("reloads for the other browsers' chunk-load wording too", () => {
+    renderBoundary(
+      <BoomWithMessage message="Failed to fetch dynamically imported module: https://app/assets/ActivityPage.js" />,
+    );
+
+    expect(reloadSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("falls back to the manual crash card if a reload already happened for this build", () => {
+    sessionStorage.setItem("chunkReloadBuild", "test");
+
+    renderBoundary(
+      <BoomWithMessage message="'text/html' is not a valid JavaScript MIME type." />,
+    );
+
+    expect(reloadSpy).not.toHaveBeenCalled();
+    expect(
+      screen.getByText("'text/html' is not a valid JavaScript MIME type."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Reload" })).toBeInTheDocument();
   });
 });
