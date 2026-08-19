@@ -1,5 +1,6 @@
 import type { DailySummaryJob } from "../scheduled/dailySummary.js";
 import type { DailyNoteJob } from "../scheduled/dailyNote.js";
+import type { BoopLineJob } from "../scheduled/boopLines.js";
 
 export interface Env {
   DB: D1Database;
@@ -41,4 +42,13 @@ export interface Env {
   AI?: Ai;
   /** Overrides the model the daily note is written with. */
   DAILY_NOTE_MODEL?: string;
+  /** Overrides the model new boop lines are written with. See boopLines.ts. */
+  BOOP_LINES_MODEL?: string;
+  /**
+   * Boop line generation queue.
+   *
+   * Optional for the same reason NOTE_QUEUE is: local dev and the tests have
+   * no queue, and fall back to generating inline. See `enqueueBoopLineRefresh`.
+   */
+  BOOP_LINES_QUEUE?: Queue<BoopLineJob>;
 }

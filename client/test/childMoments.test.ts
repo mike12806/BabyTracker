@@ -139,6 +139,22 @@ describe("boopMessage", () => {
     );
     expect(night).toContain("Otto says go back to sleep.");
   });
+
+  it("works exactly as before when there is no AI pool yet", () => {
+    const withoutExtra = boopMessage("Otto", 2, at("2026-04-07T10:00:00"));
+    const withEmptyExtra = boopMessage("Otto", 2, at("2026-04-07T10:00:00"), { day: [], night: [] });
+    expect(withEmptyExtra).toBe(withoutExtra);
+  });
+
+  it("mixes the AI-written pool in behind the built-in lines, by mood", () => {
+    const extra = { day: ["Freshly written."], night: ["Quiet new one."] };
+    const day = Array.from({ length: 8 }, (_, i) => boopMessage("Otto", i, at("2026-04-07T10:00:00"), extra));
+    expect(day).toContain("Freshly written.");
+
+    const night = Array.from({ length: 7 }, (_, i) => boopMessage("Otto", i, at("2026-04-07T03:00:00"), extra));
+    expect(night).toContain("Quiet new one.");
+    expect(night).not.toContain("Freshly written.");
+  });
 });
 
 describe("childPhotoUrl", () => {

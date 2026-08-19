@@ -8,6 +8,7 @@ A baby tracking application inspired by [Baby Buddy](https://github.com/babybudd
 - **Comprehensive tracking** — feedings, diaper changes, sleep, tummy time, pumping, growth, temperature, notes, and timers
 - **Photo uploads** — child profile photos stored securely in Cloudflare R2
 - **Daily note** — a short blurb on the dashboard about how yesterday went and how the week is trending, written once a day by Workers AI and cached in D1
+- **Boop lines** — the reward for tapping a child's photo cycles through a pool that a weekly cron tops up with new AI-written lines, so it doesn't go stale
 - **Secure by default** — authentication via Cloudflare Access (no custom login UI needed)
 - **Edge-native** — runs entirely on Cloudflare (Pages, Workers, D1, R2)
 
@@ -23,6 +24,8 @@ A baby tracking application inspired by [Baby Buddy](https://github.com/babybudd
 | Email delivery | Cloudflare Queues + SES | Retried, with a dead letter queue |
 | Daily note generation | Cloudflare Queues | Retried; template note written up front |
 | Daily note | Workers AI | One generation per child per day, cached in D1 |
+| Boop line generation | Cloudflare Queues | Retried; weekly, not per-child |
+| Boop lines | Workers AI | A handful of new lines a week, cached in D1 |
 
 ## Getting Started
 
@@ -149,6 +152,34 @@ and wants the reason when the model declines.
 
 To change the model, set `DAILY_NOTE_MODEL` in `server/wrangler.toml`.
 
+## Boop lines
+
+Tapping a child's photo on the hero card cycles through a short reaction line
+("Boop.", "Squish.", "Certified good baby."). Those are baked into the client
+(`client/src/utils/childMoments.ts`) and always work on their own — nothing
+below is required for the feature to function.
+
+On top of them, a weekly cron (`server/src/scheduled/boopLines.ts`) asks
+Workers AI for a handful of new lines in the same voice — a few for daytime,
+a few for the quieter after-hours mood — and stores them in a `boop_lines`
+table, capped and rotating so the pool doesn't grow forever. The dashboard
+fetches the current pool once per session and merges it in behind the
+built-ins, so the joke keeps finding new material without anyone hand-writing
+it.
+
+Structured like the daily note's queue for the same reason: the cron enqueues
+one job per mood on `baby-tracker-boop-lines`, and the consumer does the
+actual generation, so a transient Workers AI failure gets retried instead of
+costing that week's lines. Simpler in two ways the daily note isn't, because
+nothing here is time-critical: no per-line fallback content (a line the model
+didn't write just isn't added), and no dead letter queue (a mood that
+exhausts its retries just keeps the lines it already had).
+
+Weekly rather than daily — there's no reason for the pool to turn over as
+often as a note that describes a specific day. `POST /api/boop-lines/refresh`
+generates inline on demand, same idea as the daily note's refresh route. To
+change the model, set `BOOP_LINES_MODEL` in `server/wrangler.toml`.
+
 ## Deployment
 
 ### 1. Create Cloudflare resources
@@ -164,6 +195,7 @@ npx wrangler r2 bucket create baby-tracker-photos
 npx wrangler queues create baby-tracker-daily-summary
 npx wrangler queues create baby-tracker-daily-summary-dlq
 npx wrangler queues create baby-tracker-daily-note
+npx wrangler queues create baby-tracker-boop-lines
 ```
 
 Queues require the Workers Paid plan, and the API token used by CI needs
