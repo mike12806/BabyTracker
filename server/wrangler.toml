@@ -112,7 +112,9 @@ binding = "AI"
 # competes with them for the same invocation:
 #   04:30 UTC on Sundays.
 # `scheduled()` in src/index.ts tells the three apart by `event.cron`.
-crons = ["0 5 * * *", "15 5 * * *", "30 4 * * 0"]
+# Note: Cloudflare's weekday field is 1-7 (1 = Sunday), not the usual 0-6, so
+# "SUN" is used here rather than a numeric day to avoid that ambiguity.
+crons = ["0 5 * * *", "15 5 * * *", "30 4 * * SUN"]
 
 [vars]
 CF_ACCESS_TEAM_DOMAIN = "mfaherty.cloudflareaccess.com"

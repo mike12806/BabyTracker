@@ -86,7 +86,7 @@ const NOTE_CRON = "0 5 * * *";
  * anyone taps through. Off-hour and off the other two crons' minute so it
  * never competes with them for the same invocation.
  */
-const BOOP_LINES_CRON = "30 4 * * 0";
+const BOOP_LINES_CRON = "30 4 * * SUN";
 
 export default {
   fetch: app.fetch,
