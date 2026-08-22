@@ -7,6 +7,12 @@ interface ActivityEntry {
   activity_type: string;
   event_time: string;
   detail: string;
+  end_time: string | null;
+  subtype: string | null;
+  label: string | null;
+  amount: number | null;
+  amount_unit: string | null;
+  color: string | null;
 }
 
 interface ActivityResponse {
@@ -61,6 +67,94 @@ describe("Activity API", () => {
       expect(entry, `missing ${activityType} in feed`).toBeDefined();
       expect(entry!.id).toBe(id);
     }
+  });
+
+  it("carries each entry's own details, not just the summary line", async () => {
+    // The feed prints amounts in the unit the reader picked, which only the
+    // client knows — so every entry has to arrive with its parts intact, not
+    // as a finished sentence.
+    await api.post("/api/feedings", {
+      child_id: childId,
+      type: "bottle_formula",
+      start_time: "2024-12-01T09:00:00Z",
+      amount: 4,
+      amount_unit: "oz",
+    });
+    await api.post("/api/diaper-changes", {
+      child_id: childId,
+      time: "2024-12-01T09:30:00Z",
+      type: "solid",
+      color: "yellow",
+    });
+    await api.post("/api/sleep", {
+      child_id: childId,
+      start_time: "2024-12-01T10:00:00Z",
+      end_time: "2024-12-01T11:30:00Z",
+      is_nap: 1,
+    });
+    await api.post("/api/tummy-time", {
+      child_id: childId,
+      start_time: "2024-12-01T12:00:00Z",
+      end_time: "2024-12-01T12:10:00Z",
+      milestone: "Rolled over",
+    });
+    await api.post("/api/pumping", {
+      child_id: childId,
+      start_time: "2024-12-01T13:00:00Z",
+      amount: 90,
+      amount_unit: "ml",
+      side: "both",
+    });
+    await api.post("/api/temperature", {
+      child_id: childId,
+      time: "2024-12-01T14:00:00Z",
+      reading: 98.6,
+      reading_unit: "F",
+    });
+    await api.post("/api/notes", {
+      child_id: childId,
+      time: "2024-12-01T15:00:00Z",
+      title: "First smile",
+      content: "At the changing table",
+    });
+    await api.post("/api/medications", {
+      child_id: childId,
+      time: "2024-12-01T16:00:00Z",
+      name: "Vitamin D",
+      dosage: 1,
+      dosage_unit: "mL",
+    });
+
+    const res = await api.get(`/api/activity?child_id=${childId}`);
+    const body = (await res.json()) as ActivityResponse;
+    const byType = (type: string) => body.results.find((e) => e.activity_type === type)!;
+
+    expect(byType("Feeding")).toMatchObject({
+      subtype: "bottle_formula",
+      amount: 4,
+      amount_unit: "oz",
+    });
+    expect(byType("Diaper Change")).toMatchObject({ subtype: "solid", color: "yellow" });
+    expect(byType("Sleep")).toMatchObject({
+      subtype: "nap",
+      end_time: "2024-12-01T11:30:00Z",
+    });
+    expect(byType("Tummy Time")).toMatchObject({
+      label: "Rolled over",
+      end_time: "2024-12-01T12:10:00Z",
+    });
+    expect(byType("Pumping")).toMatchObject({ subtype: "both", amount: 90, amount_unit: "ml" });
+    expect(byType("Temperature")).toMatchObject({ amount: 98.6, amount_unit: "F" });
+    expect(byType("Note")).toMatchObject({ label: "First smile" });
+    expect(byType("Medication")).toMatchObject({
+      label: "Vitamin D",
+      amount: 1,
+      amount_unit: "mL",
+    });
+
+    // Entries with no such detail say so rather than repeating another's.
+    expect(byType("Note").amount).toBeNull();
+    expect(byType("Feeding").color).toBeNull();
   });
 
   it("keeps ids attached to the right entry when several share a type", async () => {

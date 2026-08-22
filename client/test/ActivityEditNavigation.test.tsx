@@ -120,7 +120,9 @@ describe("tapping an activity entry", () => {
 
     renderApp("/activity");
 
-    const card = await screen.findByRole("button", { name: /Edit Feeding at/i });
+    // The entry's own details are part of the button's name, so a screen
+    // reader hears what it is before opening it.
+    const card = await screen.findByRole("button", { name: /Edit Feeding, Bottle formula at/i });
     await userEvent.click(card);
 
     // Lands on the feedings page with the entry's form already open.

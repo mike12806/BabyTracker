@@ -20,6 +20,7 @@ import { useDataRefresh } from "../hooks/useDataRefresh";
 import { useNotification } from "../hooks/useNotification";
 import { clearDraft, loadDraft, saveDraft } from "../utils/formDraft";
 import { PUMPING_SIDES } from "../utils/pumping";
+import { DIAPER_TYPES, FEEDING_TYPES } from "../utils/entryDetails";
 import { pumpingLogUnit } from "../utils/feedingAmount";
 import { useVolumeUnit } from "../hooks/useVolumeUnit";
 import NowButton from "./NowButton";
@@ -51,28 +52,11 @@ const TITLES: Record<QuickLogCategory, string> = {
   note: "Add note",
 };
 
-const FEEDING_TYPES = [
-  { value: "breast_left", label: "Breast (Left)" },
-  { value: "breast_right", label: "Breast (Right)" },
-  { value: "both_breasts", label: "Both Breasts" },
-  { value: "bottle_breast_milk", label: "Bottle (Breast Milk)" },
-  { value: "bottle_formula", label: "Bottle (Formula)" },
-  { value: "solid", label: "Solid Food" },
-  { value: "fortified_breast_milk", label: "Fortified Breast Milk" },
-];
-
 const BREAST_FEEDING_TYPES = ["breast_left", "breast_right", "both_breasts"];
 
 function isBreastFeeding(type: string): boolean {
   return BREAST_FEEDING_TYPES.includes(type);
 }
-
-const DIAPER_TYPES = [
-  { value: "wet", label: "Wet" },
-  { value: "solid", label: "Solid" },
-  { value: "both", label: "Both" },
-  { value: "none", label: "None" },
-];
 
 interface FormState {
   // common

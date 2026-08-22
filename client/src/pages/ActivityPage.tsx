@@ -18,6 +18,7 @@ import IconButton from "@mui/material/IconButton";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import { useChildren } from "../hooks/useChildren";
+import { useVolumeUnit } from "../hooks/useVolumeUnit";
 import { useDataRefresh } from "../hooks/useDataRefresh";
 import { useNotification } from "../hooks/useNotification";
 import NoChildPlaceholder from "../components/NoChildPlaceholder";
@@ -27,16 +28,14 @@ import {
   type CategoryColorSet,
 } from "../theme/categoryColors";
 import { editEntryPath } from "../utils/activityLinks";
+import { entryDetails, type ActivityFeedEntry } from "../utils/entryDetails";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
 /* ------------------------------------------------------------------ */
 
-interface ActivityEntry {
+interface ActivityEntry extends ActivityFeedEntry {
   id: number;
-  activity_type: string;
-  event_time: string;
-  detail: string;
   child_name: string;
   logged_by: string;
 }
@@ -259,6 +258,7 @@ export default function ActivityPage() {
   const cat = useMemo(() => buildCategoryColors(isDark), [isDark]);
 
   const { selectedChild } = useChildren();
+  const { unit } = useVolumeUnit();
   const { refreshKey } = useDataRefresh();
   const { notify } = useNotification();
   const navigate = useNavigate();
@@ -712,6 +712,7 @@ export default function ActivityPage() {
                   {items.map((entry, i) => {
                     const cc = catColors(entry.activity_type);
                     const editPath = editEntryPath(cc.key, entry.id);
+                    const details = entryDetails(entry, unit);
                     return (
                       <Box
                         key={`${entry.activity_type}-${entry.id}-${i}`}
@@ -753,7 +754,9 @@ export default function ActivityPage() {
                           }
                           aria-label={
                             editPath
-                              ? `Edit ${entry.activity_type} at ${formatTime(entry.event_time)}`
+                              ? `Edit ${entry.activity_type}${
+                                  details.label ? `, ${details.label}` : ""
+                                }${details.measure ? `, ${details.measure}` : ""} at ${formatTime(entry.event_time)}`
                               : undefined
                           }
                           sx={{
@@ -799,14 +802,51 @@ export default function ActivityPage() {
                             >
                               {entry.activity_type}
                             </Typography>
-                            <Typography
-                              variant="body2"
-                              color="text.secondary"
-                              noWrap
-                              sx={{ textTransform: "capitalize" }}
+                            {/* The entry's own details: what kind it was, and
+                                the amount or duration it recorded. The measure
+                                keeps its width so a long type name truncates
+                                before the number does. */}
+                            <Box
+                              sx={{
+                                display: "flex",
+                                alignItems: "baseline",
+                                gap: 0.75,
+                                minWidth: 0,
+                              }}
                             >
-                              {entry.detail}
-                            </Typography>
+                              {details.label && (
+                                <Typography
+                                  variant="body2"
+                                  color="text.secondary"
+                                  noWrap
+                                  sx={{ minWidth: 0 }}
+                                >
+                                  {details.label}
+                                </Typography>
+                              )}
+                              {details.label && details.measure && (
+                                <Typography
+                                  variant="body2"
+                                  color="text.disabled"
+                                  sx={{ flexShrink: 0 }}
+                                  aria-hidden
+                                >
+                                  ·
+                                </Typography>
+                              )}
+                              {details.measure && (
+                                <Typography
+                                  variant="body2"
+                                  sx={{
+                                    color: cc.solid,
+                                    fontWeight: 600,
+                                    flexShrink: 0,
+                                  }}
+                                >
+                                  {details.measure}
+                                </Typography>
+                              )}
+                            </Box>
                           </Box>
 
                           {/* Time */}
