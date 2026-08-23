@@ -44,6 +44,7 @@ import { isoToLocal } from "../utils/dateTime";
 import { buildCategoryColors } from "../theme/categoryColors";
 import { useEditEntryParam } from "../hooks/useEditEntryParam";
 import { useSaveGuard } from "../hooks/useSaveGuard";
+import { diaperTypeLabel } from "../utils/entryDetails";
 
 const KNOWN_COLOR_SWATCHES: Record<string, string> = {
   yellow: "#f9d71c",
@@ -54,16 +55,6 @@ const KNOWN_COLOR_SWATCHES: Record<string, string> = {
   red: "#e53935",
   orange: "#fb8c00",
 };
-
-function typeLabel(type: DiaperChange["type"]): string {
-  switch (type) {
-    case "wet": return "Wet";
-    case "solid": return "Solid";
-    case "both": return "Both";
-    case "none": return "None";
-    default: return type;
-  }
-}
 
 function relativeTime(iso: string): string {
   const diffMs = Date.now() - new Date(iso).getTime();
@@ -354,7 +345,7 @@ export default function DiapersPage() {
                     </Box>
                     <Box sx={{ flex: 1, minWidth: 0 }}>
                       <Typography sx={{ fontSize: 12.5, fontWeight: 600, letterSpacing: "-0.005em", lineHeight: 1.2 }} noWrap>
-                        {typeLabel(d.type)}{d.color ? ` · ` : ""}{d.color ? renderColorDot(d.color) : ""}
+                        {diaperTypeLabel(d.type)}{d.color ? ` · ` : ""}{d.color ? renderColorDot(d.color) : ""}
                       </Typography>
                       <Typography sx={{ fontSize: 10.5, color: "text.secondary", mt: 0, lineHeight: 1.2 }}>
                         {d.notes || "—"}

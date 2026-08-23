@@ -45,25 +45,12 @@ import { useVolumeUnit } from "../hooks/useVolumeUnit";
 import { buildCategoryColors } from "../theme/categoryColors";
 import { useEditEntryParam } from "../hooks/useEditEntryParam";
 import { useSaveGuard } from "../hooks/useSaveGuard";
-
-const FEEDING_TYPES = [
-  { value: "breast_left", label: "Breast (Left)" },
-  { value: "breast_right", label: "Breast (Right)" },
-  { value: "both_breasts", label: "Both Breasts" },
-  { value: "bottle_breast_milk", label: "Bottle (Breast Milk)" },
-  { value: "bottle_formula", label: "Bottle (Formula)" },
-  { value: "solid", label: "Solid Food" },
-  { value: "fortified_breast_milk", label: "Fortified Breast Milk" },
-];
+import { FEEDING_TYPES, feedingTypeLabel } from "../utils/entryDetails";
 
 const BREAST_FEEDING_TYPES = ["breast_left", "breast_right", "both_breasts"];
 
 function isBreastFeeding(type: string): boolean {
   return BREAST_FEEDING_TYPES.includes(type);
-}
-
-function feedingTypeLabel(type: Feeding["type"]): string {
-  return FEEDING_TYPES.find((t) => t.value === type)?.label ?? type.replace(/_/g, " ");
 }
 
 function formatDuration(startIso: string, endIso: string): string {

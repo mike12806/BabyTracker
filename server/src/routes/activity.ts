@@ -4,11 +4,33 @@ import { verifyChildExists } from "./crud.js";
 
 type AppEnv = { Bindings: Env; Variables: { userId: number; userEmail: string; userName: string } };
 
+/**
+ * One row of the merged feed.
+ *
+ * `detail` is a ready-made sentence built in SQL; the fields after it are the
+ * same facts unformatted, so the client can render them the way the rest of
+ * the app does. Volumes are the reason: an amount is stored in whatever unit
+ * it was logged with, and every screen shows it in the one unit the user
+ * picked, which only the client knows. Sending the parts rather than a
+ * finished string is what lets the feed say "118 mL" for a bottle logged as
+ * 4 oz. `detail` stays for clients that have not been updated yet.
+ */
 interface ActivityEntry {
   id: number;
   activity_type: string;
   event_time: string;
   detail: string;
+  /** Set for entries that run for a stretch of time, once they have finished. */
+  end_time: string | null;
+  /** The entry's own kind: feeding type, diaper type, nap vs night, pumped side. */
+  subtype: string | null;
+  /** Free text naming the entry: medication name, note title, tummy-time milestone. */
+  label: string | null;
+  /** The number the entry carries: a volume, a dose, or a temperature reading. */
+  amount: number | null;
+  amount_unit: string | null;
+  /** Diaper colour, when one was recorded. */
+  color: string | null;
   child_name: string;
   logged_by: string;
 }
@@ -81,6 +103,8 @@ activity.get("/", async (c) => {
       c.env.DB.prepare(`
         SELECT 'Feeding' AS activity_type, f.id AS id, f.start_time AS event_time,
           REPLACE(f.type, '_', ' ') AS detail,
+          f.end_time AS end_time, f.type AS subtype, NULL AS label,
+          f.amount AS amount, f.amount_unit AS amount_unit, NULL AS color,
           ${childNameExpr} AS child_name, ${loggedByExpr} AS logged_by
         FROM feedings f
         JOIN children c ON c.id = f.child_id
@@ -91,6 +115,8 @@ activity.get("/", async (c) => {
       c.env.DB.prepare(`
         SELECT 'Diaper Change' AS activity_type, d.id AS id, d.time AS event_time,
           d.type || CASE WHEN d.color IS NOT NULL AND d.color != '' THEN ' (' || d.color || ')' ELSE '' END AS detail,
+          NULL AS end_time, d.type AS subtype, NULL AS label,
+          NULL AS amount, NULL AS amount_unit, d.color AS color,
           ${childNameExpr} AS child_name, ${loggedByExpr} AS logged_by
         FROM diaper_changes d
         JOIN children c ON c.id = d.child_id
@@ -101,6 +127,8 @@ activity.get("/", async (c) => {
       c.env.DB.prepare(`
         SELECT 'Sleep' AS activity_type, s.id AS id, s.start_time AS event_time,
           CASE WHEN s.is_nap = 1 THEN 'nap' ELSE 'night sleep' END AS detail,
+          s.end_time AS end_time, CASE WHEN s.is_nap = 1 THEN 'nap' ELSE 'night' END AS subtype, NULL AS label,
+          NULL AS amount, NULL AS amount_unit, NULL AS color,
           ${childNameExpr} AS child_name, ${loggedByExpr} AS logged_by
         FROM sleep s
         JOIN children c ON c.id = s.child_id
@@ -111,6 +139,8 @@ activity.get("/", async (c) => {
       c.env.DB.prepare(`
         SELECT 'Tummy Time' AS activity_type, t.id AS id, t.start_time AS event_time,
           CASE WHEN t.milestone IS NOT NULL AND t.milestone != '' THEN 'tummy time - ' || t.milestone ELSE 'tummy time' END AS detail,
+          t.end_time AS end_time, NULL AS subtype, NULLIF(t.milestone, '') AS label,
+          NULL AS amount, NULL AS amount_unit, NULL AS color,
           ${childNameExpr} AS child_name, ${loggedByExpr} AS logged_by
         FROM tummy_time t
         JOIN children c ON c.id = t.child_id
@@ -122,6 +152,8 @@ activity.get("/", async (c) => {
         SELECT 'Pumping' AS activity_type, p.id AS id, p.start_time AS event_time,
           CASE WHEN p.amount IS NOT NULL THEN 'pumped ' || p.amount || ' ' || COALESCE(p.amount_unit, '') ELSE 'pumping' END
             || CASE p.side WHEN 'left' THEN ' · left breast' WHEN 'right' THEN ' · right breast' WHEN 'both' THEN ' · both breasts' ELSE '' END AS detail,
+          p.end_time AS end_time, p.side AS subtype, NULL AS label,
+          p.amount AS amount, p.amount_unit AS amount_unit, NULL AS color,
           ${childNameExpr} AS child_name, ${loggedByExpr} AS logged_by
         FROM pumping p
         JOIN children c ON c.id = p.child_id
@@ -132,6 +164,8 @@ activity.get("/", async (c) => {
       c.env.DB.prepare(`
         SELECT 'Temperature' AS activity_type, t.id AS id, t.time AS event_time,
           t.reading || '°' || t.reading_unit AS detail,
+          NULL AS end_time, NULL AS subtype, NULL AS label,
+          t.reading AS amount, t.reading_unit AS amount_unit, NULL AS color,
           ${childNameExpr} AS child_name, ${loggedByExpr} AS logged_by
         FROM temperature t
         JOIN children c ON c.id = t.child_id
@@ -142,6 +176,8 @@ activity.get("/", async (c) => {
       c.env.DB.prepare(`
         SELECT 'Note' AS activity_type, n.id AS id, n.time AS event_time,
           COALESCE(n.title, SUBSTR(n.content, 1, 60)) AS detail,
+          NULL AS end_time, NULL AS subtype, COALESCE(NULLIF(n.title, ''), SUBSTR(n.content, 1, 60)) AS label,
+          NULL AS amount, NULL AS amount_unit, NULL AS color,
           ${childNameExpr} AS child_name, ${loggedByExpr} AS logged_by
         FROM notes n
         JOIN children c ON c.id = n.child_id
@@ -152,6 +188,8 @@ activity.get("/", async (c) => {
       c.env.DB.prepare(`
         SELECT 'Medication' AS activity_type, m.id AS id, m.time AS event_time,
           m.name || CASE WHEN m.dosage IS NOT NULL THEN ' ' || m.dosage || COALESCE(' ' || m.dosage_unit, '') ELSE '' END AS detail,
+          NULL AS end_time, NULL AS subtype, m.name AS label,
+          m.dosage AS amount, m.dosage_unit AS amount_unit, NULL AS color,
           ${childNameExpr} AS child_name, ${loggedByExpr} AS logged_by
         FROM medications m
         JOIN children c ON c.id = m.child_id
