@@ -4,7 +4,7 @@ import { sendPushMessage } from "../pushSend.js";
 /** Queue name, as declared in `wrangler.toml` — see `queueNames.test.ts`. */
 export const REMINDER_QUEUE = "baby-tracker-reminders";
 
-const REMINDER_THRESHOLD_MS = 3 * 60 * 60 * 1000;
+const REMINDER_THRESHOLD_MS = (2 * 60 + 45) * 60 * 1000;
 
 export interface ReminderJob {
   subscriptionId: number;
@@ -22,9 +22,9 @@ const childNameExpr = `TRIM(first_name || CASE WHEN last_name IS NOT NULL AND la
 /**
  * Runs on the reminder cron (every 15 minutes — see `wrangler.toml`). For
  * every child and kind (diaper/feeding), decides whether a reminder is due —
- * no recorded entry in the last three hours, and no reminder already sent for
- * this same gap — and if so enqueues one delivery job per device subscribed
- * to that child.
+ * no recorded entry in the last 2 hours 45 minutes, and no reminder already
+ * sent for this same gap — and if so enqueues one delivery job per device
+ * subscribed to that child.
  *
  * The "already sent for this gap" check and the `reminder_state` update both
  * happen here, not in the queue consumer: once a reminder is queued the gap
@@ -62,7 +62,7 @@ async function checkOne(
     .bind(childId)
     .first<{ t: string }>();
 
-  // Not overdue: something was logged inside the last three hours.
+  // Not overdue: something was logged inside the last 2 hours 45 minutes.
   if (last && last.t >= cutoff) return;
   const lastActivityAt = last?.t ?? "0000-01-01T00:00:00Z";
 
@@ -112,7 +112,7 @@ export async function deliverReminder(env: Env, job: ReminderJob): Promise<void>
   const label = KIND_CONFIG[job.kind].label;
   await sendPushMessage(env, sub, {
     title: "Baby Tracker",
-    body: `No ${label} logged for ${job.childName} in over 3 hours.`,
+    body: `No ${label} logged for ${job.childName} in over 2 hours 45 minutes.`,
     url: "/",
   });
 }
