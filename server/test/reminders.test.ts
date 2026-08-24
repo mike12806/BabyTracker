@@ -66,7 +66,7 @@ describe("enqueueReminderChecks", () => {
     vi.restoreAllMocks();
   });
 
-  it("queues a reminder when nothing has been logged for over 3 hours", async () => {
+  it("queues a reminder when nothing has been logged for over 2 hours 45 minutes", async () => {
     await seedChildWithSubscriber();
     // Last diaper change 4 hours ago; feeding is recent, so only diaper fires.
     await env.DB.prepare(
