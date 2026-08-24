@@ -132,10 +132,6 @@ async function encryptPayload(payload: PushPayload, p256dh: string, auth: string
   return concatBytes(header, ciphertext);
 }
 
-function base64UrlToStdBase64(b64url: string): string {
-  return b64url.replace(/-/g, "+").replace(/_/g, "/");
-}
-
 /** Builds and ES256-signs the short-lived VAPID JWT a push service requires (RFC 8292). */
 async function signVapidJwt(audience: string, subject: string, publicKey: string, privateKey: string): Promise<string> {
   const header = bytesToBase64Url(new TextEncoder().encode(JSON.stringify({ typ: "JWT", alg: "ES256" })));
@@ -149,7 +145,9 @@ async function signVapidJwt(audience: string, subject: string, publicKey: string
   const jwk = {
     kty: "EC",
     crv: "P-256",
-    d: base64UrlToStdBase64(privateKey).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""),
+    // `privateKey` is already base64url — the JWK `d` field's own encoding —
+    // straight from `generateVapidKeys`, so it needs no conversion here.
+    d: privateKey,
     x: bytesToBase64Url(publicBytes.slice(1, 33)),
     y: bytesToBase64Url(publicBytes.slice(33, 65)),
     ext: true,
