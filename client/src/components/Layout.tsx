@@ -17,6 +17,7 @@ import {
   MenuItem,
   Select,
   SwipeableDrawer,
+  Switch,
   ToggleButton,
   ToggleButtonGroup,
   Toolbar,
@@ -55,12 +56,14 @@ import { useDataFreshness } from "../hooks/useDataFreshness";
 import { useDataRefresh } from "../hooks/useDataRefresh";
 import { useThemeMode } from "../hooks/useTheme";
 import { useVolumeUnit } from "../hooks/useVolumeUnit";
+import { usePushNotifications } from "../hooks/usePushNotifications";
 import { formatRelativeTime } from "../utils/dateTime";
 import { unitLabel, VOLUME_UNITS, type VolumeUnit } from "../utils/feedingAmount";
 import { api, API_BASE } from "../api/client";
 import { useNotification } from "../hooks/useNotification";
 import { childPhotoUrl } from "../utils/childMoments";
 import QuickLogDialog, { type QuickLogCategory } from "./QuickLogDialog";
+import PushNotificationsNudge from "./PushNotificationsNudge";
 
 const DRAWER_WIDTH = 240;
 const BOTTOM_NAV_HEIGHT = 68;
@@ -145,6 +148,13 @@ export default function Layout() {
   const { children, selectedChild, selectChild } = useChildren();
   const { preference, setPreference } = useThemeMode();
   const { unit: volumeUnit, setUnit: setVolumeUnit } = useVolumeUnit();
+  const {
+    supported: pushSupported,
+    subscribed: pushSubscribed,
+    working: pushWorking,
+    subscribe: subscribeToPush,
+    unsubscribe: unsubscribeFromPush,
+  } = usePushNotifications();
   const { staleSince } = useDataFreshness();
   const { refreshData } = useDataRefresh();
   const { notify } = useNotification();
@@ -298,6 +308,33 @@ export default function Layout() {
           ))}
         </ToggleButtonGroup>
       </Box>
+      {pushSupported && (
+        <>
+          <Divider />
+          <Box sx={{ px: 2, py: 1.5, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1 }}>
+            <Box>
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                sx={{ fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase", display: "block", mb: 0.25 }}
+              >
+                Reminders
+              </Typography>
+              <Typography variant="body2" sx={{ fontSize: 13 }}>
+                Notify if diapers/feedings go unrecorded for 3+ hours
+              </Typography>
+            </Box>
+            <Switch
+              checked={pushSubscribed}
+              disabled={pushWorking}
+              onChange={(_, checked) => {
+                (checked ? subscribeToPush() : unsubscribeFromPush()).catch(() => {});
+              }}
+              slotProps={{ input: { "aria-label": "Diaper/feeding reminders" } }}
+            />
+          </Box>
+        </>
+      )}
       {user && (
         <>
           <Divider />
@@ -657,6 +694,8 @@ export default function Layout() {
         category={quickLogCategory}
         onClose={() => setQuickLogCategory(null)}
       />
+
+      {user && <PushNotificationsNudge />}
     </Box>
   );
 }

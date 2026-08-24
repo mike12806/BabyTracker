@@ -78,3 +78,25 @@ registerRoute(
     ],
   })
 );
+
+// Diaper/feeding reminders — see server/src/scheduled/reminders.ts, which is
+// the only thing that ever sends a push to this app. The payload is always
+// fresh at the moment it's pushed (the server decides "overdue" right before
+// sending), so unlike API data there's nothing here that can go stale by
+// being shown.
+self.addEventListener("push", (event) => {
+  const data: { title?: string; body?: string; url?: string } = event.data?.json() ?? {};
+  event.waitUntil(
+    self.registration.showNotification(data.title ?? "Baby Tracker", {
+      body: data.body,
+      icon: "/icons/icon-192.png",
+      badge: "/icons/icon-192.png",
+      data: { url: data.url ?? "/" },
+    })
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  event.waitUntil(self.clients.openWindow((event.notification.data as { url?: string })?.url ?? "/"));
+});

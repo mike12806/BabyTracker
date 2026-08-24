@@ -7,6 +7,7 @@ import { ChildProvider } from "./hooks/useChildren";
 import { DataRefreshProvider } from "./hooks/useDataRefresh";
 import { NotificationProvider } from "./hooks/useNotification";
 import { VolumeUnitProvider } from "./hooks/useVolumeUnit";
+import { PushNotificationsProvider } from "./hooks/usePushNotifications";
 import Layout from "./components/Layout";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { Box, CircularProgress } from "@mui/material";
@@ -74,6 +75,7 @@ export default function App() {
               <ChildProvider>
                 <NotificationProvider>
                   <VolumeUnitProvider>
+                    <PushNotificationsProvider>
                     <Suspense fallback={<PageFallback />}>
                       <Routes>
                         <Route element={<Layout />}>
@@ -95,6 +97,7 @@ export default function App() {
                         </Route>
                       </Routes>
                     </Suspense>
+                    </PushNotificationsProvider>
                   </VolumeUnitProvider>
                 </NotificationProvider>
               </ChildProvider>

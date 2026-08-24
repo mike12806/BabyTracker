@@ -94,6 +94,27 @@ max_batch_timeout = 30
 max_retries = 3
 retry_delay = 300
 
+# Diaper/feeding reminder pushes. The 15-minute cron below decides which
+# (child, kind) gaps are overdue and enqueues one job per subscribed device;
+# the consumer does the actual Web Push send, same split as the queues above
+# so a push service hiccup gets retried instead of silently dropping that
+# reminder.
+#
+# No dead letter queue: a reminder that exhausts its retries is exactly as
+# low-stakes as a missed boop line — the next cron tick picks up the gap again
+# if it's still open, and if a new entry was logged in the meantime there's
+# nothing left to remind about.
+[[queues.producers]]
+queue = "baby-tracker-reminders"
+binding = "REMINDER_QUEUE"
+
+[[queues.consumers]]
+queue = "baby-tracker-reminders"
+max_batch_size = 10
+max_batch_timeout = 30
+max_retries = 3
+retry_delay = 60
+
 # Workers AI, for the dashboard's daily note. One generation per child per day
 # from the cron below, cached in D1 — a page load never reaches the model, so
 # the cost does not scale with how often the app is opened.
@@ -101,7 +122,7 @@ retry_delay = 300
 binding = "AI"
 
 [triggers]
-# Three crons. The first two, both after midnight Eastern so each covers the
+# Four crons. The first two, both after midnight Eastern so each covers the
 # prior full ET day, staggered so the note is written before the email that
 # includes it:
 #   05:00 UTC = 12:00 AM EST (1:00 AM EDT) — writes/queues the daily note.
@@ -111,10 +132,14 @@ binding = "AI"
 # rather than daily, and off-hour and off the other two's minute so it never
 # competes with them for the same invocation:
 #   04:30 UTC on Sundays.
-# `scheduled()` in src/index.ts tells the three apart by `event.cron`.
+# The fourth checks for overdue diaper/feeding reminders (see
+# scheduled/reminders.ts) — the only sub-daily cron here, because a 3-hour
+# gap needs checking far more often than once a day:
+#   every 15 minutes, all day.
+# `scheduled()` in src/index.ts tells the four apart by `event.cron`.
 # Note: Cloudflare's weekday field is 1-7 (1 = Sunday), not the usual 0-6, so
 # "SUN" is used here rather than a numeric day to avoid that ambiguity.
-crons = ["0 5 * * *", "15 5 * * *", "30 4 * * SUN"]
+crons = ["0 5 * * *", "15 5 * * *", "30 4 * * SUN", "*/15 * * * *"]
 
 [vars]
 CF_ACCESS_TEAM_DOMAIN = "mfaherty.cloudflareaccess.com"
@@ -134,3 +159,10 @@ AWS_SES_REGION = "us-east-1"
 #   wrangler secret put AWS_SES_SECRET_KEY
 #   wrangler secret put REPORT_FROM_EMAIL
 #   wrangler secret put ALERT_EMAIL       # optional — defaults to REPORT_FROM_EMAIL
+#
+# VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY / VAPID_SUBJECT (Web Push, for the
+# reminder cron) are also secrets rather than vars — even the "public" key,
+# so the client never needs a rebuild to pick it up, it just fetches it over
+# GET /api/push/vapid-public-key. They're set automatically by the deploy
+# workflow (deploy-server.yml) the first time it runs, and never regenerated
+# after that: rotating them would break every device that already subscribed.

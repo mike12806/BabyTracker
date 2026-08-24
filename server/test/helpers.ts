@@ -20,6 +20,7 @@ import { activity } from "../src/routes/activity.js";
 import { todos } from "../src/routes/todos.js";
 import { dailyNotes } from "../src/routes/dailyNotes.js";
 import { boopLines } from "../src/routes/boopLines.js";
+import { push } from "../src/routes/push.js";
 import type { MiddlewareHandler } from "hono";
 import migration0001 from "../migrations/0001_initial_schema.sql?raw";
 import migration0002 from "../migrations/0002_add_picture_blob.sql?raw";
@@ -37,6 +38,7 @@ import migration0013 from "../migrations/0013_add_diaper_type_none.sql?raw";
 import migration0014 from "../migrations/0014_add_client_requests.sql?raw";
 import migration0015 from "../migrations/0015_add_daily_notes.sql?raw";
 import migration0016 from "../migrations/0016_add_boop_lines.sql?raw";
+import migration0017 from "../migrations/0017_add_push_subscriptions.sql?raw";
 
 type AppEnv = { Bindings: Env; Variables: { userId: number; userEmail: string; userName: string } };
 
@@ -94,6 +96,7 @@ export function createTestApp() {
   app.route("/api/todos", todos);
   app.route("/api/daily-notes", dailyNotes);
   app.route("/api/boop-lines", boopLines);
+  app.route("/api/push", push);
 
   return app;
 }
@@ -118,6 +121,8 @@ export async function execScript(db: D1Database, script: string) {
 export async function applyMigrations(db: D1Database) {
   // Drop all tables first to ensure clean state between tests
   const dropSQL = `
+    DROP TABLE IF EXISTS reminder_state;
+    DROP TABLE IF EXISTS push_subscriptions;
     DROP TABLE IF EXISTS boop_lines;
     DROP TABLE IF EXISTS child_daily_notes;
     DROP TABLE IF EXISTS client_requests;
@@ -139,7 +144,7 @@ export async function applyMigrations(db: D1Database) {
   `;
 
   // Execute the real migration files in order to keep test schema in sync
-  const migrations = [migration0001, migration0002, migration0003, migration0004, migration0005, migration0006, migration0007, migration0008, migration0009, migration0010, migration0011, migration0012, migration0013, migration0014, migration0015, migration0016];
+  const migrations = [migration0001, migration0002, migration0003, migration0004, migration0005, migration0006, migration0007, migration0008, migration0009, migration0010, migration0011, migration0012, migration0013, migration0014, migration0015, migration0016, migration0017];
 
   await execScript(db, dropSQL + migrations.join("\n"));
 }

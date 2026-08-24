@@ -1,6 +1,7 @@
 import type { DailySummaryJob } from "../scheduled/dailySummary.js";
 import type { DailyNoteJob } from "../scheduled/dailyNote.js";
 import type { BoopLineJob } from "../scheduled/boopLines.js";
+import type { ReminderJob } from "../scheduled/reminders.js";
 
 export interface Env {
   DB: D1Database;
@@ -51,4 +52,20 @@ export interface Env {
    * no queue, and fall back to generating inline. See `enqueueBoopLineRefresh`.
    */
   BOOP_LINES_QUEUE?: Queue<BoopLineJob>;
+  /**
+   * Web Push (VAPID), for the diaper/feeding reminder cron. All three are
+   * optional so tests and local dev without them just skip sending — see
+   * `pushSend.ts`.
+   */
+  VAPID_PUBLIC_KEY?: string;
+  VAPID_PRIVATE_KEY?: string;
+  /** e.g. "mailto:someone@example.com" — required by the Web Push spec. */
+  VAPID_SUBJECT?: string;
+  /**
+   * Reminder delivery queue.
+   *
+   * Optional for the same reason NOTE_QUEUE is: local dev and the tests have
+   * no queue, and fall back to sending inline. See `enqueueReminderChecks`.
+   */
+  REMINDER_QUEUE?: Queue<ReminderJob>;
 }
