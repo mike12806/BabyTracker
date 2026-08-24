@@ -13,6 +13,8 @@ import { enqueueDailyNotes, writeNoteForJob, DAILY_NOTE_QUEUE } from "./schedule
 import type { DailyNoteJob } from "./scheduled/dailyNote.js";
 import { enqueueBoopLineRefresh, refreshMood, BOOP_LINES_QUEUE } from "./scheduled/boopLines.js";
 import type { BoopLineJob } from "./scheduled/boopLines.js";
+import { enqueueReminderChecks, deliverReminder, REMINDER_QUEUE } from "./scheduled/reminders.js";
+import type { ReminderJob } from "./scheduled/reminders.js";
 import { auth } from "./routes/auth.js";
 import { children } from "./routes/children.js";
 import { feedings } from "./routes/feedings.js";
@@ -30,6 +32,7 @@ import { activity } from "./routes/activity.js";
 import { todos } from "./routes/todos.js";
 import { dailyNotes } from "./routes/dailyNotes.js";
 import { boopLines } from "./routes/boopLines.js";
+import { push } from "./routes/push.js";
 
 type AppEnv = { Bindings: Env; Variables: { userId: number; userEmail: string; userName: string } };
 
@@ -61,6 +64,7 @@ app.route("/api/activity", activity);
 app.route("/api/todos", todos);
 app.route("/api/daily-notes", dailyNotes);
 app.route("/api/boop-lines", boopLines);
+app.route("/api/push", push);
 
 // Global error handler
 app.onError((err, c) => {
@@ -88,10 +92,29 @@ const NOTE_CRON = "0 5 * * *";
  */
 const BOOP_LINES_CRON = "30 4 * * SUN";
 
+/**
+ * The reminder cron — see scheduled/reminders.ts. The only sub-daily cron
+ * here, since checking a 3-hour gap needs far more frequent checking than
+ * anything else in this Worker.
+ */
+const REMINDERS_CRON = "*/15 * * * *";
+
 export default {
   fetch: app.fetch,
 
   async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
+    if (event.cron === REMINDERS_CRON) {
+      // Decides which (child, kind) gaps are overdue and enqueues one job per
+      // subscribed device; the actual push send happens in the consumer
+      // below, same split as the other crons.
+      ctx.waitUntil(
+        enqueueReminderChecks(env).catch((err) =>
+          console.error("Reminder check failed:", err)
+        )
+      );
+      return;
+    }
+
     if (event.cron === NOTE_CRON) {
       // Only writes each child's template note and queues the model call here;
       // the generation itself happens in the consumer below, where a transient
@@ -133,7 +156,21 @@ export default {
    * failed, and a duplicate summary in someone's inbox is the failure this is
    * meant to avoid creating.
    */
-  async queue(batch: MessageBatch<DailySummaryJob | DailyNoteJob | BoopLineJob>, env: Env): Promise<void> {
+  async queue(batch: MessageBatch<DailySummaryJob | DailyNoteJob | BoopLineJob | ReminderJob>, env: Env): Promise<void> {
+    if (batch.queue === REMINDER_QUEUE) {
+      for (const message of batch.messages) {
+        const job = message.body as ReminderJob;
+        try {
+          await deliverReminder(env, job);
+          message.ack();
+        } catch (err) {
+          console.error(`Reminder delivery failed for subscription ${job?.subscriptionId}:`, err);
+          message.retry();
+        }
+      }
+      return;
+    }
+
     // Generating one child's note. A failure here is retried rather than
     // dropped — the template note is already on the card, so a retry is an
     // upgrade that can afford to be late, and there is no dead letter queue

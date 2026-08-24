@@ -77,7 +77,7 @@ jobs:
       # Worker with a binding that goes nowhere.
       - name: Create queues
         run: |
-          for QUEUE in baby-tracker-daily-summary baby-tracker-daily-summary-dlq baby-tracker-daily-note baby-tracker-boop-lines; do
+          for QUEUE in baby-tracker-daily-summary baby-tracker-daily-summary-dlq baby-tracker-daily-note baby-tracker-boop-lines baby-tracker-reminders; do
             if npx wrangler queues create "$QUEUE"; then
               echo "Created $QUEUE"
             else
@@ -95,6 +95,33 @@ jobs:
       # declared in wrangler.toml and provisioned once via dashboard/CLI.
       - name: Deploy Worker
         run: npx wrangler deploy
+        working-directory: server
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      # One-time Web Push (VAPID) keypair, for the diaper/feeding reminder
+      # cron. Generated here rather than by hand — this deploy is the only
+      # place with both Node and Cloudflare API access — and guarded by
+      # `wrangler secret list` so it never regenerates: a browser's push
+      # subscription is tied to the public key it subscribed with, so
+      # rotating this keypair would silently break every device that already
+      # turned reminders on. Runs after the deploy above because `wrangler
+      # secret put` needs the Worker to already exist.
+      - name: Set up VAPID keys (one-time)
+        run: |
+          if npx wrangler secret list | grep -q '"name": *"VAPID_PUBLIC_KEY"'; then
+            echo "VAPID keys already set — skipping."
+          else
+            echo "No VAPID keys yet — generating a keypair for Web Push."
+            KEYS=$(node scripts/generate-vapid-keys.mjs)
+            PUBLIC_KEY=$(echo "$KEYS" | grep '^VAPID_PUBLIC_KEY=' | cut -d= -f2)
+            PRIVATE_KEY=$(echo "$KEYS" | grep '^VAPID_PRIVATE_KEY=' | cut -d= -f2)
+            echo "::add-mask::$PRIVATE_KEY"
+            printf '%s' "$PUBLIC_KEY" | npx wrangler secret put VAPID_PUBLIC_KEY
+            printf '%s' "$PRIVATE_KEY" | npx wrangler secret put VAPID_PRIVATE_KEY
+            printf '%s' "${{ vars.VAPID_SUBJECT || 'mailto:michaelefaherty@gmail.com' }}" | npx wrangler secret put VAPID_SUBJECT
+          fi
         working-directory: server
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
