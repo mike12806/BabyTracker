@@ -1,6 +1,22 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { env } from "cloudflare:test";
 import { createTestApp, applyMigrations, testRequest } from "./helpers";
+import { generateVapidKeys } from "../src/pushSend.js";
+
+function bytesToBase64Url(bytes: Uint8Array): string {
+  let binary = "";
+  for (const b of bytes) binary += String.fromCharCode(b);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+/** A real (if throwaway) EC keypair + auth secret, in the shape a browser's PushSubscription carries. */
+async function fakeSubscriberKeys(): Promise<{ p256dh: string; auth: string }> {
+  const keyPair = (await crypto.subtle.generateKey({ name: "ECDH", namedCurve: "P-256" }, true, [
+    "deriveBits",
+  ])) as CryptoKeyPair;
+  const raw = new Uint8Array((await crypto.subtle.exportKey("raw", keyPair.publicKey)) as ArrayBuffer);
+  return { p256dh: bytesToBase64Url(raw), auth: bytesToBase64Url(crypto.getRandomValues(new Uint8Array(16))) };
+}
 
 describe("Push subscription API", () => {
   let api: ReturnType<typeof testRequest>;
@@ -65,5 +81,83 @@ describe("Push subscription API", () => {
   it("DELETE /api/push/subscribe without an endpoint is a 400", async () => {
     const res = await api.delete("/api/push/subscribe");
     expect(res.status).toBe(400);
+  });
+});
+
+describe("Push subscription confirmation push", () => {
+  let app: ReturnType<typeof createTestApp>;
+  let vapidEnv: { VAPID_PUBLIC_KEY: string; VAPID_PRIVATE_KEY: string; VAPID_SUBJECT: string };
+
+  beforeEach(async () => {
+    app = createTestApp();
+    await applyMigrations(env.DB);
+    const { publicKey, privateKey } = await generateVapidKeys();
+    vapidEnv = { VAPID_PUBLIC_KEY: publicKey, VAPID_PRIVATE_KEY: privateKey, VAPID_SUBJECT: "mailto:test@example.com" };
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("sends a confirmation push right away when subscribing", async () => {
+    const { p256dh, auth } = await fakeSubscriberKeys();
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 201 }));
+
+    const res = await app.request(
+      "/api/push/subscribe",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ endpoint: "https://push.example.com/confirm", keys: { p256dh, auth } }),
+      },
+      { DB: env.DB, ...vapidEnv }
+    );
+
+    expect(res.status).toBe(201);
+    expect(fetchSpy).toHaveBeenCalledWith("https://push.example.com/confirm", expect.any(Object));
+  });
+
+  it("still succeeds when the confirmation push fails to send", async () => {
+    const { p256dh, auth } = await fakeSubscriberKeys();
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("push service unreachable"));
+
+    const res = await app.request(
+      "/api/push/subscribe",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ endpoint: "https://push.example.com/confirm-fail", keys: { p256dh, auth } }),
+      },
+      { DB: env.DB, ...vapidEnv }
+    );
+
+    expect(res.status).toBe(201);
+    const row = await env.DB.prepare("SELECT * FROM push_subscriptions WHERE endpoint = ?")
+      .bind("https://push.example.com/confirm-fail")
+      .first();
+    expect(row).toBeTruthy();
+  });
+
+  it("queues the confirmation push instead of sending it inline when a queue is bound", async () => {
+    const { p256dh, auth } = await fakeSubscriberKeys();
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    const sent: unknown[] = [];
+    const queueBinding = { send: vi.fn(async (body: unknown) => sent.push(body)), sendBatch: vi.fn() };
+
+    const res = await app.request(
+      "/api/push/subscribe",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ endpoint: "https://push.example.com/confirm-queued", keys: { p256dh, auth } }),
+      },
+      { DB: env.DB, ...vapidEnv, REMINDER_QUEUE: queueBinding }
+    );
+
+    expect(res.status).toBe(201);
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toMatchObject({ kind: "confirmation" });
+    // No queue bound would fall back to sending inline via fetch — confirms it didn't.
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 });

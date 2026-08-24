@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import type { Env } from "../types/env.js";
+import { enqueueConfirmation } from "../scheduled/reminders.js";
 
 type AppEnv = { Bindings: Env; Variables: { userId: number; userEmail: string; userName: string } };
 
@@ -32,6 +33,20 @@ push.post("/subscribe", async (c) => {
   )
     .bind(userId, body.endpoint, body.keys.p256dh, body.keys.auth)
     .run();
+
+  // A confirmation push, sent right away, so opting in gives immediate proof
+  // it actually works rather than leaving the user to wonder until the next
+  // reminder is due. Queued through the same retry path as every other push
+  // send here — a failure enqueueing shouldn't fail the subscribe request
+  // itself, since the row is already saved.
+  const sub = await c.env.DB.prepare("SELECT id FROM push_subscriptions WHERE endpoint = ?")
+    .bind(body.endpoint)
+    .first<{ id: number }>();
+  try {
+    if (sub) await enqueueConfirmation(c.env, sub.id);
+  } catch (err) {
+    console.error("Failed to queue confirmation push:", err);
+  }
 
   return c.json({ ok: true }, 201);
 });

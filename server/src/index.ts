@@ -94,10 +94,10 @@ const BOOP_LINES_CRON = "30 4 * * SUN";
 
 /**
  * The reminder cron — see scheduled/reminders.ts. The only sub-daily cron
- * here, since checking a 3-hour gap needs far more frequent checking than
+ * here, since checking a 2h45m gap needs far more frequent checking than
  * anything else in this Worker.
  */
-const REMINDERS_CRON = "*/15 * * * *";
+const REMINDERS_CRON = "*/5 * * * *";
 
 export default {
   fetch: app.fetch,

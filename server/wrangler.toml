@@ -94,7 +94,7 @@ max_batch_timeout = 30
 max_retries = 3
 retry_delay = 300
 
-# Diaper/feeding reminder pushes. The 15-minute cron below decides which
+# Diaper/feeding reminder pushes. The 5-minute cron below decides which
 # (child, kind) gaps are overdue and enqueues one job per subscribed device;
 # the consumer does the actual Web Push send, same split as the queues above
 # so a push service hiccup gets retried instead of silently dropping that
@@ -133,13 +133,13 @@ binding = "AI"
 # competes with them for the same invocation:
 #   04:30 UTC on Sundays.
 # The fourth checks for overdue diaper/feeding reminders (see
-# scheduled/reminders.ts) — the only sub-daily cron here, because a 3-hour
+# scheduled/reminders.ts) — the only sub-daily cron here, because a 2h45m
 # gap needs checking far more often than once a day:
-#   every 15 minutes, all day.
+#   every 5 minutes, all day.
 # `scheduled()` in src/index.ts tells the four apart by `event.cron`.
 # Note: Cloudflare's weekday field is 1-7 (1 = Sunday), not the usual 0-6, so
 # "SUN" is used here rather than a numeric day to avoid that ambiguity.
-crons = ["0 5 * * *", "15 5 * * *", "30 4 * * SUN", "*/15 * * * *"]
+crons = ["0 5 * * *", "15 5 * * *", "30 4 * * SUN", "*/5 * * * *"]
 
 [vars]
 CF_ACCESS_TEAM_DOMAIN = "mfaherty.cloudflareaccess.com"
