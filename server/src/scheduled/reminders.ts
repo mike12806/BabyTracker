@@ -8,8 +8,9 @@ const REMINDER_THRESHOLD_MS = (2 * 60 + 45) * 60 * 1000;
 
 export interface ReminderJob {
   subscriptionId: number;
+  /** Unused for "confirmation" — there's no child to name. */
   childName: string;
-  kind: "diaper" | "feeding";
+  kind: "diaper" | "feeding" | "confirmation";
 }
 
 const KIND_CONFIG = {
@@ -20,7 +21,7 @@ const KIND_CONFIG = {
 const childNameExpr = `TRIM(first_name || CASE WHEN last_name IS NOT NULL AND last_name != '' THEN ' ' || last_name ELSE '' END)`;
 
 /**
- * Runs on the reminder cron (every 15 minutes — see `wrangler.toml`). For
+ * Runs on the reminder cron (every 5 minutes — see `wrangler.toml`). For
  * every child and kind (diaper/feeding), decides whether a reminder is due —
  * no recorded entry in the last 2 hours 45 minutes, and no reminder already
  * sent for this same gap — and if so enqueues one delivery job per device
@@ -109,10 +110,35 @@ export async function deliverReminder(env: Env, job: ReminderJob): Promise<void>
   // Unsubscribed between enqueue and delivery — nothing to do.
   if (!sub) return;
 
+  if (job.kind === "confirmation") {
+    await sendPushMessage(env, sub, {
+      title: "Baby Tracker",
+      body: "Reminders are on. We'll notify you here when one's due.",
+      url: "/",
+    });
+    return;
+  }
+
   const label = KIND_CONFIG[job.kind].label;
   await sendPushMessage(env, sub, {
     title: "Baby Tracker",
     body: `No ${label} logged for ${job.childName} in over 2 hours 45 minutes.`,
     url: "/",
   });
+}
+
+/**
+ * Queues (or, with no queue bound, sends inline) the confirmation push a
+ * fresh subscription gets right away — see `routes/push.ts`. Shares the
+ * reminder queue's retry behavior rather than being a fire-and-forget best
+ * effort, same reasoning as every other push send here: a push-service
+ * hiccup should be retried, not silently lost.
+ */
+export async function enqueueConfirmation(env: Env, subscriptionId: number): Promise<void> {
+  const job: ReminderJob = { subscriptionId, childName: "", kind: "confirmation" };
+  if (env.REMINDER_QUEUE) {
+    await env.REMINDER_QUEUE.send(job);
+  } else {
+    await deliverReminder(env, job);
+  }
 }

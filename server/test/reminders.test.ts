@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from "vitest";
 import { env } from "cloudflare:test";
-import { enqueueReminderChecks, deliverReminder, type ReminderJob } from "../src/scheduled/reminders.js";
+import { enqueueReminderChecks, deliverReminder, enqueueConfirmation, type ReminderJob } from "../src/scheduled/reminders.js";
 import { generateVapidKeys } from "../src/pushSend.js";
 import { applyMigrations } from "./helpers";
 
@@ -190,5 +190,49 @@ describe("deliverReminder", () => {
     });
 
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("sends a confirmation push, distinct from a diaper/feeding reminder", async () => {
+    await seedChildWithSubscriber();
+    const sub = await env.DB.prepare("SELECT id FROM push_subscriptions").first<{ id: number }>();
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 201 }));
+
+    await deliverReminder({ ...env, ...VAPID_ENV } as unknown as typeof env, {
+      subscriptionId: sub!.id,
+      childName: "",
+      kind: "confirmation",
+    });
+
+    expect(fetchSpy).toHaveBeenCalledWith("https://push.example.com/1", expect.any(Object));
+  });
+});
+
+describe("enqueueConfirmation", () => {
+  beforeEach(async () => {
+    await applyMigrations(env.DB);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("queues a confirmation job when a queue is bound", async () => {
+    await seedChildWithSubscriber();
+    const sub = await env.DB.prepare("SELECT id FROM push_subscriptions").first<{ id: number }>();
+    const queue = fakeQueue();
+
+    await enqueueConfirmation({ ...env, REMINDER_QUEUE: queue.binding } as unknown as typeof env, sub!.id);
+
+    expect(queue.sent).toEqual([{ subscriptionId: sub!.id, childName: "", kind: "confirmation" }]);
+  });
+
+  it("sends inline when no queue is bound", async () => {
+    await seedChildWithSubscriber();
+    const sub = await env.DB.prepare("SELECT id FROM push_subscriptions").first<{ id: number }>();
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 201 }));
+
+    await enqueueConfirmation({ ...env, ...VAPID_ENV, REMINDER_QUEUE: undefined } as unknown as typeof env, sub!.id);
+
+    expect(fetchSpy).toHaveBeenCalled();
   });
 });
