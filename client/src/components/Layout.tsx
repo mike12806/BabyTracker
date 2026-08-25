@@ -53,6 +53,7 @@ import ErrorBoundary from "./ErrorBoundary";
 import { useAuth } from "../hooks/useAuth";
 import { useChildren } from "../hooks/useChildren";
 import { useDataFreshness } from "../hooks/useDataFreshness";
+import PendingSyncBanner from "./PendingSyncBanner";
 import { useDataRefresh } from "../hooks/useDataRefresh";
 import { useThemeMode } from "../hooks/useTheme";
 import { useVolumeUnit } from "../hooks/useVolumeUnit";
@@ -526,6 +527,12 @@ export default function Layout() {
             entries from other devices aren't here yet; retrying automatically.
           </Alert>
         )}
+        {/* The same honesty in the other direction: the banner above says what
+            this screen may be missing, this one says what the rest of the
+            world is missing from this screen. Below it deliberately — a
+            failure to reach the server explains why anything is queued at
+            all, so it reads in that order. */}
+        <PendingSyncBanner />
         {/* Keyed on the route so navigating away clears a crashed page rather
             than pinning the error in place for the rest of the session. The
             nav around it stays usable, which is the whole point of catching

@@ -14,7 +14,8 @@ import {
   useMediaQuery,
   useTheme,
 } from "@mui/material";
-import { api } from "../api/client";
+import { createEntry, type OutboxResource } from "../api/outbox";
+import { QUEUED_SAVE_MESSAGE, QUEUED_SAVE_SEVERITY } from "../utils/saveOutcome";
 import { useChildren } from "../hooks/useChildren";
 import { useDataRefresh } from "../hooks/useDataRefresh";
 import { useNotification } from "../hooks/useNotification";
@@ -152,86 +153,126 @@ export default function QuickLogDialog({ category, onClose, onLogged }: QuickLog
     onClose();
   };
 
+  /**
+   * The POST body for whichever category is open, or null when the form isn't
+   * ready to send.
+   *
+   * Split out from the save below because the body has to exist as a value
+   * before it can be handed to `createEntry` — that is what lets one call
+   * cover every category and, when the server can't be reached, lets the same
+   * body be stored verbatim and sent later.
+   */
+  const buildEntry = (
+    idempotencyKey: string,
+  ): { resource: OutboxResource; body: Record<string, unknown> } | null => {
+    const childId = selectedChild!.id;
+    const startIso = form.time ? new Date(form.time).toISOString() : new Date().toISOString();
+    const endIso = form.end_time ? new Date(form.end_time).toISOString() : null;
+    const common = { child_id: childId, client_request_id: idempotencyKey };
+
+    if (category === "feed") {
+      const trackAmount = !isBreastFeeding(form.feedingType) && form.amount;
+      return {
+        resource: "feedings",
+        body: {
+          ...common,
+          type: form.feedingType,
+          start_time: startIso,
+          end_time: endIso,
+          amount: trackAmount ? parseFloat(form.amount) : null,
+          amount_unit: trackAmount ? form.amountUnit : null,
+          notes: form.notes || null,
+        },
+      };
+    }
+    if (category === "diaper") {
+      return {
+        resource: "diaper_changes",
+        body: {
+          ...common,
+          time: startIso,
+          type: form.diaperType,
+          color: form.color || null,
+          notes: form.notes || null,
+        },
+      };
+    }
+    if (category === "sleep") {
+      return {
+        resource: "sleep",
+        body: {
+          ...common,
+          start_time: startIso,
+          end_time: endIso,
+          is_nap: form.isNap ? 1 : 0,
+          notes: form.notes || null,
+        },
+      };
+    }
+    if (category === "pump") {
+      return {
+        resource: "pumping",
+        body: {
+          ...common,
+          start_time: startIso,
+          end_time: endIso,
+          side: form.pumpSide,
+          amount: form.amount ? parseFloat(form.amount) : null,
+          amount_unit: form.amount ? form.amountUnit : null,
+          notes: form.notes || null,
+        },
+      };
+    }
+    if (category === "tummy") {
+      return {
+        resource: "tummy_time",
+        body: {
+          ...common,
+          start_time: startIso,
+          end_time: endIso,
+          milestone: null,
+          notes: form.notes || null,
+        },
+      };
+    }
+    if (!form.content.trim()) {
+      notify("Note can't be empty.", "warning");
+      return null;
+    }
+    return {
+      resource: "notes",
+      body: { ...common, time: startIso, title: form.title || null, content: form.content },
+    };
+  };
+
   const handleSave = async () => {
     if (!selectedChild) {
       notify("Select a child first.", "warning");
       return;
     }
     await save({ category, form }, async (idempotencyKey) => {
-      try {
-        const startIso = form.time ? new Date(form.time).toISOString() : new Date().toISOString();
-        const endIso = form.end_time ? new Date(form.end_time).toISOString() : null;
+      const entry = buildEntry(idempotencyKey);
+      if (!entry) return;
 
-        if (category === "feed") {
-          const trackAmount = !isBreastFeeding(form.feedingType) && form.amount;
-          await api.post("/feedings", {
-            child_id: selectedChild.id,
-            client_request_id: idempotencyKey,
-            type: form.feedingType,
-            start_time: startIso,
-            end_time: endIso,
-            amount: trackAmount ? parseFloat(form.amount) : null,
-            amount_unit: trackAmount ? form.amountUnit : null,
-            notes: form.notes || null,
-          });
-        } else if (category === "diaper") {
-          await api.post("/diaper-changes", {
-            child_id: selectedChild.id,
-            client_request_id: idempotencyKey,
-            time: startIso,
-            type: form.diaperType,
-            color: form.color || null,
-            notes: form.notes || null,
-          });
-        } else if (category === "sleep") {
-          await api.post("/sleep", {
-            child_id: selectedChild.id,
-            client_request_id: idempotencyKey,
-            start_time: startIso,
-            end_time: endIso,
-            is_nap: form.isNap ? 1 : 0,
-            notes: form.notes || null,
-          });
-        } else if (category === "pump") {
-          await api.post("/pumping", {
-            child_id: selectedChild.id,
-            client_request_id: idempotencyKey,
-            start_time: startIso,
-            end_time: endIso,
-            side: form.pumpSide,
-            amount: form.amount ? parseFloat(form.amount) : null,
-            amount_unit: form.amount ? form.amountUnit : null,
-            notes: form.notes || null,
-          });
-        } else if (category === "tummy") {
-          await api.post("/tummy-time", {
-            child_id: selectedChild.id,
-            client_request_id: idempotencyKey,
-            start_time: startIso,
-            end_time: endIso,
-            milestone: null,
-            notes: form.notes || null,
-          });
-        } else if (category === "note") {
-          if (!form.content.trim()) {
-            notify("Note can't be empty.", "warning");
-            return;
-          }
-          await api.post("/notes", {
-            child_id: selectedChild.id,
-            client_request_id: idempotencyKey,
-            time: startIso,
-            title: form.title || null,
-            content: form.content,
-          });
-        }
-        notify("Logged.", "success");
-        refreshData();
-        onLogged?.(category);
-        handleClose();
-      } catch (err) {
-        notify(err instanceof Error ? err.message : "Failed to save.", "error");
+      // Queued rather than lost when the server is unreachable — this is the
+      // dialog people use one-handed at 3am, often in the corner of the house
+      // the wifi doesn't reach, and "Network error, try again" there means
+      // typing it all a second time.
+      const outcome = await createEntry(entry.resource, selectedChild.id, entry.body);
+      if (outcome.status === "failed") {
+        // The form stays open with everything still in it, and the draft is
+        // still on disk, so the user can fix whatever the server objected to.
+        notify(outcome.error.message, "error");
+        return;
       }
+
+      notify(
+        outcome.status === "queued" ? QUEUED_SAVE_MESSAGE : "Logged.",
+        outcome.status === "queued" ? QUEUED_SAVE_SEVERITY : "success",
+      );
+      refreshData();
+      onLogged?.(category);
+      handleClose();
     });
   };
 

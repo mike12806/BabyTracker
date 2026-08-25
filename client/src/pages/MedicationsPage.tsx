@@ -41,6 +41,10 @@ import { isoToLocal } from "../utils/dateTime";
 import { buildCategoryColors } from "../theme/categoryColors";
 import { useEditEntryParam } from "../hooks/useEditEntryParam";
 import { useSaveGuard } from "../hooks/useSaveGuard";
+import { createEntry, discardPendingRow, isPending, mergePending } from "../api/outbox";
+import { usePendingRows } from "../hooks/useOutbox";
+import PendingChip from "../components/PendingChip";
+import { QUEUED_SAVE_MESSAGE, QUEUED_SAVE_SEVERITY } from "../utils/saveOutcome";
 
 function relativeTime(iso: string): string {
   const then = new Date(iso).getTime();
@@ -102,7 +106,22 @@ export default function MedicationsPage() {
   const { notify } = useNotification();
   const { saving, save } = useSaveGuard();
   const { refreshKey } = useDataRefresh();
-  const [entries, setEntries] = useState<Medication[]>([]);
+  const [savedEntries, setSavedEntries] = useState<Medication[]>([]);
+  const pendingEntries = usePendingRows<Medication>("medications", selectedChild?.id ?? null);
+  /**
+   * What the server has, plus what this device logged and hasn't managed to
+   * send. Everything below reads this list, which is the point: the summary
+   * above it answers "when was the last one", and leaving out the entry logged
+   * ten minutes ago in the basement would make that answer wrong.
+   *
+   * Pending rows carry a negative `id` and are marked in the list — see
+   * `PendingChip` — so they are never mistaken for something the other
+   * caregiver's phone can see.
+   */
+  const entries = useMemo(
+    () => mergePending(savedEntries, pendingEntries, "time"),
+    [savedEntries, pendingEntries],
+  );
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState<Medication | null>(null);
   const [form, setForm] = useState({ time: "", name: "", dosage: "", dosage_unit: "", notes: "" });
@@ -113,7 +132,7 @@ export default function MedicationsPage() {
     if (!selectedChild) return;
     try {
       const data = await api.get<Medication[]>(`/medications?child_id=${selectedChild.id}`);
-      setEntries(data);
+      setSavedEntries(data);
     } catch (err) {
       notify(err instanceof Error ? err.message : "Failed to load medications.", "error");
     }
@@ -138,6 +157,13 @@ export default function MedicationsPage() {
   };
 
   const handleEdit = (entry: Medication) => {
+    // A pending row has no server id to PUT against — it is still a queued
+    // create. Rewriting the queued body would be more machinery than this case
+    // deserves, so the honest offer is to throw it away and log it again.
+    if (isPending(entry)) {
+      notify("That entry hasn't synced yet — discard it and log it again to change it.", "info");
+      return;
+    }
     setEditingEntry(entry);
     setForm({
       time: isoToLocal(entry.time),
@@ -163,23 +189,51 @@ export default function MedicationsPage() {
       notes: form.notes || null,
     };
     await save(payload, async (idempotencyKey) => {
-      try {
-        if (editingEntry) {
+      let queued = false;
+      if (editingEntry) {
+        // Deliberately not queued when the server is unreachable: an edit
+        // replayed an hour later would overwrite whatever the other caregiver
+        // did to the same row in the meantime, with nothing to detect it by.
+        // `outbox.ts` explains why a create carries no such hazard.
+        try {
           await api.put(`/medications/${editingEntry.id}`, payload);
-        } else {
-          await api.post("/medications", { child_id: selectedChild.id, ...payload, client_request_id: idempotencyKey });
+        } catch (err) {
+          notify(err instanceof Error ? err.message : "Failed to save medication.", "error");
+          return;
         }
-        setDialogOpen(false);
-        setEditingEntry(null);
-        setForm({ time: "", name: "", dosage: "", dosage_unit: "", notes: "" });
-        await load();
-      } catch (err) {
-        notify(err instanceof Error ? err.message : "Failed to save medication.", "error");
+      } else {
+        const outcome = await createEntry("medications", selectedChild.id, {
+          child_id: selectedChild.id,
+          ...payload,
+          client_request_id: idempotencyKey,
+        });
+        if (outcome.status === "failed") {
+          // The dialog stays open with everything still in it, so whatever the
+          // server objected to can be fixed and saved again.
+          notify(outcome.error.message, "error");
+          return;
+        }
+        if (outcome.status === "queued") {
+          notify(QUEUED_SAVE_MESSAGE, QUEUED_SAVE_SEVERITY);
+          queued = true;
+        }
       }
+      setDialogOpen(false);
+      setEditingEntry(null);
+      setForm({ time: "", name: "", dosage: "", dosage_unit: "", notes: "" });
+      // A queued entry is already in the list — it is rendered from the outbox,
+      // not from the server — and the refetch would fail on the same dead
+      // connection and replace "saved on this device" with a load error.
+      if (!queued) await load();
     });
   };
 
   const handleDelete = async (id: number) => {
+    // Nothing exists on the server to delete: dropping the queued entry is the
+    // whole operation, and it is also the only version that works while the
+    // connection is still down — which is exactly when a mistyped entry gets
+    // noticed.
+    if (discardPendingRow(id)) return;
     try {
       await api.delete(`/medications/${id}`);
       await load();
@@ -269,7 +323,7 @@ export default function MedicationsPage() {
               <TableBody>
                 {entries.map((m) => (
                   <TableRow key={m.id}>
-                    <TableCell>{new Date(m.time).toLocaleString()}</TableCell>
+                    <TableCell>{new Date(m.time).toLocaleString()}{isPending(m) && <PendingChip />}</TableCell>
                     <TableCell>{m.name}</TableCell>
                     <TableCell>
                       {m.dosage !== null ? `${m.dosage}${m.dosage_unit ? " " + m.dosage_unit : ""}` : "—"}
@@ -360,6 +414,7 @@ export default function MedicationsPage() {
                       <Typography sx={{ fontSize: 12.5, fontWeight: 600, letterSpacing: "-0.005em", lineHeight: 1.2 }} noWrap>{formatDose(m)}</Typography>
                       <Typography sx={{ fontSize: 10.5, color: "text.secondary", mt: 0, lineHeight: 1.2 }} noWrap>{m.notes || "—"}</Typography>
                     </Box>
+                    {isPending(m) && <PendingChip compact />}
                     <Typography sx={{ fontSize: 11, color: "text.secondary", fontWeight: 500, fontVariantNumeric: "tabular-nums", flexShrink: 0, mr: 3.25 }}>
                       {formatTimeShort(m.time)}
                     </Typography>

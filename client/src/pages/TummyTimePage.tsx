@@ -45,6 +45,10 @@ import { isoToLocal } from "../utils/dateTime";
 import { buildCategoryColors } from "../theme/categoryColors";
 import { useEditEntryParam } from "../hooks/useEditEntryParam";
 import { useSaveGuard } from "../hooks/useSaveGuard";
+import { createEntry, discardPendingRow, isPending, mergePending } from "../api/outbox";
+import { usePendingRows } from "../hooks/useOutbox";
+import PendingChip from "../components/PendingChip";
+import { QUEUED_SAVE_MESSAGE, QUEUED_SAVE_SEVERITY } from "../utils/saveOutcome";
 
 function relativeTime(iso: string): string {
   const ms = Date.now() - new Date(iso).getTime();
@@ -129,7 +133,22 @@ export default function TummyTimePage() {
   const c = cat.tummy;
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const isCompact = useMediaQuery(theme.breakpoints.down("md"));
-  const [entries, setEntries] = useState<TummyTime[]>([]);
+  const [savedEntries, setSavedEntries] = useState<TummyTime[]>([]);
+  const pendingEntries = usePendingRows<TummyTime>("tummy_time", selectedChild?.id ?? null);
+  /**
+   * What the server has, plus what this device logged and hasn't managed to
+   * send. Everything below reads this list, which is the point: the summary
+   * above it answers "when was the last one", and leaving out the entry logged
+   * ten minutes ago in the basement would make that answer wrong.
+   *
+   * Pending rows carry a negative `id` and are marked in the list — see
+   * `PendingChip` — so they are never mistaken for something the other
+   * caregiver's phone can see.
+   */
+  const entries = useMemo(
+    () => mergePending(savedEntries, pendingEntries, "start_time"),
+    [savedEntries, pendingEntries],
+  );
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState<TummyTime | null>(null);
   const [form, setForm] = useState({ start_time: "", end_time: "", milestone: "", notes: "" });
@@ -140,7 +159,7 @@ export default function TummyTimePage() {
     if (!selectedChild) return;
     try {
       const data = await api.get<TummyTime[]>(`/tummy-time?child_id=${selectedChild.id}`);
-      setEntries(data);
+      setSavedEntries(data);
     } catch (err) {
       notify(err instanceof Error ? err.message : "Failed to load tummy time entries.", "error");
     }
@@ -157,6 +176,13 @@ export default function TummyTimePage() {
   };
 
   const handleEdit = (entry: TummyTime) => {
+    // A pending row has no server id to PUT against — it is still a queued
+    // create. Rewriting the queued body would be more machinery than this case
+    // deserves, so the honest offer is to throw it away and log it again.
+    if (isPending(entry)) {
+      notify("That entry hasn't synced yet — discard it and log it again to change it.", "info");
+      return;
+    }
     setEditingEntry(entry);
     setForm({
       start_time: isoToLocal(entry.start_time),
@@ -180,23 +206,51 @@ export default function TummyTimePage() {
       notes: form.notes || null,
     };
     await save(payload, async (idempotencyKey) => {
-      try {
-        if (editingEntry) {
+      let queued = false;
+      if (editingEntry) {
+        // Deliberately not queued when the server is unreachable: an edit
+        // replayed an hour later would overwrite whatever the other caregiver
+        // did to the same row in the meantime, with nothing to detect it by.
+        // `outbox.ts` explains why a create carries no such hazard.
+        try {
           await api.put(`/tummy-time/${editingEntry.id}`, payload);
-        } else {
-          await api.post("/tummy-time", { child_id: selectedChild.id, ...payload, client_request_id: idempotencyKey });
+        } catch (err) {
+          notify(err instanceof Error ? err.message : "Failed to save tummy time entry.", "error");
+          return;
         }
-        setDialogOpen(false);
-        setEditingEntry(null);
-        setForm({ start_time: "", end_time: "", milestone: "", notes: "" });
-        await load();
-      } catch (err) {
-        notify(err instanceof Error ? err.message : "Failed to save tummy time entry.", "error");
+      } else {
+        const outcome = await createEntry("tummy_time", selectedChild.id, {
+          child_id: selectedChild.id,
+          ...payload,
+          client_request_id: idempotencyKey,
+        });
+        if (outcome.status === "failed") {
+          // The dialog stays open with everything still in it, so whatever the
+          // server objected to can be fixed and saved again.
+          notify(outcome.error.message, "error");
+          return;
+        }
+        if (outcome.status === "queued") {
+          notify(QUEUED_SAVE_MESSAGE, QUEUED_SAVE_SEVERITY);
+          queued = true;
+        }
       }
+      setDialogOpen(false);
+      setEditingEntry(null);
+      setForm({ start_time: "", end_time: "", milestone: "", notes: "" });
+      // A queued entry is already in the list — it is rendered from the outbox,
+      // not from the server — and the refetch would fail on the same dead
+      // connection and replace "saved on this device" with a load error.
+      if (!queued) await load();
     });
   };
 
   const handleDelete = async (id: number) => {
+    // Nothing exists on the server to delete: dropping the queued entry is the
+    // whole operation, and it is also the only version that works while the
+    // connection is still down — which is exactly when a mistyped entry gets
+    // noticed.
+    if (discardPendingRow(id)) return;
     try {
       await api.delete(`/tummy-time/${id}`);
       await load();
@@ -288,7 +342,7 @@ export default function TummyTimePage() {
               <TableBody>
                 {entries.map((t) => (
                   <TableRow key={t.id}>
-                    <TableCell>{new Date(t.start_time).toLocaleString()}</TableCell>
+                    <TableCell>{new Date(t.start_time).toLocaleString()}{isPending(t) && <PendingChip />}</TableCell>
                     <TableCell>{t.end_time ? new Date(t.end_time).toLocaleString() : "In progress"}</TableCell>
                     <TableCell>{humanDuration(t.start_time, t.end_time)}</TableCell>
                     <TableCell>{t.milestone || "—"}</TableCell>
@@ -381,6 +435,7 @@ export default function TummyTimePage() {
                         </Typography>
                         <Typography sx={{ fontSize: 10.5, color: "text.secondary", mt: 0, lineHeight: 1.2 }} noWrap>{meta}</Typography>
                       </Box>
+                      {isPending(t) && <PendingChip compact />}
                       <Typography sx={{ fontSize: 11, color: "text.secondary", fontWeight: 500, fontVariantNumeric: "tabular-nums", flexShrink: 0, mr: 3.25 }}>
                         {formatTimeShort(t.start_time)}
                       </Typography>

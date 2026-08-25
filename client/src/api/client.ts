@@ -1,3 +1,4 @@
+import { ApiError } from "./errors";
 import { markOffline, noteResponse } from "./freshness";
 import { FROM_CACHE_HEADER } from "../serviceWorkerContract";
 
@@ -186,10 +187,12 @@ async function doFetch(
     // only place that sees it — flag it before deciding what to do next.
     if (!flags.optional) markOffline();
     if (await sessionIsAlive()) {
-      throw new Error("Network error — check your connection and try again.");
+      // No status: nothing answered. The outbox reads that as "hold this and
+      // try again later" rather than as a rejection.
+      throw new ApiError("Network error — check your connection and try again.");
     }
     triggerReauth();
-    throw new Error("Unauthorized");
+    throw new ApiError("Unauthorized", 401);
   }
 
   // Deliberately outside the try above: that catch means "the network failed",
@@ -220,15 +223,15 @@ async function doFetch(
  * JSON fails, and the old fallback ("Request failed") told the user nothing
  * about what to do next.
  */
-async function errorFromResponse(res: Response): Promise<Error> {
+async function errorFromResponse(res: Response): Promise<ApiError> {
   const body = await res.json().catch(() => null);
   const message = (body as { error?: string } | null)?.error;
-  if (message) return new Error(message);
+  if (message) return new ApiError(message, res.status);
 
-  if (res.status === 413) return new Error("That file is too large to upload.");
-  if (res.status === 429) return new Error("Too many requests — wait a moment and try again.");
-  if (res.status >= 500) return new Error(`The server had a problem (HTTP ${res.status}). Please try again.`);
-  return new Error(`Request failed (HTTP ${res.status})`);
+  if (res.status === 413) return new ApiError("That file is too large to upload.", res.status);
+  if (res.status === 429) return new ApiError("Too many requests — wait a moment and try again.", res.status);
+  if (res.status >= 500) return new ApiError(`The server had a problem (HTTP ${res.status}). Please try again.`, res.status);
+  return new ApiError(`Request failed (HTTP ${res.status})`, res.status);
 }
 
 async function request<T>(
@@ -251,7 +254,7 @@ async function request<T>(
 
   if (isAuthFailure(res.status)) {
     triggerReauth();
-    throw new Error("Unauthorized");
+    throw new ApiError("Unauthorized", res.status);
   }
 
   if (!res.ok) {
