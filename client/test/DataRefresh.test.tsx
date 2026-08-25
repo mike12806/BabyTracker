@@ -187,4 +187,62 @@ describe("Dashboard refresh after logging from outside the page", () => {
     await waitFor(() => expect(feedingFetchCount()).toBe(2));
     expect(feedingFetchCount()).toBe(2);
   });
+
+  it("reloads once for the whole burst of events a foreground fires", async () => {
+    // Coming back to the app on iOS delivers these together: the visibility
+    // change, the window focus, a `pageshow` if the page was in the back/
+    // forward cache, and an `online` as the radio re-attaches. Each one used
+    // to reach the page through a path of its own, so the dashboard rebuilt
+    // itself two or three times over in front of the user.
+    render(<AppShell />, { wrapper: Wrapper });
+
+    await waitFor(() => expect(feedingFetchCount()).toBe(1));
+
+    // One `act` each: these arrive milliseconds apart in separate tasks, so
+    // React does not get to batch the refreshes into a single render the way
+    // it would if they were dispatched together.
+    await act(async () => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"));
+    });
+    await act(async () => {
+      window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true }));
+    });
+    await act(async () => {
+      window.dispatchEvent(new Event("online"));
+    });
+
+    await waitFor(() => expect(feedingFetchCount()).toBe(2));
+    expect(feedingFetchCount()).toBe(2);
+  });
+
+  it("does not refetch again behind a save that just refetched", async () => {
+    // The poll tick held back while the dialog was open is released the
+    // moment it closes — which is immediately after the save has refetched.
+    const user = userEvent.setup();
+    render(<AppShell />, { wrapper: Wrapper });
+
+    await waitFor(() => expect(feedingFetchCount()).toBe(1));
+
+    await user.click(screen.getByRole("button", { name: /fab log feeding/i }));
+    await screen.findByRole("dialog");
+
+    await act(async () => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+
+    await user.click(screen.getByRole("button", { name: /^save$/i }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+
+    await act(async () => {
+      document.dispatchEvent(new Event("focusout"));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    // The save's own refresh, and nothing on top of it.
+    await waitFor(() => expect(feedingFetchCount()).toBe(2));
+    expect(feedingFetchCount()).toBe(2);
+  });
 });
