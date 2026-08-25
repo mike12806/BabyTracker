@@ -11,7 +11,6 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  Legend,
 } from "recharts";
 import { unitLabel, volumeTotal } from "../utils/feedingAmount";
 import { useVolumeUnit } from "../hooks/useVolumeUnit";
@@ -122,7 +121,6 @@ export function FeedingChart({ feedings, days = 14 }: FeedingChartProps) {
             return [value, name];
           }}
         />
-        <Legend />
         <Bar yAxisId="count" dataKey="Breast" stackId="a" fill="#7e57c2" radius={[0, 0, 0, 0]} />
         <Bar yAxisId="count" dataKey="Bottle" stackId="a" fill="#42a5f5" />
         <Bar yAxisId="count" dataKey="Solid" stackId="a" fill="#66bb6a" radius={[4, 4, 0, 0]} />
@@ -184,7 +182,6 @@ export function DiaperChart({ diapers, days = 14 }: DiaperChartProps) {
             borderRadius: 8,
           }}
         />
-        <Legend />
         <Bar dataKey="Wet" stackId="a" fill="#ffa726" radius={[0, 0, 0, 0]} />
         <Bar dataKey="Solid" stackId="a" fill="#8d6e63" />
         <Bar dataKey="Both" stackId="a" fill="#78909c" />
@@ -240,7 +237,6 @@ export function SleepChart({ sleeps, days = 14 }: SleepChartProps) {
           }}
           formatter={(value) => `${value}h`}
         />
-        <Legend />
         <Bar dataKey="Night" stackId="a" fill="#5c6bc0" radius={[0, 0, 0, 0]} />
         <Bar dataKey="Nap" stackId="a" fill="#b39ddb" radius={[4, 4, 0, 0]} />
       </BarChart>
@@ -387,7 +383,6 @@ export function GrowthChart({ growths }: GrowthChartProps) {
             borderRadius: 8,
           }}
         />
-        <Legend />
         {hasWeight && (
           <Line
             type="monotone"
