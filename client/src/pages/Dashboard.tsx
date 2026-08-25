@@ -40,6 +40,9 @@ import QuickLogDialog, { type QuickLogCategory } from "../components/QuickLogDia
 import { buildCategoryColors, type CategoryKey } from "../theme/categoryColors";
 import type { BoopLinePool } from "../utils/childMoments";
 import { editEntryPath } from "../utils/activityLinks";
+import { mergePending } from "../api/outbox";
+import { usePendingRows } from "../hooks/useOutbox";
+import PendingChip from "../components/PendingChip";
 import { formatRelativeTime } from "../utils/dateTime";
 import { sideLabel } from "../utils/pumping";
 import { amountTotals, formatAmountTotal, formatEntryAmount } from "../utils/feedingAmount";
@@ -138,15 +141,15 @@ export default function Dashboard() {
   const cat = useMemo(() => buildCategoryColors(isDark), [isDark]);
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
 
-  const [feedings, setFeedings] = useState<Feeding[]>([]);
-  const [diapers, setDiapers] = useState<DiaperChange[]>([]);
-  const [sleeps, setSleeps] = useState<SleepEntry[]>([]);
+  const [savedFeedings, setSavedFeedings] = useState<Feeding[]>([]);
+  const [savedDiapers, setSavedDiapers] = useState<DiaperChange[]>([]);
+  const [savedSleeps, setSavedSleeps] = useState<SleepEntry[]>([]);
   const [timers, setTimers] = useState<Timer[]>([]);
-  const [tummyTimes, setTummyTimes] = useState<TummyTime[]>([]);
-  const [pumpings, setPumpings] = useState<Pumping[]>([]);
-  const [temperatures, setTemperatures] = useState<Temperature[]>([]);
-  const [notes, setNotes] = useState<Note[]>([]);
-  const [medications, setMedications] = useState<Medication[]>([]);
+  const [savedTummyTimes, setSavedTummyTimes] = useState<TummyTime[]>([]);
+  const [savedPumpings, setSavedPumpings] = useState<Pumping[]>([]);
+  const [savedTemperatures, setSavedTemperatures] = useState<Temperature[]>([]);
+  const [savedNotes, setSavedNotes] = useState<Note[]>([]);
+  const [savedMedications, setSavedMedications] = useState<Medication[]>([]);
   const [todos, setTodos] = useState<Todo[]>([]);
   const [dailyNote, setDailyNote] = useState<string | null>(null);
   const [dailyNoteSource, setDailyNoteSource] = useState<"ai" | "fallback" | null>(null);
@@ -229,15 +232,15 @@ export default function Dashboard() {
             .catch(() => ({ note: null })),
         ]);
         if (cancelled) return;
-        setFeedings(f);
-        setDiapers(d);
-        setSleeps(s);
+        setSavedFeedings(f);
+        setSavedDiapers(d);
+        setSavedSleeps(s);
         setTimers(t);
-        setTummyTimes(tt);
-        setPumpings(p);
-        setTemperatures(temp);
-        setNotes(n);
-        setMedications(m);
+        setSavedTummyTimes(tt);
+        setSavedPumpings(p);
+        setSavedTemperatures(temp);
+        setSavedNotes(n);
+        setSavedMedications(m);
         setTodos(td);
         setDailyNote(note.note?.body ?? null);
         setDailyNoteSource(note.note?.source ?? null);
@@ -259,6 +262,55 @@ export default function Dashboard() {
       return stillActive.length === prev.length ? prev : stillActive;
     });
   }, [todos]);
+
+
+  // Entries logged on this device that haven't reached the server yet, folded
+  // into the same lists everything below reads. This screen exists to answer
+  // "how long since she ate" and "has anyone changed her", and a feed logged
+  // ten minutes ago in the corner of the house without signal is part of that
+  // answer whether or not the server has heard about it. Each pending row
+  // keeps a negative id, which is what stops the rows below linking to an edit
+  // form for something the server has never seen — see `outbox.ts`.
+  const pendingFeedings = usePendingRows<Feeding>("feedings", selectedChild?.id ?? null);
+  const feedings = useMemo(
+    () => mergePending(savedFeedings, pendingFeedings, "start_time"),
+    [savedFeedings, pendingFeedings],
+  );
+  const pendingDiapers = usePendingRows<DiaperChange>("diaper_changes", selectedChild?.id ?? null);
+  const diapers = useMemo(
+    () => mergePending(savedDiapers, pendingDiapers, "time"),
+    [savedDiapers, pendingDiapers],
+  );
+  const pendingSleeps = usePendingRows<SleepEntry>("sleep", selectedChild?.id ?? null);
+  const sleeps = useMemo(
+    () => mergePending(savedSleeps, pendingSleeps, "start_time"),
+    [savedSleeps, pendingSleeps],
+  );
+  const pendingTummyTimes = usePendingRows<TummyTime>("tummy_time", selectedChild?.id ?? null);
+  const tummyTimes = useMemo(
+    () => mergePending(savedTummyTimes, pendingTummyTimes, "start_time"),
+    [savedTummyTimes, pendingTummyTimes],
+  );
+  const pendingPumpings = usePendingRows<Pumping>("pumping", selectedChild?.id ?? null);
+  const pumpings = useMemo(
+    () => mergePending(savedPumpings, pendingPumpings, "start_time"),
+    [savedPumpings, pendingPumpings],
+  );
+  const pendingTemperatures = usePendingRows<Temperature>("temperature", selectedChild?.id ?? null);
+  const temperatures = useMemo(
+    () => mergePending(savedTemperatures, pendingTemperatures, "time"),
+    [savedTemperatures, pendingTemperatures],
+  );
+  const pendingNotes = usePendingRows<Note>("notes", selectedChild?.id ?? null);
+  const notes = useMemo(
+    () => mergePending(savedNotes, pendingNotes, "time"),
+    [savedNotes, pendingNotes],
+  );
+  const pendingMedications = usePendingRows<Medication>("medications", selectedChild?.id ?? null);
+  const medications = useMemo(
+    () => mergePending(savedMedications, pendingMedications, "time"),
+    [savedMedications, pendingMedications],
+  );
 
   if (!selectedChild) return <NoChildPlaceholder />;
 
@@ -661,7 +713,11 @@ export default function Dashboard() {
         ) : (
           recentActivity.map((ev, i) => {
             const c = cat[ev.cat];
-            const editPath = editEntryPath(ev.cat, ev.id);
+            // A pending row has no server id, so there is no edit form on the
+            // other end of a link — the row renders as plain text instead, and
+            // the chip says why.
+            const pendingRow = ev.id < 0;
+            const editPath = pendingRow ? null : editEntryPath(ev.cat, ev.id);
             return (
               // Tapping a row opens that entry's edit form on its section page.
               <Box
@@ -695,6 +751,7 @@ export default function Dashboard() {
                   <Typography sx={{ fontSize: 12.5, fontWeight: 600, letterSpacing: "-0.005em", lineHeight: 1.2 }} noWrap>
                     {ev.title}
                   </Typography>
+                  {pendingRow && <PendingChip compact />}
                   <Typography sx={{ fontSize: 10.5, color: "text.secondary", mt: 0, lineHeight: 1.2 }}>
                     {ev.meta}
                   </Typography>
