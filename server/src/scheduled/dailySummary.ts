@@ -681,8 +681,9 @@ async function sendEmail(
 
 // ── Main export ───────────────────────────────────────────────────────────────
 
-/** Returns the `YYYY-MM-DD` calendar-date string in America/New_York for a given UTC instant. */
-function toEtDateStr(date: Date): string {
+/** Returns the `YYYY-MM-DD` calendar-date string in America/New_York for a given UTC instant.
+ *  Exported for `feedingTrend.ts`, which walks ET calendar days of its own. */
+export function toEtDateStr(date: Date): string {
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: "America/New_York",
     year: "numeric",
@@ -703,8 +704,11 @@ function toEtDateStr(date: Date): string {
  * Offset 4 (EDT) is tried before 5 (EST) so that on DST fall-back days — where
  * midnight can correspond to both UTC-4 and UTC-5 — the earlier (EDT) midnight
  * is chosen, giving the correct 25-hour day boundary.
+ *
+ * Exported for `feedingTrend.ts`, which needs the same ET day boundaries at
+ * checkpoints other than midnight.
  */
-function etMidnightToUtc(etDateStr: string): string {
+export function etMidnightToUtc(etDateStr: string): string {
   for (const offsetHrs of [4, 5]) {
     const candidate = new Date(`${etDateStr}T${String(offsetHrs).padStart(2, "0")}:00:00.000Z`);
     if (toEtDateStr(candidate) === etDateStr) {
