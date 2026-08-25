@@ -230,7 +230,7 @@ export default function ChartsPage() {
                 sx={{
                   border: `1px solid ${theme.palette.divider}`,
                   borderRadius: 2.5,
-                  overflow: "hidden",
+                  overflow: "visible",
                 }}
               >
                 {/* Colored left gutter via a left border */}
