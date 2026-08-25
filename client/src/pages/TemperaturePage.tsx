@@ -46,6 +46,10 @@ import { buildCategoryColors } from "../theme/categoryColors";
 import type { Chip as _Chip } from "@mui/material";
 import { useEditEntryParam } from "../hooks/useEditEntryParam";
 import { useSaveGuard } from "../hooks/useSaveGuard";
+import { createEntry, discardPendingRow, isPending, mergePending } from "../api/outbox";
+import { usePendingRows } from "../hooks/useOutbox";
+import PendingChip from "../components/PendingChip";
+import { QUEUED_SAVE_MESSAGE, QUEUED_SAVE_SEVERITY } from "../utils/saveOutcome";
 
 type FeverLevel = "normal" | "lowFever" | "highFever";
 
@@ -116,7 +120,22 @@ export default function TemperaturePage() {
   const cat = useMemo(() => buildCategoryColors(isDark), [isDark]);
   const c = cat.temp;
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
-  const [entries, setEntries] = useState<Temperature[]>([]);
+  const [savedEntries, setSavedEntries] = useState<Temperature[]>([]);
+  const pendingEntries = usePendingRows<Temperature>("temperature", selectedChild?.id ?? null);
+  /**
+   * What the server has, plus what this device logged and hasn't managed to
+   * send. Everything below reads this list, which is the point: the summary
+   * above it answers "when was the last one", and leaving out the entry logged
+   * ten minutes ago in the basement would make that answer wrong.
+   *
+   * Pending rows carry a negative `id` and are marked in the list — see
+   * `PendingChip` — so they are never mistaken for something the other
+   * caregiver's phone can see.
+   */
+  const entries = useMemo(
+    () => mergePending(savedEntries, pendingEntries, "time"),
+    [savedEntries, pendingEntries],
+  );
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState<Temperature | null>(null);
   const [form, setForm] = useState({ time: "", reading: "", reading_unit: "F", notes: "" });
@@ -127,7 +146,7 @@ export default function TemperaturePage() {
     if (!selectedChild) return;
     try {
       const data = await api.get<Temperature[]>(`/temperature?child_id=${selectedChild.id}`);
-      setEntries(data);
+      setSavedEntries(data);
     } catch (err) {
       notify(err instanceof Error ? err.message : "Failed to load temperature readings.", "error");
     }
@@ -147,6 +166,13 @@ export default function TemperaturePage() {
   };
 
   const handleEdit = (entry: Temperature) => {
+    // A pending row has no server id to PUT against — it is still a queued
+    // create. Rewriting the queued body would be more machinery than this case
+    // deserves, so the honest offer is to throw it away and log it again.
+    if (isPending(entry)) {
+      notify("That entry hasn't synced yet — discard it and log it again to change it.", "info");
+      return;
+    }
     setEditingEntry(entry);
     setForm({
       time: isoToLocal(entry.time),
@@ -170,23 +196,51 @@ export default function TemperaturePage() {
       notes: form.notes || null,
     };
     await save(payload, async (idempotencyKey) => {
-      try {
-        if (editingEntry) {
+      let queued = false;
+      if (editingEntry) {
+        // Deliberately not queued when the server is unreachable: an edit
+        // replayed an hour later would overwrite whatever the other caregiver
+        // did to the same row in the meantime, with nothing to detect it by.
+        // `outbox.ts` explains why a create carries no such hazard.
+        try {
           await api.put(`/temperature/${editingEntry.id}`, payload);
-        } else {
-          await api.post("/temperature", { child_id: selectedChild.id, ...payload, client_request_id: idempotencyKey });
+        } catch (err) {
+          notify(err instanceof Error ? err.message : "Failed to save temperature reading.", "error");
+          return;
         }
-        setDialogOpen(false);
-        setEditingEntry(null);
-        setForm({ time: "", reading: "", reading_unit: "F", notes: "" });
-        await load();
-      } catch (err) {
-        notify(err instanceof Error ? err.message : "Failed to save temperature reading.", "error");
+      } else {
+        const outcome = await createEntry("temperature", selectedChild.id, {
+          child_id: selectedChild.id,
+          ...payload,
+          client_request_id: idempotencyKey,
+        });
+        if (outcome.status === "failed") {
+          // The dialog stays open with everything still in it, so whatever the
+          // server objected to can be fixed and saved again.
+          notify(outcome.error.message, "error");
+          return;
+        }
+        if (outcome.status === "queued") {
+          notify(QUEUED_SAVE_MESSAGE, QUEUED_SAVE_SEVERITY);
+          queued = true;
+        }
       }
+      setDialogOpen(false);
+      setEditingEntry(null);
+      setForm({ time: "", reading: "", reading_unit: "F", notes: "" });
+      // A queued entry is already in the list — it is rendered from the outbox,
+      // not from the server — and the refetch would fail on the same dead
+      // connection and replace "saved on this device" with a load error.
+      if (!queued) await load();
     });
   };
 
   const handleDelete = async (id: number) => {
+    // Nothing exists on the server to delete: dropping the queued entry is the
+    // whole operation, and it is also the only version that works while the
+    // connection is still down — which is exactly when a mistyped entry gets
+    // noticed.
+    if (discardPendingRow(id)) return;
     try {
       await api.delete(`/temperature/${id}`);
       await load();
@@ -274,7 +328,7 @@ export default function TemperaturePage() {
               <TableBody>
                 {entries.map((t) => (
                   <TableRow key={t.id}>
-                    <TableCell>{new Date(t.time).toLocaleString()}</TableCell>
+                    <TableCell>{new Date(t.time).toLocaleString()}{isPending(t) && <PendingChip />}</TableCell>
                     <TableCell>{renderChipInTable(t)}</TableCell>
                     <TableCell>{t.notes || "—"}</TableCell>
                     <TableCell>
@@ -357,6 +411,7 @@ export default function TemperaturePage() {
                         {feverLabel(t.reading, t.reading_unit)}{t.notes ? ` · ${t.notes}` : ""}
                       </Typography>
                     </Box>
+                    {isPending(t) && <PendingChip compact />}
                     <Typography sx={{ fontSize: 11, color: "text.secondary", fontWeight: 500, fontVariantNumeric: "tabular-nums", flexShrink: 0, mr: 3.25 }}>
                       {formatTimeShort(t.time)}
                     </Typography>

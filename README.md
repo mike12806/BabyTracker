@@ -10,6 +10,7 @@ A baby tracking application inspired by [Baby Buddy](https://github.com/babybudd
 - **Daily note** — a short blurb on the dashboard about how yesterday went and how the week is trending, written once a day by Workers AI and cached in D1
 - **Boop lines** — the reward for tapping a child's photo cycles through a pool that a weekly cron tops up with new AI-written lines, so it doesn't go stale
 - **Feeding trend alerts** — at 11am, 4pm and 7pm Eastern, checks how much a child has been fed so far today against the same point on each of the previous seven days, and pushes a notification when Workers AI agrees the shortfall is worth knowing about
+- **Offline logging** — an entry saved while the server is unreachable is kept on the device, shown in the log marked as unsynced, and sent automatically when the connection returns; the idempotency keys behind every create mean a resend can't double-log it
 - **Secure by default** — authentication via Cloudflare Access (no custom login UI needed)
 - **Edge-native** — runs entirely on Cloudflare (Pages, Workers, D1, R2)
 
@@ -29,6 +30,7 @@ A baby tracking application inspired by [Baby Buddy](https://github.com/babybudd
 | Boop lines | Workers AI | A handful of new lines a week, cached in D1 |
 | Feeding trend analysis | Workers AI | Three checks a day, only when the figures already show a shortfall |
 | Feeding trend delivery | Cloudflare Queues | Retried; one job per subscribed device |
+| Offline writes | Device-local outbox | Foreground flush, deduplicated server-side by `client_request_id` |
 
 ## Getting Started
 
@@ -237,6 +239,44 @@ see the feature work before 11am. Add `?send=1` to run it exactly as the cron
 would. To change the model, set `FEEDING_TREND_MODEL` in
 `server/wrangler.toml`.
 
+## Offline behaviour
+
+The app is installed as a PWA and used in places the wifi doesn't reach, so
+"the server is unreachable" is an ordinary state rather than an error. Reads
+and writes are handled in opposite ways, on purpose.
+
+**Reads keep nothing.** Nothing caches API responses — not the service worker,
+not an HTTP cache (`Cache-Control: no-store`). When a refresh fails the app
+keeps whatever it last rendered and says so in a banner naming its age, then
+retries with a cheap ping until the server answers. A saved copy of the
+server's answer reads as a fact about the baby and can be false; unavailable
+but honest beats readable but wrong.
+
+**Writes keep everything.** A create that can't reach the server is queued on
+the device (`client/src/api/outbox.ts`) and sent on the next signal the server
+is back — coming online, the app being foregrounded, a successful ping, or a
+periodic retry. Queued entries appear in the log where their own timestamp puts
+them, marked "not synced", and a banner counts them with the option to sync
+now or discard. Nothing is dropped without the user saying so: an entry the
+server rejects outright (a 4xx — the child was deleted, say) is set aside with
+the server's message rather than retried forever.
+
+Safety comes from the idempotency key every create already carries. The queued
+entry keeps the `client_request_id` it was given when Save was pressed, so a
+resend against a server that already applied it is answered with the original
+row instead of logging a second feed.
+
+A few deliberate limits:
+
+- **Only creates are queued.** An edit or delete replayed later would overwrite
+  whatever the other caregiver did to the same row in the meantime.
+- **The queue drains in the foreground.** Background Sync isn't available on
+  iOS Safari, so entries go out when the app is open, not while it's closed.
+- **Two people logging the same real-world feed still make two rows.** That
+  happens whether or not anyone is offline, and it isn't auto-merged: the app
+  can't tell "logged twice" from "fed twice", and deleting a real second feed
+  is the worse mistake.
+
 ## Deployment
 
 ### 1. Create Cloudflare resources
@@ -309,7 +349,7 @@ Add both the Pages site and Worker API to a Cloudflare Access application to pro
 ```
 ├── client/              # React + Vite SPA
 │   ├── src/
-│   │   ├── api/         # API client
+│   │   ├── api/         # API client and the offline write outbox
 │   │   ├── components/  # Layout, shared components
 │   │   ├── hooks/       # Auth & children context
 │   │   ├── pages/       # Route pages

@@ -46,6 +46,10 @@ import { isoToLocal } from "../utils/dateTime";
 import { buildCategoryColors } from "../theme/categoryColors";
 import { useEditEntryParam } from "../hooks/useEditEntryParam";
 import { useSaveGuard } from "../hooks/useSaveGuard";
+import { createEntry, discardPendingRow, isPending, mergePending } from "../api/outbox";
+import { usePendingRows } from "../hooks/useOutbox";
+import PendingChip from "../components/PendingChip";
+import { QUEUED_SAVE_MESSAGE, QUEUED_SAVE_SEVERITY } from "../utils/saveOutcome";
 
 function humanDuration(ms: number): string {
   if (ms < 0) ms = 0;
@@ -138,7 +142,22 @@ export default function SleepPage() {
   const { refreshKey } = useDataRefresh();
   const { notify } = useNotification();
   const { saving, save } = useSaveGuard();
-  const [entries, setEntries] = useState<SleepEntry[]>([]);
+  const [savedEntries, setSavedEntries] = useState<SleepEntry[]>([]);
+  const pendingEntries = usePendingRows<SleepEntry>("sleep", selectedChild?.id ?? null);
+  /**
+   * What the server has, plus what this device logged and hasn't managed to
+   * send. Everything below reads this list, which is the point: the summary
+   * above it answers "when was the last one", and leaving out the entry logged
+   * ten minutes ago in the basement would make that answer wrong.
+   *
+   * Pending rows carry a negative `id` and are marked in the list — see
+   * `PendingChip` — so they are never mistaken for something the other
+   * caregiver's phone can see.
+   */
+  const entries = useMemo(
+    () => mergePending(savedEntries, pendingEntries, "start_time"),
+    [savedEntries, pendingEntries],
+  );
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState<SleepEntry | null>(null);
   const [form, setForm] = useState({ start_time: "", end_time: "", is_nap: false, notes: "" });
@@ -149,7 +168,7 @@ export default function SleepPage() {
     if (!selectedChild) return;
     try {
       const data = await api.get<SleepEntry[]>(`/sleep?child_id=${selectedChild.id}`);
-      setEntries(data);
+      setSavedEntries(data);
     } catch (err) {
       notify(err instanceof Error ? err.message : "Failed to load sleep entries.", "error");
     }
@@ -166,6 +185,13 @@ export default function SleepPage() {
   };
 
   const handleEdit = (entry: SleepEntry) => {
+    // A pending row has no server id to PUT against — it is still a queued
+    // create. Rewriting the queued body would be more machinery than this case
+    // deserves, so the honest offer is to throw it away and log it again.
+    if (isPending(entry)) {
+      notify("That entry hasn't synced yet — discard it and log it again to change it.", "info");
+      return;
+    }
     setEditingEntry(entry);
     setForm({
       start_time: isoToLocal(entry.start_time),
@@ -194,23 +220,51 @@ export default function SleepPage() {
       notes: form.notes || null,
     };
     await save(payload, async (idempotencyKey) => {
-      try {
-        if (editingEntry) {
+      let queued = false;
+      if (editingEntry) {
+        // Deliberately not queued when the server is unreachable: an edit
+        // replayed an hour later would overwrite whatever the other caregiver
+        // did to the same row in the meantime, with nothing to detect it by.
+        // `outbox.ts` explains why a create carries no such hazard.
+        try {
           await api.put(`/sleep/${editingEntry.id}`, payload);
-        } else {
-          await api.post("/sleep", { child_id: selectedChild.id, ...payload, client_request_id: idempotencyKey });
+        } catch (err) {
+          notify(err instanceof Error ? err.message : "Failed to save sleep entry.", "error");
+          return;
         }
-        setDialogOpen(false);
-        setEditingEntry(null);
-        setForm({ start_time: "", end_time: "", is_nap: false, notes: "" });
-        await load();
-      } catch (err) {
-        notify(err instanceof Error ? err.message : "Failed to save sleep entry.", "error");
+      } else {
+        const outcome = await createEntry("sleep", selectedChild.id, {
+          child_id: selectedChild.id,
+          ...payload,
+          client_request_id: idempotencyKey,
+        });
+        if (outcome.status === "failed") {
+          // The dialog stays open with everything still in it, so whatever the
+          // server objected to can be fixed and saved again.
+          notify(outcome.error.message, "error");
+          return;
+        }
+        if (outcome.status === "queued") {
+          notify(QUEUED_SAVE_MESSAGE, QUEUED_SAVE_SEVERITY);
+          queued = true;
+        }
       }
+      setDialogOpen(false);
+      setEditingEntry(null);
+      setForm({ start_time: "", end_time: "", is_nap: false, notes: "" });
+      // A queued entry is already in the list — it is rendered from the outbox,
+      // not from the server — and the refetch would fail on the same dead
+      // connection and replace "saved on this device" with a load error.
+      if (!queued) await load();
     });
   };
 
   const handleDelete = async (id: number) => {
+    // Nothing exists on the server to delete: dropping the queued entry is the
+    // whole operation, and it is also the only version that works while the
+    // connection is still down — which is exactly when a mistyped entry gets
+    // noticed.
+    if (discardPendingRow(id)) return;
     try {
       await api.delete(`/sleep/${id}`);
       await load();
@@ -302,7 +356,7 @@ export default function SleepPage() {
                     sx={{ cursor: "pointer" }}
                     onClick={() => handleEdit(s)}
                   >
-                    <TableCell>{start.toLocaleString()}</TableCell>
+                    <TableCell>{start.toLocaleString()}{isPending(s) && <PendingChip />}</TableCell>
                     <TableCell>{end ? end.toLocaleString() : "In progress"}</TableCell>
                     <TableCell>{end ? humanDuration(durationMs) : "—"}</TableCell>
                     <TableCell>{s.is_nap ? "Nap" : "Night"}</TableCell>
@@ -417,6 +471,7 @@ export default function SleepPage() {
                           {formatTimeRange(s.start_time, s.end_time)}
                         </Typography>
                       </Box>
+                      {isPending(s) && <PendingChip compact />}
                       <Typography sx={{ fontSize: 11, color: "text.secondary", fontWeight: 500, fontVariantNumeric: "tabular-nums", flexShrink: 0, mr: 3.25 }}>
                         {formatTimeShort(s.start_time)}
                       </Typography>

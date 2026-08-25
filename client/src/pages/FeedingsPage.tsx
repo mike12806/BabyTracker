@@ -45,6 +45,10 @@ import { useVolumeUnit } from "../hooks/useVolumeUnit";
 import { buildCategoryColors } from "../theme/categoryColors";
 import { useEditEntryParam } from "../hooks/useEditEntryParam";
 import { useSaveGuard } from "../hooks/useSaveGuard";
+import { createEntry, discardPendingRow, isPending, mergePending } from "../api/outbox";
+import { usePendingRows } from "../hooks/useOutbox";
+import PendingChip from "../components/PendingChip";
+import { QUEUED_SAVE_MESSAGE, QUEUED_SAVE_SEVERITY } from "../utils/saveOutcome";
 import { FEEDING_TYPES, feedingTypeLabel } from "../utils/entryDetails";
 
 const BREAST_FEEDING_TYPES = ["breast_left", "breast_right", "both_breasts"];
@@ -101,7 +105,22 @@ export default function FeedingsPage() {
   const { notify } = useNotification();
   const { saving, save } = useSaveGuard();
   const { unit } = useVolumeUnit();
-  const [feedings, setFeedings] = useState<Feeding[]>([]);
+  const [savedFeedings, setSavedFeedings] = useState<Feeding[]>([]);
+  const pendingFeedings = usePendingRows<Feeding>("feedings", selectedChild?.id ?? null);
+  /**
+   * What the server has, plus what this device logged and hasn't managed to
+   * send. Everything below reads this list, which is the point: the summary
+   * above it answers "when was the last one", and leaving out the entry logged
+   * ten minutes ago in the basement would make that answer wrong.
+   *
+   * Pending rows carry a negative `id` and are marked in the list — see
+   * `PendingChip` — so they are never mistaken for something the other
+   * caregiver's phone can see.
+   */
+  const feedings = useMemo(
+    () => mergePending(savedFeedings, pendingFeedings, "start_time"),
+    [savedFeedings, pendingFeedings],
+  );
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState<Feeding | null>(null);
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
@@ -121,7 +140,7 @@ export default function FeedingsPage() {
     if (!selectedChild) return;
     try {
       const data = await api.get<Feeding[]>(`/feedings?child_id=${selectedChild.id}`);
-      setFeedings(data);
+      setSavedFeedings(data);
     } catch (err) {
       notify(err instanceof Error ? err.message : "Failed to load feedings.", "error");
     }
@@ -138,6 +157,13 @@ export default function FeedingsPage() {
   };
 
   const handleEdit = (entry: Feeding) => {
+    // A pending row has no server id to PUT against — it is still a queued
+    // create. Rewriting the queued body would be more machinery than this case
+    // deserves, so the honest offer is to throw it away and log it again.
+    if (isPending(entry)) {
+      notify("That entry hasn't synced yet — discard it and log it again to change it.", "info");
+      return;
+    }
     setEditingEntry(entry);
     setForm({
       type: entry.type,
@@ -166,23 +192,51 @@ export default function FeedingsPage() {
       notes: form.notes || null,
     };
     await save(payload, async (idempotencyKey) => {
-      try {
-        if (editingEntry) {
+      let queued = false;
+      if (editingEntry) {
+        // Deliberately not queued when the server is unreachable: an edit
+        // replayed an hour later would overwrite whatever the other caregiver
+        // did to the same row in the meantime, with nothing to detect it by.
+        // `outbox.ts` explains why a create carries no such hazard.
+        try {
           await api.put(`/feedings/${editingEntry.id}`, payload);
-        } else {
-          await api.post("/feedings", { child_id: selectedChild.id, ...payload, client_request_id: idempotencyKey });
+        } catch (err) {
+          notify(err instanceof Error ? err.message : "Failed to save feeding.", "error");
+          return;
         }
-        setDialogOpen(false);
-        setEditingEntry(null);
-        setForm({ type: "bottle_formula", start_time: "", end_time: "", amount: "", amount_unit: unit, notes: "" });
-        await load();
-      } catch (err) {
-        notify(err instanceof Error ? err.message : "Failed to save feeding.", "error");
+      } else {
+        const outcome = await createEntry("feedings", selectedChild.id, {
+          child_id: selectedChild.id,
+          ...payload,
+          client_request_id: idempotencyKey,
+        });
+        if (outcome.status === "failed") {
+          // The dialog stays open with everything still in it, so whatever the
+          // server objected to can be fixed and saved again.
+          notify(outcome.error.message, "error");
+          return;
+        }
+        if (outcome.status === "queued") {
+          notify(QUEUED_SAVE_MESSAGE, QUEUED_SAVE_SEVERITY);
+          queued = true;
+        }
       }
+      setDialogOpen(false);
+      setEditingEntry(null);
+      setForm({ type: "bottle_formula", start_time: "", end_time: "", amount: "", amount_unit: unit, notes: "" });
+      // A queued entry is already in the list — it is rendered from the outbox,
+      // not from the server — and the refetch would fail on the same dead
+      // connection and replace "saved on this device" with a load error.
+      if (!queued) await load();
     });
   };
 
   const handleDelete = async (id: number) => {
+    // Nothing exists on the server to delete: dropping the queued entry is the
+    // whole operation, and it is also the only version that works while the
+    // connection is still down — which is exactly when a mistyped entry gets
+    // noticed.
+    if (discardPendingRow(id)) return;
     try {
       await api.delete(`/feedings/${id}`);
       await load();
@@ -267,7 +321,7 @@ export default function FeedingsPage() {
                 <TableBody>
                   {feedings.map((f) => (
                     <TableRow key={f.id}>
-                      <TableCell>{f.type.replace(/_/g, " ")}</TableCell>
+                      <TableCell>{f.type.replace(/_/g, " ")}{isPending(f) && <PendingChip />}</TableCell>
                       <TableCell>{new Date(f.start_time).toLocaleString()}</TableCell>
                       <TableCell>{f.end_time ? new Date(f.end_time).toLocaleString() : "—"}</TableCell>
                       <TableCell>{formatEntryAmount(f, unit) ?? "—"}</TableCell>
@@ -365,6 +419,7 @@ export default function FeedingsPage() {
                       <Typography sx={{ fontSize: 12.5, fontWeight: 600, letterSpacing: "-0.005em", lineHeight: 1.2 }} noWrap>{feedingTypeLabel(f.type)}</Typography>
                       <Typography sx={{ fontSize: 10.5, color: "text.secondary", mt: 0, lineHeight: 1.2 }}>{summaryFor(f, unit)}</Typography>
                     </Box>
+                    {isPending(f) && <PendingChip compact />}
                     <Typography sx={{ fontSize: 11, color: "text.secondary", fontWeight: 500, fontVariantNumeric: "tabular-nums", flexShrink: 0, mr: 3.25 }}>
                       {formatTimeShort(f.start_time)}
                     </Typography>

@@ -44,6 +44,10 @@ import type { Note } from "../types/models";
 import { isoToLocal } from "../utils/dateTime";
 import { useEditEntryParam } from "../hooks/useEditEntryParam";
 import { useSaveGuard } from "../hooks/useSaveGuard";
+import { createEntry, discardPendingRow, isPending, mergePending } from "../api/outbox";
+import { usePendingRows } from "../hooks/useOutbox";
+import PendingChip from "../components/PendingChip";
+import { QUEUED_SAVE_MESSAGE, QUEUED_SAVE_SEVERITY } from "../utils/saveOutcome";
 
 function relativeTime(iso: string): string {
   const now = new Date();
@@ -83,7 +87,22 @@ export default function NotesPage() {
   const isDark = theme.palette.mode === "dark";
   const cat = useMemo(() => buildCategoryColors(isDark), [isDark]);
 
-  const [entries, setEntries] = useState<Note[]>([]);
+  const [savedEntries, setSavedEntries] = useState<Note[]>([]);
+  const pendingEntries = usePendingRows<Note>("notes", selectedChild?.id ?? null);
+  /**
+   * What the server has, plus what this device logged and hasn't managed to
+   * send. Everything below reads this list, which is the point: the summary
+   * above it answers "when was the last one", and leaving out the entry logged
+   * ten minutes ago in the basement would make that answer wrong.
+   *
+   * Pending rows carry a negative `id` and are marked in the list — see
+   * `PendingChip` — so they are never mistaken for something the other
+   * caregiver's phone can see.
+   */
+  const entries = useMemo(
+    () => mergePending(savedEntries, pendingEntries, "time"),
+    [savedEntries, pendingEntries],
+  );
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState<Note | null>(null);
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
@@ -108,7 +127,7 @@ export default function NotesPage() {
     if (!selectedChild) return;
     try {
       const data = await api.get<Note[]>(`/notes?child_id=${selectedChild.id}`);
-      setEntries(data);
+      setSavedEntries(data);
     } catch (err) {
       notify(err instanceof Error ? err.message : "Failed to load notes.", "error");
     }
@@ -135,6 +154,13 @@ export default function NotesPage() {
   };
 
   const handleEdit = (entry: Note) => {
+    // A pending row has no server id to PUT against — it is still a queued
+    // create. Rewriting the queued body would be more machinery than this case
+    // deserves, so the honest offer is to throw it away and log it again.
+    if (isPending(entry)) {
+      notify("That entry hasn't synced yet — discard it and log it again to change it.", "info");
+      return;
+    }
     setEditingEntry(entry);
     setForm({ time: isoToLocal(entry.time), title: entry.title || "", content: entry.content });
     setDialogOpen(true);
@@ -152,23 +178,51 @@ export default function NotesPage() {
       content: form.content,
     };
     await save(payload, async (idempotencyKey) => {
-      try {
-        if (editingEntry) {
+      let queued = false;
+      if (editingEntry) {
+        // Deliberately not queued when the server is unreachable: an edit
+        // replayed an hour later would overwrite whatever the other caregiver
+        // did to the same row in the meantime, with nothing to detect it by.
+        // `outbox.ts` explains why a create carries no such hazard.
+        try {
           await api.put(`/notes/${editingEntry.id}`, payload);
-        } else {
-          await api.post("/notes", { child_id: selectedChild.id, ...payload, client_request_id: idempotencyKey });
+        } catch (err) {
+          notify(err instanceof Error ? err.message : "Failed to save note.", "error");
+          return;
         }
-        setDialogOpen(false);
-        setEditingEntry(null);
-        setForm({ time: "", title: "", content: "" });
-        await load();
-      } catch (err) {
-        notify(err instanceof Error ? err.message : "Failed to save note.", "error");
+      } else {
+        const outcome = await createEntry("notes", selectedChild.id, {
+          child_id: selectedChild.id,
+          ...payload,
+          client_request_id: idempotencyKey,
+        });
+        if (outcome.status === "failed") {
+          // The dialog stays open with everything still in it, so whatever the
+          // server objected to can be fixed and saved again.
+          notify(outcome.error.message, "error");
+          return;
+        }
+        if (outcome.status === "queued") {
+          notify(QUEUED_SAVE_MESSAGE, QUEUED_SAVE_SEVERITY);
+          queued = true;
+        }
       }
+      setDialogOpen(false);
+      setEditingEntry(null);
+      setForm({ time: "", title: "", content: "" });
+      // A queued entry is already in the list — it is rendered from the outbox,
+      // not from the server — and the refetch would fail on the same dead
+      // connection and replace "saved on this device" with a load error.
+      if (!queued) await load();
     });
   };
 
   const handleDelete = async (id: number) => {
+    // Nothing exists on the server to delete: dropping the queued entry is the
+    // whole operation, and it is also the only version that works while the
+    // connection is still down — which is exactly when a mistyped entry gets
+    // noticed.
+    if (discardPendingRow(id)) return;
     try {
       await api.delete(`/notes/${id}`);
       await load();
@@ -260,7 +314,7 @@ export default function NotesPage() {
                         onClick={() => handleEdit(n)}
                         sx={{ cursor: "pointer" }}
                       >
-                        <TableCell>{new Date(n.time).toLocaleString()}</TableCell>
+                        <TableCell>{new Date(n.time).toLocaleString()}{isPending(n) && <PendingChip />}</TableCell>
                         <TableCell>
                           <Chip
                             label={tagLabel(tag)}
@@ -389,6 +443,7 @@ export default function NotesPage() {
                       {n.content}
                     </Typography>
                   </Box>
+                  {isPending(n) && <PendingChip compact />}
                   <Typography
                     sx={{
                       fontSize: 11,
