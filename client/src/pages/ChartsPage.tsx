@@ -292,16 +292,7 @@ export default function ChartsPage() {
                     </Stack>
 
                     {/* Chart */}
-                    <Box
-                      sx={{
-                        mx: -0.5,
-                        "& .recharts-responsive-container": {
-                          height: "130px !important",
-                        },
-                      }}
-                    >
-                      {sec.chart}
-                    </Box>
+                    <Box sx={{ mx: -0.5 }}>{sec.chart}</Box>
                   </CardContent>
                 </Box>
               </Card>

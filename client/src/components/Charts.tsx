@@ -23,7 +23,10 @@ import type {
   TummyTime,
 } from "../types/models";
 
-const CHART_HEIGHT = 200;
+// Must match the height the chart cards give the container. Recharts sizes the
+// SVG from this prop, so a container CSS-forced to a different height would
+// leave the chart overflowing into whatever sits below it.
+const CHART_HEIGHT = 130;
 const CHART_MARGIN = { top: 4, right: 12, bottom: 0, left: 0 };
 const TICK_STYLE = { fontSize: 10 };
 
