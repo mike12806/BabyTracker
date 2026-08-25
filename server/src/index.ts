@@ -15,6 +15,12 @@ import { enqueueBoopLineRefresh, refreshMood, BOOP_LINES_QUEUE } from "./schedul
 import type { BoopLineJob } from "./scheduled/boopLines.js";
 import { enqueueReminderChecks, deliverReminder, REMINDER_QUEUE } from "./scheduled/reminders.js";
 import type { ReminderJob } from "./scheduled/reminders.js";
+import {
+  runFeedingTrendCron,
+  deliverFeedingTrendAlert,
+  FEEDING_TREND_QUEUE,
+} from "./scheduled/feedingTrend.js";
+import type { FeedingTrendJob } from "./scheduled/feedingTrend.js";
 import { auth } from "./routes/auth.js";
 import { children } from "./routes/children.js";
 import { feedings } from "./routes/feedings.js";
@@ -33,6 +39,7 @@ import { todos } from "./routes/todos.js";
 import { dailyNotes } from "./routes/dailyNotes.js";
 import { boopLines } from "./routes/boopLines.js";
 import { push } from "./routes/push.js";
+import { feedingTrend } from "./routes/feedingTrend.js";
 
 type AppEnv = { Bindings: Env; Variables: { userId: number; userEmail: string; userName: string } };
 
@@ -65,6 +72,7 @@ app.route("/api/todos", todos);
 app.route("/api/daily-notes", dailyNotes);
 app.route("/api/boop-lines", boopLines);
 app.route("/api/push", push);
+app.route("/api/feeding-trend", feedingTrend);
 
 // Global error handler
 app.onError((err, c) => {
@@ -99,6 +107,30 @@ const BOOP_LINES_CRON = "30 4 * * SUN";
  */
 const REMINDERS_CRON = "*/5 * * * *";
 
+/**
+ * The feeding-trend cron — see scheduled/feedingTrend.ts.
+ *
+ * The checkpoints wanted are 11am, 4pm and 7pm *Eastern*, and cron here is
+ * UTC, so a fixed three-hour list would drift by an hour twice a year. This
+ * fires at six UTC hours instead — the EDT and the EST translation of each
+ * checkpoint — and `runFeedingTrendCron` keeps only the three invocations
+ * that actually land on an ET checkpoint hour, discarding the other three:
+ *
+ *   UTC 15 → 11am EDT ✓ / 10am EST ✗
+ *   UTC 16 → 12pm EDT ✗ / 11am EST ✓
+ *   UTC 20 →  4pm EDT ✓ /  3pm EST ✗
+ *   UTC 21 →  5pm EDT ✗ /  4pm EST ✓
+ *   UTC 23 →  7pm EDT ✓ /  6pm EST ✗
+ *   UTC 00 →  8pm EDT ✗ /  7pm EST ✓
+ *
+ * So exactly three checks a day happen year-round, on the right local clock,
+ * with no DST-aware cron and no drift. The 00:00 UTC entry is 7pm ET on the
+ * *previous* ET day, which is the day it is meant to be reporting on — every
+ * window is derived from the ET calendar date of the instant, so that works
+ * out on its own.
+ */
+const FEEDING_TREND_CRON = "0 15,16,20,21,23,0 * * *";
+
 export default {
   fetch: app.fetch,
 
@@ -110,6 +142,20 @@ export default {
       ctx.waitUntil(
         enqueueReminderChecks(env).catch((err) =>
           console.error("Reminder check failed:", err)
+        )
+      );
+      return;
+    }
+
+    if (event.cron === FEEDING_TREND_CRON) {
+      // Three of the six firings are thrown away inside — see the comment on
+      // FEEDING_TREND_CRON. Unlike the crons below, the analysis itself runs
+      // here rather than on the queue: the alert is about the day it is still
+      // in, so a retried model call is worth less than the template sentence
+      // it would have delayed. The queue only carries the finished push.
+      ctx.waitUntil(
+        runFeedingTrendCron(env).catch((err) =>
+          console.error("Feeding trend check failed:", err)
         )
       );
       return;
@@ -156,7 +202,27 @@ export default {
    * failed, and a duplicate summary in someone's inbox is the failure this is
    * meant to avoid creating.
    */
-  async queue(batch: MessageBatch<DailySummaryJob | DailyNoteJob | BoopLineJob | ReminderJob>, env: Env): Promise<void> {
+  async queue(
+    batch: MessageBatch<DailySummaryJob | DailyNoteJob | BoopLineJob | ReminderJob | FeedingTrendJob>,
+    env: Env,
+  ): Promise<void> {
+    if (batch.queue === FEEDING_TREND_QUEUE) {
+      for (const message of batch.messages) {
+        const job = message.body as FeedingTrendJob;
+        try {
+          await deliverFeedingTrendAlert(env, job);
+          message.ack();
+        } catch (err) {
+          console.error(
+            `Feeding trend alert delivery failed for subscription ${job?.subscriptionId}:`,
+            err,
+          );
+          message.retry();
+        }
+      }
+      return;
+    }
+
     if (batch.queue === REMINDER_QUEUE) {
       for (const message of batch.messages) {
         const job = message.body as ReminderJob;

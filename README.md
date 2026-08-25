@@ -9,6 +9,7 @@ A baby tracking application inspired by [Baby Buddy](https://github.com/babybudd
 - **Photo uploads** — child profile photos stored securely in Cloudflare R2
 - **Daily note** — a short blurb on the dashboard about how yesterday went and how the week is trending, written once a day by Workers AI and cached in D1
 - **Boop lines** — the reward for tapping a child's photo cycles through a pool that a weekly cron tops up with new AI-written lines, so it doesn't go stale
+- **Feeding trend alerts** — at 11am, 4pm and 7pm Eastern, checks how much a child has been fed so far today against the same point on each of the previous seven days, and pushes a notification when Workers AI agrees the shortfall is worth knowing about
 - **Secure by default** — authentication via Cloudflare Access (no custom login UI needed)
 - **Edge-native** — runs entirely on Cloudflare (Pages, Workers, D1, R2)
 
@@ -26,6 +27,8 @@ A baby tracking application inspired by [Baby Buddy](https://github.com/babybudd
 | Daily note | Workers AI | One generation per child per day, cached in D1 |
 | Boop line generation | Cloudflare Queues | Retried; weekly, not per-child |
 | Boop lines | Workers AI | A handful of new lines a week, cached in D1 |
+| Feeding trend analysis | Workers AI | Three checks a day, only when the figures already show a shortfall |
+| Feeding trend delivery | Cloudflare Queues | Retried; one job per subscribed device |
 
 ## Getting Started
 
@@ -180,6 +183,60 @@ often as a note that describes a specific day. `POST /api/boop-lines/refresh`
 generates inline on demand, same idea as the daily note's refresh route. To
 change the model, set `BOOP_LINES_MODEL` in `server/wrangler.toml`.
 
+## Feeding trend alerts
+
+Three times a day — 11am, 4pm and 7pm Eastern — the Worker
+(`server/src/scheduled/feedingTrend.ts`) compares how much each child has been
+fed *so far today* against how much they had been fed by the same point on each
+of the previous seven days. If today is meaningfully behind, it asks Workers AI
+whether that is worth interrupting the parents' day over, and pushes a Web Push
+notification to every subscribed device when the answer is yes.
+
+Three rules shape it:
+
+- **The numbers are computed in SQL, never by the model** — same rule the daily
+  note follows. A notification that misreports how much a baby ate is worse
+  than no notification.
+- **The model can only veto an alert, never invent one.** `compareFeeding`
+  decides whether there is a shortfall (more than 15% below the baseline on
+  feed count *or* on volume); the model is only asked once that has already
+  happened, and its job is to say whether it deserves a buzz and to write the
+  sentence. A model that is down, rate-limited or babbling therefore costs a
+  nicer wording, never a missed alert — the template sentence says the same
+  true figures.
+- **The decision happens on the cron, the delivery on the queue** — same split
+  as the reminder pushes, so a push-service hiccup is retried for that one
+  device without re-deciding anything or re-notifying the others. Unlike the
+  daily note, the *model call* is not retried: this alert is about the day it
+  is still in, and a "behind by 11am" push that lands at noon has lost most of
+  its point.
+
+The comparison is like-for-like. Each baseline window is the same elapsed
+length as today's rather than ending at the same wall-clock time, so a daylight
+saving change can't masquerade as a feeding trend, and the baseline averages
+only over days that actually have a feeding logged — at least three of them, or
+no alert is possible at all. Volume is only compared when both sides measured
+some, so a household that breastfeeds and logs no amounts is judged on feed
+count alone rather than being permanently "0 oz below".
+
+Every check that gets as far as needing a decision is recorded in
+`feeding_trend_checks` — what was decided, the sentence, and whether the model
+or the template wrote it. That row is also the idempotency key: it is claimed
+before anything is sent, so one child can only be alerted once per checkpoint
+however many times the cron fires.
+
+Those checkpoints are local times and cron is UTC, so the trigger fires at six
+UTC hours — the EDT and the EST translation of each — and the handler discards
+the three that don't land on an Eastern checkpoint hour. Three checks a day,
+year-round, with no DST drift.
+
+`POST /api/feeding-trend/check` runs the whole analysis for right now and
+returns it — the figures, the comparison and what the model made of it —
+without notifying anyone or spending the checkpoint, which is the only way to
+see the feature work before 11am. Add `?send=1` to run it exactly as the cron
+would. To change the model, set `FEEDING_TREND_MODEL` in
+`server/wrangler.toml`.
+
 ## Deployment
 
 ### 1. Create Cloudflare resources
@@ -196,6 +253,8 @@ npx wrangler queues create baby-tracker-daily-summary
 npx wrangler queues create baby-tracker-daily-summary-dlq
 npx wrangler queues create baby-tracker-daily-note
 npx wrangler queues create baby-tracker-boop-lines
+npx wrangler queues create baby-tracker-reminders
+npx wrangler queues create baby-tracker-feeding-trend
 ```
 
 Queues require the Workers Paid plan, and the API token used by CI needs
