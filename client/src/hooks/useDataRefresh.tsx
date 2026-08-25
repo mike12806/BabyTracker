@@ -17,8 +17,26 @@ const DataRefreshContext = createContext<DataRefreshContextType>({
   refreshData: () => {},
 });
 
-/** Ignore a re-focus refresh this soon after the previous one (ms). */
-const FOCUS_REFRESH_THROTTLE_MS = 2000;
+/**
+ * Ignore an automatic refresh this soon after the previous one (ms).
+ *
+ * Bringing the app back to the front does not fire one event, it fires a
+ * burst: `visibilitychange` and `focus`, a `pageshow` if the page came out of
+ * the back/forward cache, an `online` as the phone's radio re-attaches, and —
+ * because iOS freezes a backgrounded page rather than running timers in it —
+ * whichever poll ticks came due while it was away, all delivered at once on
+ * resume. Every one of those is a legitimate "we are back, get current data"
+ * signal on its own; together they used to mean the dashboard visibly rebuilt
+ * itself two or three times in a row.
+ *
+ * Ten seconds rather than the couple this started as: on iOS the burst is not
+ * tight. `focus` can trail `visibilitychange` by seconds when the phone was
+ * unlocked with Face ID, and `online` lands whenever the radio finishes. What
+ * it costs is bounded — the poll below still refetches every minute, and a
+ * failed refresh still retries on its own cadence — so nothing on screen goes
+ * more than the usual interval without being brought up to date.
+ */
+export const REFRESH_THROTTLE_MS = 10_000;
 
 /**
  * How often to refetch while the app is open and in front of the user (ms).
@@ -69,23 +87,40 @@ export function DataRefreshProvider({ children }: { children: ReactNode }) {
   const { staleSince } = useDataFreshness();
   const isStale = staleSince !== null;
 
-  const refreshData = useCallback(() => setRefreshKey((k) => k + 1), []);
+  const bumpRefreshKey = useCallback(() => setRefreshKey((k) => k + 1), []);
 
   // Entries are often logged from another device (or the installed PWA sits in
   // the background for hours), so refetch whenever the app becomes visible
-  // again. `visibilitychange` and `focus` both fire when returning to a tab,
-  // hence the throttle.
-  const lastFocusRefresh = useRef(0);
+  // again — see `REFRESH_THROTTLE_MS` for why coming back fires more than one
+  // of these at a time.
+  const lastRefresh = useRef(0);
   const refreshHeld = useRef(false);
 
+  /**
+   * Refetch now, whatever else is going on.
+   *
+   * This is what the context hands out, so a save or the stale banner's Retry
+   * button lands here: an explicit action is never throttled or held back. It
+   * also stamps the clock the throttle below reads, so an automatic refresh
+   * arriving right behind a save — the poll tick that was held while the
+   * dialog was open, released the moment it closed — sees the data it wanted
+   * has already been fetched and stands down.
+   */
   const runRefresh = useCallback(() => {
-    lastFocusRefresh.current = Date.now();
+    lastRefresh.current = Date.now();
     refreshHeld.current = false;
-    refreshData();
-  }, [refreshData]);
+    bumpRefreshKey();
+  }, [bumpRefreshKey]);
 
   /**
    * Refetch unless something says not to right now.
+   *
+   * Every automatic trigger goes through here — the visibility and focus
+   * events, `online`, the foreground poll, the stale-retry ping — so that the
+   * throttle is one shared gate rather than a check bolted onto whichever
+   * trigger happened to be noticed first. That was the bug: the throttle sat
+   * in the visibility handler alone, and the resume burst reached the page
+   * through the paths that skipped it.
    *
    * On a phone the on-screen keyboard and the native date picker both blur and
    * re-focus the window, so a refresh can be triggered repeatedly while a form
@@ -94,14 +129,25 @@ export function DataRefreshProvider({ children }: { children: ReactNode }) {
    * re-auth — taking the half-filled form with it. Hold it instead, and let any
    * later trigger pick it up once the form is closed.
    */
-  const attemptRefresh = useCallback(() => {
+  const attemptRefresh = useCallback((options?: { ignoreThrottle?: boolean }) => {
     if (document.visibilityState !== "visible") return;
+    // Deliberately ahead of the busy check: nothing is owed to the user here,
+    // because a refresh this recent already fetched what this trigger wanted.
+    // Holding it would only queue up a duplicate for the next release.
+    if (!options?.ignoreThrottle && Date.now() - lastRefresh.current < REFRESH_THROTTLE_MS) return;
     if (isUserBusy()) {
       refreshHeld.current = true;
       return;
     }
     runRefresh();
   }, [runRefresh]);
+
+  // The throttle exists to stop good data being re-fetched over itself, so
+  // the paths where there is no good result to duplicate are exempt from it:
+  // the two that recover a stale screen (the last refresh there failed), and
+  // a flush that has just put new entries on the server.
+  const isStaleRef = useRef(isStale);
+  isStaleRef.current = isStale;
 
   // Kept in a ref so the timer effects below can re-read the latest callback
   // without tearing down and rebuilding their intervals on every render.
@@ -127,7 +173,12 @@ export function DataRefreshProvider({ children }: { children: ReactNode }) {
     flushing.current = true;
     try {
       const summary = await flushOutbox();
-      if (summary.synced > 0) attemptRefreshRef.current();
+      // Past the throttle: entries just moved from this device's queue onto
+      // the server, so this is not a duplicate of the refresh that ran when
+      // the app came back — it is the one that drops their pending mark. The
+      // `synced > 0` guard is what keeps it honest, and the single-flight
+      // latch above means one flush asks once.
+      if (summary.synced > 0) attemptRefreshRef.current({ ignoreThrottle: true });
     } finally {
       flushing.current = false;
     }
@@ -143,18 +194,18 @@ export function DataRefreshProvider({ children }: { children: ReactNode }) {
   const hasQueuedEntries = useOutbox().some((entry) => !entry.failure);
 
   useEffect(() => {
-    const onVisible = () => {
-      if (document.visibilityState !== "visible") return;
-      if (Date.now() - lastFocusRefresh.current < FOCUS_REFRESH_THROTTLE_MS) return;
-      attemptRefreshRef.current();
-    };
+    const onVisible = () => attemptRefreshRef.current();
 
     // Closing the dialog (or just leaving a field) is when a held-back refresh
     // becomes safe. `focusout` fires before focus lands, so re-check next tick.
+    // Released through `attemptRefresh` rather than straight to `runRefresh`:
+    // if a refresh has landed since the hold began there is nothing left to
+    // release, and if the throttle does decline it the flag stays set for the
+    // poll tick to pick up.
     const onFocusOut = () => {
       if (!refreshHeld.current) return;
       setTimeout(() => {
-        if (refreshHeld.current && !isUserBusy()) runRefresh();
+        if (refreshHeld.current && !isUserBusy()) attemptRefreshRef.current();
       }, 0);
     };
 
@@ -170,9 +221,14 @@ export function DataRefreshProvider({ children }: { children: ReactNode }) {
     // Queued entries go out on the same signal, and go out *first*: sending
     // them before the refetch is what stops the reply arriving without the
     // feed that was logged in the dead zone and briefly contradicting it.
+    //
+    // iOS also fires this on resume when nothing was ever lost, which is why
+    // the refetch is throttled like the rest unless the screen is actually
+    // stale. The flush is not throttled with it: it is not a refetch, and if
+    // it does send anything it asks for its own refresh.
     const onOnline = () => {
       void syncOutboxRef.current();
-      attemptRefreshRef.current();
+      attemptRefreshRef.current({ ignoreThrottle: isStaleRef.current });
     };
 
     document.addEventListener("visibilitychange", onVisible);
@@ -216,7 +272,10 @@ export function DataRefreshProvider({ children }: { children: ReactNode }) {
         // moment the queue can drain — and a queued entry is more urgent than
         // a refetch, since until it lands nobody else can see it.
         void syncOutboxRef.current();
-        attemptRefreshRef.current();
+        // Only armed while stale, and it has already paid for a ping that came
+        // back healthy, so this is the refresh the banner promises rather than
+        // a duplicate of one that worked.
+        attemptRefreshRef.current({ ignoreThrottle: true });
       });
     }, STALE_RETRY_MS);
     return () => {
@@ -265,7 +324,7 @@ export function DataRefreshProvider({ children }: { children: ReactNode }) {
   }, [hasQueuedEntries]);
 
   return (
-    <DataRefreshContext.Provider value={{ refreshKey, refreshData }}>
+    <DataRefreshContext.Provider value={{ refreshKey, refreshData: runRefresh }}>
       {children}
     </DataRefreshContext.Provider>
   );

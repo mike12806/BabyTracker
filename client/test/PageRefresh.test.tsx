@@ -29,7 +29,12 @@ import TemperaturePage from "../src/pages/TemperaturePage";
 import TimersPage from "../src/pages/TimersPage";
 import MedicationsPage from "../src/pages/MedicationsPage";
 import TodosPage from "../src/pages/TodosPage";
-import { DataRefreshProvider, FOREGROUND_POLL_MS, STALE_RETRY_MS } from "../src/hooks/useDataRefresh";
+import {
+  DataRefreshProvider,
+  FOREGROUND_POLL_MS,
+  REFRESH_THROTTLE_MS,
+  STALE_RETRY_MS,
+} from "../src/hooks/useDataRefresh";
 import { NotificationProvider } from "../src/hooks/useNotification";
 import { useChildren } from "../src/hooks/useChildren";
 import { api, pingServer } from "../src/api/client";
@@ -197,6 +202,86 @@ describe("an app left open in front of the user", () => {
     });
 
     await waitFor(() => expect(fetchCount("/todos")).toBe(2));
+  });
+});
+
+describe("an app being brought back to the front", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    resetFreshness();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    resetFreshness();
+  });
+
+  it("does not refetch again for a poll tick that lands on the way back", async () => {
+    // iOS freezes a backgrounded page instead of running timers in it, so a
+    // poll tick that came due while the app was away is delivered on resume,
+    // right behind the refresh the resume itself triggered. That is the
+    // second reload the dashboard was visibly doing.
+    renderPage(TodosPage);
+    await waitFor(() => expect(fetchCount("/todos")).toBe(1));
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(FOREGROUND_POLL_MS - 500);
+    });
+    expect(fetchCount("/todos")).toBe(1);
+
+    await act(async () => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await waitFor(() => expect(fetchCount("/todos")).toBe(2));
+
+    // The overdue tick arrives.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500);
+    });
+
+    expect(fetchCount("/todos")).toBe(2);
+  });
+
+  it("keeps polling once the app has settled back down", async () => {
+    // The throttle must not swallow the ordinary cadence — it only covers the
+    // seconds around the return.
+    renderPage(TodosPage);
+    await waitFor(() => expect(fetchCount("/todos")).toBe(1));
+
+    await act(async () => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await waitFor(() => expect(fetchCount("/todos")).toBe(2));
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(FOREGROUND_POLL_MS);
+    });
+
+    await waitFor(() => expect(fetchCount("/todos")).toBe(3));
+  });
+
+  it("still refetches on `online` when the screen is stale", async () => {
+    // Throttling this one is only right while there is fresh data on screen
+    // to protect. A stale screen is showing a failed refresh, so connectivity
+    // returning has to be acted on rather than waited out.
+    renderPage(TodosPage);
+    await waitFor(() => expect(fetchCount("/todos")).toBe(1));
+
+    await act(async () => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await waitFor(() => expect(fetchCount("/todos")).toBe(2));
+
+    await act(async () => {
+      markOffline();
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(REFRESH_THROTTLE_MS / 2);
+      window.dispatchEvent(new Event("online"));
+    });
+
+    await waitFor(() => expect(fetchCount("/todos")).toBe(3));
   });
 });
 

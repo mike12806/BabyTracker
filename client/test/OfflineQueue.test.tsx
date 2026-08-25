@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { MemoryRouter } from "react-router-dom";
@@ -85,6 +85,10 @@ async function dialogClosed() {
   await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
 }
 
+function fetchCount(): number {
+  return mockApi.get.mock.calls.filter(([url]) => String(url).startsWith("/diaper-changes")).length;
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   resetOutbox();
@@ -161,6 +165,42 @@ describe("logging while the server is unreachable", () => {
     // The key it was queued with is the key it is sent with — that is the
     // whole reason a flush is safe to repeat.
     expect(queuedBody.client_request_id).toEqual(expect.any(String));
+  });
+
+  it("shows the synced entries even when the app was refreshed moments earlier", async () => {
+    // Coming back to the app refreshes, and the same return flushes the queue
+    // a beat later. The refresh throttle that stops the return itself
+    // reloading twice must not swallow the flush's refetch with it, or the
+    // entries that just reached the server keep their "not synced" mark until
+    // the next poll — up to a minute of the app contradicting itself.
+    const user = userEvent.setup();
+    mockApi.post.mockRejectedValue(dropped());
+    renderPage();
+    await logADiaper(user);
+    await waitFor(() => expect(getOutboxSnapshot()).toHaveLength(1));
+    await dialogClosed();
+
+    // The app comes back while the server is still out of reach: the refresh
+    // this fires is what arms the throttle, and the flush it also fires sends
+    // nothing.
+    await act(async () => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await waitFor(() => expect(fetchCount()).toBeGreaterThanOrEqual(2));
+    expect(getOutboxSnapshot()).toHaveLength(1);
+    const afterReturn = fetchCount();
+
+    // The radio finishes re-attaching a beat later, still inside the throttle
+    // window, and this time the queue drains.
+    const queuedBody = getOutboxSnapshot()[0].body;
+    mockApi.post.mockReset();
+    mockApi.post.mockResolvedValue({ id: 9, ...queuedBody });
+    await act(async () => {
+      window.dispatchEvent(new Event("online"));
+    });
+
+    await waitFor(() => expect(getOutboxSnapshot()).toHaveLength(0));
+    await waitFor(() => expect(fetchCount()).toBeGreaterThan(afterReturn));
   });
 
   it("drops the pending row once the server's copy arrives, rather than showing both", async () => {
