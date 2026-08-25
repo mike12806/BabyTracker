@@ -115,6 +115,30 @@ max_batch_timeout = 30
 max_retries = 3
 retry_delay = 60
 
+# Feeding-trend alert pushes. The 11am/4pm/7pm ET cron below works out whether
+# a child is being fed less than they were by the same point on each of the
+# previous seven days, asks Workers AI whether that's worth a notification, and
+# enqueues one job per subscribed device; the consumer does the Web Push send.
+#
+# Only the *delivery* is queued, unlike the daily note — the analysis runs on
+# the cron itself. This alert is about the day it is still in, so a retried
+# model call is worth less than the template sentence it would have delayed;
+# see the comment at the top of src/scheduled/feedingTrend.ts.
+#
+# No dead letter queue, same reasoning as the reminders queue above: an alert
+# that exhausts its retries is superseded by the next checkpoint a few hours
+# later, and by then the figures it was about have moved on anyway.
+[[queues.producers]]
+queue = "baby-tracker-feeding-trend"
+binding = "FEEDING_TREND_QUEUE"
+
+[[queues.consumers]]
+queue = "baby-tracker-feeding-trend"
+max_batch_size = 10
+max_batch_timeout = 30
+max_retries = 3
+retry_delay = 60
+
 # Workers AI, for the dashboard's daily note. One generation per child per day
 # from the cron below, cached in D1 — a page load never reaches the model, so
 # the cost does not scale with how often the app is opened.
@@ -122,7 +146,7 @@ retry_delay = 60
 binding = "AI"
 
 [triggers]
-# Four crons. The first two, both after midnight Eastern so each covers the
+# Five crons. The first two, both after midnight Eastern so each covers the
 # prior full ET day, staggered so the note is written before the email that
 # includes it:
 #   05:00 UTC = 12:00 AM EST (1:00 AM EDT) — writes/queues the daily note.
@@ -136,10 +160,17 @@ binding = "AI"
 # scheduled/reminders.ts) — the only sub-daily cron here, because a 2h45m
 # gap needs checking far more often than once a day:
 #   every 5 minutes, all day.
-# `scheduled()` in src/index.ts tells the four apart by `event.cron`.
+# The fifth checks whether today's feeding is trending below the previous week
+# (see scheduled/feedingTrend.ts) at 11am, 4pm and 7pm Eastern. Those are local
+# times and cron is UTC, so it fires at six UTC hours — the EDT and the EST
+# translation of each checkpoint — and the handler discards the three that
+# don't land on an ET checkpoint hour. Three checks a day, year-round, with no
+# DST drift; see FEEDING_TREND_CRON in src/index.ts for the full table:
+#   15:00, 16:00, 20:00, 21:00, 23:00 and 00:00 UTC.
+# `scheduled()` in src/index.ts tells the five apart by `event.cron`.
 # Note: Cloudflare's weekday field is 1-7 (1 = Sunday), not the usual 0-6, so
 # "SUN" is used here rather than a numeric day to avoid that ambiguity.
-crons = ["0 5 * * *", "15 5 * * *", "30 4 * * SUN", "*/5 * * * *"]
+crons = ["0 5 * * *", "15 5 * * *", "30 4 * * SUN", "*/5 * * * *", "0 15,16,20,21,23,0 * * *"]
 
 [vars]
 CF_ACCESS_TEAM_DOMAIN = "mfaherty.cloudflareaccess.com"
@@ -151,6 +182,11 @@ AWS_SES_REGION = "us-east-1"
 # Override to write new boop lines with a different Workers AI model.
 # Defaults to DEFAULT_BOOP_LINE_MODEL in src/scheduled/boopLines.ts.
 # BOOP_LINES_MODEL = "@cf/google/gemma-4-26b-a4b-it"
+# Override to analyse the feeding trend with a different Workers AI model.
+# Defaults to DEFAULT_TREND_MODEL in src/scheduled/feedingTrend.ts. That prompt
+# asks for a judgement and a JSON object rather than prose, so it is the one
+# most likely to want a different model — hence the override.
+# FEEDING_TREND_MODEL = "@cf/google/gemma-4-26b-a4b-it"
 
 # For local dev, create server/.dev.vars to override:
 #   CLIENT_URL=http://localhost:5173

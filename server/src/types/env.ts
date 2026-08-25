@@ -2,6 +2,7 @@ import type { DailySummaryJob } from "../scheduled/dailySummary.js";
 import type { DailyNoteJob } from "../scheduled/dailyNote.js";
 import type { BoopLineJob } from "../scheduled/boopLines.js";
 import type { ReminderJob } from "../scheduled/reminders.js";
+import type { FeedingTrendJob } from "../scheduled/feedingTrend.js";
 
 export interface Env {
   DB: D1Database;
@@ -68,4 +69,14 @@ export interface Env {
    * no queue, and fall back to sending inline. See `enqueueReminderChecks`.
    */
   REMINDER_QUEUE?: Queue<ReminderJob>;
+  /**
+   * Feeding-trend alert delivery queue.
+   *
+   * Optional for the same reason REMINDER_QUEUE is: local dev and the tests
+   * have no queue, and fall back to sending inline. See `feedingTrend.ts`.
+   */
+  FEEDING_TREND_QUEUE?: Queue<FeedingTrendJob>;
+  /** Overrides the model the feeding-trend alert is analysed with. See
+   *  feedingTrend.ts. */
+  FEEDING_TREND_MODEL?: string;
 }

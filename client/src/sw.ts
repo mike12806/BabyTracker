@@ -79,11 +79,13 @@ registerRoute(
   })
 );
 
-// Diaper/feeding reminders — see server/src/scheduled/reminders.ts, which is
-// the only thing that ever sends a push to this app. The payload is always
-// fresh at the moment it's pushed (the server decides "overdue" right before
-// sending), so unlike API data there's nothing here that can go stale by
-// being shown.
+// Two things push to this app: diaper/feeding reminders (see
+// server/src/scheduled/reminders.ts) and feeding-trend alerts (see
+// server/src/scheduled/feedingTrend.ts). Both send the same
+// { title, body, url } payload, so nothing here needs to tell them apart.
+// The payload is always fresh at the moment it's pushed — the server decides
+// "overdue" or "trending below" right before sending — so unlike API data
+// there's nothing here that can go stale by being shown.
 self.addEventListener("push", (event) => {
   const data: { title?: string; body?: string; url?: string } = event.data?.json() ?? {};
   event.waitUntil(
