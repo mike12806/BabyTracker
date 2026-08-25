@@ -44,6 +44,11 @@ performance.** Decisions below follow from that ordering; don't trade upward.
   only version with nothing to get wrong. Do not add a runtime cache for
   `/api/*` back, however tempting for offline support: readable-but-wrong lost
   to unavailable-but-honest by design.
+- That rule is about the *server's answers*. It is not about the user's own
+  unsent writes, which are kept — see **Offline writes** below. The two are
+  opposites: a stored copy of a server reply is a claim about the baby that may
+  since have become false, while a queued write is a fact about what this user
+  did that no unreachable server can contradict.
 - When the server is unreachable the app keeps its last-rendered data, raises
   the banner in `Layout` (driven by `freshness.ts` — `markOffline` on a failed
   request, cleared by the next success), and retries: `STALE_RETRY_MS` pings
@@ -69,13 +74,74 @@ performance.** Decisions below follow from that ordering; don't trade upward.
   on activate. Keep the header check until no installed device predates it.
 - What *is* cached: the precached app shell (versioned per build) and Google
   Fonts. Neither is data, and neither can be stale in the data sense.
-- The service worker's `/api/` cache is an offline fallback only: it must never
-  pre-empt a working network. Don't reintroduce `networkTimeoutSeconds`.
-- Anything served from that cache is flagged to the user by the banner in
-  `Layout`, driven by `useDataFreshness` — the app never presents cached
-  entries as if they were live.
 - API responses are `Cache-Control: no-store` so no HTTP cache in between can
   answer on the server's behalf.
+
+## Offline Writes
+
+Reads keep nothing; writes keep everything. A create that cannot reach the
+server goes into a durable queue on the device (`src/api/outbox.ts`) and is
+sent on the next signal that the server is back. Losing what someone typed
+because the radio was down is not honesty, it is data loss.
+
+- **Only creates are queued.** An edit or a delete offline is an operation on a
+  row the server owns, and that row may have been changed by the other
+  caregiver in the meantime — replaying it later overwrites work this device
+  never saw, with nothing to detect it by. A failed edit stays a failed edit.
+  Timers are excluded too: a running timer means "started now", so one started
+  offline and flushed hours later would be a lie.
+- **Safety is the idempotency key, not the queue.** Every queued create carries
+  the `client_request_id` `useSaveGuard` gave it at the moment Save was pressed
+  (see `server/src/routes/idempotency.ts`). That is what makes a flush safe to
+  repeat from any tab against a server that may already have applied it — the
+  replay is answered with the original row. Never strip or regenerate that key
+  on the way out of the queue.
+- **Queued entries appear in the lists, marked.** They are merged in by
+  `mergePending` and rendered with `PendingChip`; `PendingSyncBanner` counts
+  them at the top of every page. Showing them is required — the dashboard
+  answers "when did she last eat", and an entry logged ten minutes ago is part
+  of that answer. Marking them is equally required: until it lands, nobody
+  else's phone can see it. A pending row keeps a **negative `id`**, which is
+  the whole test (`isPending`) for "never reached the server" — it is what
+  stops an `?edit=` link or a `DELETE /api/…/-1`.
+- **What is retried and what is not.** A failure with no status (dropped
+  connection, request deadline) or a 5xx/429 is held and retried; an expired
+  session is queued too, because re-auth navigates the open form away. A 4xx is
+  not: the same payload will be rejected the same way, so the entry is set
+  aside with the server's own message for the user to fix or discard. Entries
+  are never dropped silently — only the user discards one.
+- **Flush triggers** live in `DataRefreshProvider`: `online`, becoming visible,
+  a successful stale-data ping, app launch, and `OUTBOX_RETRY_MS` as a
+  backstop. A flush stops at the first entry the server won't take, so a tick
+  during an outage costs one request rather than one per entry.
+
+### PWA limits this design is shaped by
+
+- **No Background Sync on iOS Safari**, which is most of the installs here, and
+  a service worker cannot read `localStorage` anyway. The queue therefore
+  drains from the foreground only. Do not assume an entry goes out while the
+  app is closed — it doesn't, and the banner is what makes that visible.
+- **iOS evicts a backgrounded PWA whenever it likes**, so the queue must be on
+  disk (it is) and a flush must be resumable from nothing — no in-progress
+  state that only exists in memory.
+- **Storage can refuse a write** (quota, private browsing). `enqueue` returns
+  null there and the save is reported as failed, because telling someone their
+  entry is safe on the device when nothing recorded it is worse than an error.
+- **Two tabs share one queue.** Concurrent flushes are safe (the key
+  deduplicates), and a `storage` listener keeps the other tab's rendering from
+  going stale.
+
+### Conflicts on reconnect
+
+Between a queued create and the server there are none worth resolving: an
+entry that did not exist cannot have been concurrently edited, every entity is
+ordered by a client-supplied timestamp so a backdated entry lands where it
+belongs, and the idempotency key rules out duplicating the entry itself. The
+one real conflict is two caregivers logging the *same real-world event* from
+different devices, which produces two rows. That is not an offline problem —
+it happens with both devices online — and it is deliberately not auto-merged:
+the app cannot tell "logged twice" from "fed twice", and deleting a real
+second feed is worse than showing two rows the user can delete.
 
 ## Auth
 
