@@ -32,6 +32,7 @@
 
 import type { Env } from "../types/env.js";
 import { sendPushMessage } from "../pushSend.js";
+import { recordAlert } from "../alerts.js";
 import {
   etMidnightToUtc,
   toEtDateStr,
@@ -746,6 +747,19 @@ export async function runFeedingTrendCheck(
         });
         continue;
       }
+
+      // The in-app record, before the fan-out and independent of it: a
+      // shortfall worth pushing is worth reading in the app whether or not
+      // anyone has a subscribed device — see `alerts.ts`. Keyed on the
+      // checkpoint already claimed above, so the two can't disagree about
+      // how many times this alert was raised.
+      await recordAlert(env, {
+        childId: child.id,
+        kind: "feeding_trend",
+        title: "Feeding trend",
+        body: analysis.body,
+        dedupeKey: `feeding_trend:${child.id}:${windows.checkDate}:${checkpoint}`,
+      });
 
       const devices = await fanOutAlert(env, child.id, child.first_name, analysis.body);
       await recordCheck(

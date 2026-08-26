@@ -278,6 +278,19 @@ export const api = {
     request<T>(path, { method: "POST", body: JSON.stringify(data) }),
 
   /**
+   * A POST for something nothing on screen depends on — the counterpart of
+   * `getOptional`, and for the same reason. Marking the alerts feed read is
+   * the case: it changes a badge, and failing to reach the server with it
+   * says nothing about whether the data on screen is current, so it must not
+   * raise the stale-data banner.
+   *
+   * Not for anything the user typed. A failed save is exactly the case the
+   * banner and the outbox exist for.
+   */
+  postOptional: <T>(path: string, data: unknown) =>
+    request<T>(path, { method: "POST", body: JSON.stringify(data) }, { optional: true }),
+
+  /**
    * A POST that asks the server to generate something, and so is allowed to
    * take much longer than an ordinary write before being given up on.
    */

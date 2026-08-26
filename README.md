@@ -10,6 +10,7 @@ A baby tracking application inspired by [Baby Buddy](https://github.com/babybudd
 - **Daily note** — a short blurb on the dashboard about how yesterday went and how the week is trending, written once a day by Workers AI and cached in D1
 - **Boop lines** — the reward for tapping a child's photo cycles through a pool that a weekly cron tops up with new AI-written lines, so it doesn't go stale
 - **Feeding trend alerts** — at 11am, 4pm and 7pm Eastern, checks how much a child has been fed so far today against the same point on each of the previous seven days, and pushes a notification when Workers AI agrees the shortfall is worth knowing about
+- **In-app alerts** — a bell in the app bar opens the list of alerts the server has raised, so a notification that was swiped away, went to the other parent's phone, or was never delivered at all is still there to read
 - **Offline logging** — an entry saved while the server is unreachable is kept on the device, shown in the log marked as unsynced, and sent automatically when the connection returns; the idempotency keys behind every create mean a resend can't double-log it
 - **Secure by default** — authentication via Cloudflare Access (no custom login UI needed)
 - **Edge-native** — runs entirely on Cloudflare (Pages, Workers, D1, R2)
@@ -30,6 +31,7 @@ A baby tracking application inspired by [Baby Buddy](https://github.com/babybudd
 | Boop lines | Workers AI | A handful of new lines a week, cached in D1 |
 | Feeding trend analysis | Workers AI | Three checks a day, only when the figures already show a shortfall |
 | Feeding trend delivery | Cloudflare Queues | Retried; one job per subscribed device |
+| In-app alerts feed | D1 (`alerts`) | Written where the alert is decided, read back by the app's bell |
 | Offline writes | Device-local outbox | Foreground flush, deduplicated server-side by `client_request_id` |
 
 ## Getting Started
@@ -238,6 +240,32 @@ without notifying anyone or spending the checkpoint, which is the only way to
 see the feature work before 11am. Add `?send=1` to run it exactly as the cron
 would. To change the model, set `FEEDING_TREND_MODEL` in
 `server/wrangler.toml`.
+
+## In-app alerts
+
+Every alert the Worker raises — an overdue diaper or feeding reminder, a
+feeding-trend alert — is also written to the `alerts` table, and the bell in
+the app bar reads it back. Tapping it opens a drawer with the alerts for the
+children you're linked to, newest first, with the ones that arrived since your
+last visit marked.
+
+Push and this list are deliberately not the same thing. A notification swiped
+off a lock screen is gone, while the thing it was telling you about — nobody
+has logged a feed since 8am — is still true. A push only ever reaches the
+devices that opted in, and two people sharing a child rarely both have
+notifications on. And on an installed iOS PWA, which is most of the installs
+here, push is the least reliable link in the whole chain.
+
+So the rows are written where the alert is *decided*, in the cron, behind the
+same claim that stops a double firing from double-pushing — not in the queue
+consumer that sends them. An alert is recorded even when nobody is subscribed
+to push at all, which is the case the feed exists for. Each row stores the
+sentence that was sent, word for word, rather than re-deriving it on read: a
+trend alert's figures describe the moment it was raised.
+
+Read state is per user and is a single "last read at" mark, so opening the
+drawer clears your badge without touching anyone else's. The feed keeps 30
+days and is pruned by the daily cron.
 
 ## Offline behaviour
 

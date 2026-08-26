@@ -1,5 +1,6 @@
 import type { Env } from "../types/env.js";
 import { sendPushMessage } from "../pushSend.js";
+import { recordAlert } from "../alerts.js";
 
 /** Queue name, as declared in `wrangler.toml` — see `queueNames.test.ts`. */
 export const REMINDER_QUEUE = "baby-tracker-reminders";
@@ -14,9 +15,21 @@ export interface ReminderJob {
 }
 
 const KIND_CONFIG = {
-  diaper: { table: "diaper_changes", timeColumn: "time", label: "diaper change" },
-  feeding: { table: "feedings", timeColumn: "start_time", label: "feeding" },
+  diaper: { table: "diaper_changes", timeColumn: "time", label: "diaper change", title: "Diaper reminder" },
+  feeding: { table: "feedings", timeColumn: "start_time", label: "feeding", title: "Feeding reminder" },
 } as const;
+
+/**
+ * The sentence a reminder says, in one place.
+ *
+ * Both the push and the in-app feed row are built from this, so the alert
+ * someone reads in the app tomorrow is word for word the one their phone
+ * showed them — a feed that paraphrases the notification is a second version
+ * of events to reconcile.
+ */
+export function reminderBody(childName: string, kind: "diaper" | "feeding"): string {
+  return `No ${KIND_CONFIG[kind].label} logged for ${childName} in over 2 hours 45 minutes.`;
+}
 
 const childNameExpr = `TRIM(first_name || CASE WHEN last_name IS NOT NULL AND last_name != '' THEN ' ' || last_name ELSE '' END)`;
 
@@ -82,6 +95,18 @@ async function checkOne(
     .bind(childId, kind, new Date().toISOString())
     .run();
 
+  // The in-app record, written here rather than in the queue consumer and
+  // before the fan-out below, so it exists even when this child has no
+  // subscribed devices at all — see `alerts.ts`. Keyed on the same gap the
+  // claim above guards, so a doubled cron cannot double-log it either.
+  await recordAlert(env, {
+    childId,
+    kind,
+    title: KIND_CONFIG[kind].title,
+    body: reminderBody(childName, kind),
+    dedupeKey: `reminder:${childId}:${kind}:${lastActivityAt}`,
+  });
+
   const subscriptions = await env.DB.prepare(
     `SELECT ps.id FROM push_subscriptions ps
      JOIN user_children uc ON uc.user_id = ps.user_id
@@ -119,10 +144,9 @@ export async function deliverReminder(env: Env, job: ReminderJob): Promise<void>
     return;
   }
 
-  const label = KIND_CONFIG[job.kind].label;
   await sendPushMessage(env, sub, {
     title: "Baby Tracker",
-    body: `No ${label} logged for ${job.childName} in over 2 hours 45 minutes.`,
+    body: reminderBody(job.childName, job.kind),
     url: "/",
   });
 }

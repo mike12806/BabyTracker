@@ -157,3 +157,21 @@ export interface UserSettings {
   /** The unit every volume is displayed in, whatever unit it was logged with. */
   volume_unit: "ml" | "oz" | "cc";
 }
+
+/**
+ * One entry in the in-app alerts feed — a notification the server decided to
+ * raise, recorded whether or not a push was ever delivered for it. See
+ * `server/src/alerts.ts`.
+ */
+export interface Alert {
+  id: number;
+  child_id: number;
+  kind: "diaper" | "feeding" | "feeding_trend";
+  /** Short label for the row — "Diaper reminder", "Feeding trend". */
+  title: string;
+  /** The sentence that was pushed, stored as sent. */
+  body: string;
+  url: string;
+  created_at: string;
+  child_first_name: string;
+}
