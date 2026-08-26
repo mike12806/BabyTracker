@@ -65,6 +65,7 @@ import { useNotification } from "../hooks/useNotification";
 import { childPhotoUrl } from "../utils/childMoments";
 import QuickLogDialog, { type QuickLogCategory } from "./QuickLogDialog";
 import PushNotificationsNudge from "./PushNotificationsNudge";
+import AlertsBell from "./AlertsBell";
 
 const DRAWER_WIDTH = 240;
 const BOTTOM_NAV_HEIGHT = 68;
@@ -443,6 +444,10 @@ export default function Layout() {
                 : "Baby Tracker"}
             </Typography>
           </Box>
+          {/* Reminders and trend alerts as a list, next to the theme toggle:
+              a push that was never delivered — or was swiped away, or went to
+              the other parent's phone — is still readable here. */}
+          <AlertsBell />
           <IconButton
             color="inherit"
             size="small"

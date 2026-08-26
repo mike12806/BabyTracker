@@ -143,6 +143,32 @@ it happens with both devices online — and it is deliberately not auto-merged:
 the app cannot tell "logged twice" from "fed twice", and deleting a real
 second feed is worse than showing two rows the user can delete.
 
+## Alerts feed
+
+The bell in the app bar (`AlertsBell.tsx`, `api/alerts.ts`) reads back the
+alerts the server decided to raise — overdue diaper/feeding reminders and
+feeding-trend alerts. It is the app's own copy of what push delivers, and it
+exists because push here is the unreliable half: a notification swiped off a
+lock screen is gone while what it reported is still true, it only ever reached
+the devices that opted in, and on an installed iOS PWA — most of the installs
+here — it is the least dependable link in the chain.
+
+- **It renders, it does not decide.** The sentence in a row is the one the
+  server sent, stored as sent. A trend alert's figures describe the moment it
+  was raised, so recomputing them against the current clock would have the app
+  saying something the alert never said.
+- **The feed is not cached**, like every other read here. It refetches on
+  `refreshKey` with everything else, and a closed drawer holds whatever the
+  last fetch returned.
+- **`getOptional`/`postOptional`.** Nobody opened the app to read the bell, so
+  neither the fetch nor the read-mark may raise the stale-data banner or arm
+  the retry loop — same reasoning as the daily note. A fetch that fails costs
+  the badge its number rather than claiming one it can't stand behind.
+- **Read is marked to the newest row that was on screen**, never to `now`: an
+  alert raised between the fetch and the tap would otherwise be cleared
+  without ever having been seen. The server only ever moves the mark forward,
+  so a second device with a stale drawer can't un-read anything.
+
 ## Auth
 
 - Cloudflare Access handles login — no login page or auth UI needed in the app

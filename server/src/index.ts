@@ -10,6 +10,7 @@ import {
 } from "./scheduled/dailySummary.js";
 import type { DailySummaryJob } from "./scheduled/dailySummary.js";
 import { enqueueDailyNotes, writeNoteForJob, DAILY_NOTE_QUEUE } from "./scheduled/dailyNote.js";
+import { pruneAlerts } from "./alerts.js";
 import type { DailyNoteJob } from "./scheduled/dailyNote.js";
 import { enqueueBoopLineRefresh, refreshMood, BOOP_LINES_QUEUE } from "./scheduled/boopLines.js";
 import type { BoopLineJob } from "./scheduled/boopLines.js";
@@ -40,6 +41,7 @@ import { dailyNotes } from "./routes/dailyNotes.js";
 import { boopLines } from "./routes/boopLines.js";
 import { push } from "./routes/push.js";
 import { feedingTrend } from "./routes/feedingTrend.js";
+import { alerts } from "./routes/alerts.js";
 
 type AppEnv = { Bindings: Env; Variables: { userId: number; userEmail: string; userName: string } };
 
@@ -73,6 +75,7 @@ app.route("/api/daily-notes", dailyNotes);
 app.route("/api/boop-lines", boopLines);
 app.route("/api/push", push);
 app.route("/api/feeding-trend", feedingTrend);
+app.route("/api/alerts", alerts);
 
 // Global error handler
 app.onError((err, c) => {
@@ -169,6 +172,15 @@ export default {
       ctx.waitUntil(
         enqueueDailyNotes(env).catch((err) =>
           console.error("Daily note enqueue failed:", err)
+        )
+      );
+      // Housekeeping for the in-app alerts feed, on the one cron that already
+      // runs once a day. Independent of the note above — an expired alert row
+      // is nobody's dependency — so it gets its own waitUntil rather than
+      // being chained behind a model call that may well fail.
+      ctx.waitUntil(
+        pruneAlerts(env).catch((err) =>
+          console.error("Alert prune failed:", err)
         )
       );
       return;
