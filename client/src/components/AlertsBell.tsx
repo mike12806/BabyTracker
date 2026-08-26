@@ -17,9 +17,10 @@ import BabyChangingStationIcon from "@mui/icons-material/BabyChangingStation";
 import RestaurantIcon from "@mui/icons-material/Restaurant";
 import TrendingDownRoundedIcon from "@mui/icons-material/TrendingDownRounded";
 import NotificationsOffRoundedIcon from "@mui/icons-material/NotificationsOffRounded";
-import { fetchAlerts, markAlertsRead } from "../api/alerts";
+import { dismissAlert, fetchAlerts, markAlertsRead, restoreAlert } from "../api/alerts";
 import { useDataRefresh } from "../hooks/useDataRefresh";
 import { usePushNotifications } from "../hooks/usePushNotifications";
+import { useNotification } from "../hooks/useNotification";
 import { formatRelativeTime } from "../utils/dateTime";
 import { buildCategoryColors, type CategoryKey } from "../theme/categoryColors";
 import type { Alert } from "../types/models";
@@ -38,6 +39,10 @@ import type { Alert } from "../types/models";
  *  - **It is never cached**, like every other read in this app. A closed
  *    drawer holds whatever the last fetch returned, and the feed refetches
  *    with everything else on `refreshKey`.
+ *  - **Dismissing hides, for this user only.** The alert row is shared with
+ *    everyone linked to the child, so tidying your own bell must not take an
+ *    unread alert off theirs. It is offered with an undo because this app gets
+ *    used one-handed, mid-feed, where a mis-tap on a small row is routine.
  */
 
 const KIND_ICON: Record<Alert["kind"], { icon: React.ReactNode; category: CategoryKey }> = {
@@ -61,8 +66,17 @@ export default function AlertsBell() {
    * list. Frozen here for the visit, rather than read from the live feed.
    */
   const [newSince, setNewSince] = useState<string | null>(null);
+  /**
+   * The alert the undo bar is currently offering to put back.
+   *
+   * Holds the whole row rather than its id: the list it came out of is
+   * rebuilt from the server on every refresh, so by the time Undo is tapped
+   * the local copy may be all that is left of it.
+   */
+  const [undoable, setUndoable] = useState<Alert | null>(null);
 
   const navigate = useNavigate();
+  const { notify } = useNotification();
   const { refreshKey } = useDataRefresh();
   const { supported: pushSupported, subscribed: pushSubscribed, working: pushWorking, subscribe } =
     usePushNotifications();
@@ -114,7 +128,48 @@ export default function AlertsBell() {
     }
   };
 
+  /** Closing puts away the undo offer with the list it belongs to. */
+  const closeDrawer = () => {
+    setOpen(false);
+    setUndoable(null);
+  };
+
   const isNew = (alert: Alert) => newSince === null || alert.created_at > newSince;
+
+  /** Newest first, the order the server sends the feed in. */
+  const byNewest = (a: Alert, b: Alert) =>
+    a.created_at === b.created_at ? b.id - a.id : (a.created_at < b.created_at ? 1 : -1);
+
+  /**
+   * Take a row off the list straight away, then tell the server.
+   *
+   * Optimistic because the alternative is a row that sits there for a round
+   * trip after being tapped away. If the server won't take it, the row goes
+   * back where it was and the failure is reported — the one thing not to do
+   * is leave the screen showing a dismissal that was never recorded.
+   */
+  const handleDismiss = async (alert: Alert) => {
+    setAlerts((current) => current.filter((a) => a.id !== alert.id));
+    setUndoable(alert);
+    try {
+      await dismissAlert(alert.id);
+    } catch (err) {
+      setAlerts((current) => [...current, alert].sort(byNewest));
+      setUndoable(null);
+      notify(err instanceof Error ? err.message : "Couldn't dismiss that alert.", "error");
+    }
+  };
+
+  const handleUndo = async (alert: Alert) => {
+    setUndoable(null);
+    setAlerts((current) => (current.some((a) => a.id === alert.id) ? current : [...current, alert].sort(byNewest)));
+    try {
+      await restoreAlert(alert.id);
+    } catch (err) {
+      setAlerts((current) => current.filter((a) => a.id !== alert.id));
+      notify(err instanceof Error ? err.message : "Couldn't bring that alert back.", "error");
+    }
+  };
 
   const body = (
     <Box sx={{ width: { xs: "86vw", sm: 380 }, maxWidth: 420, display: "flex", flexDirection: "column", height: "100%" }}>
@@ -130,7 +185,7 @@ export default function AlertsBell() {
         }}
       >
         <Typography sx={{ fontSize: 17, fontWeight: 700, letterSpacing: "-0.01em" }}>Alerts</Typography>
-        <IconButton size="small" onClick={() => setOpen(false)} aria-label="Close alerts">
+        <IconButton size="small" onClick={closeDrawer} aria-label="Close alerts">
           <CloseRoundedIcon sx={{ fontSize: 20 }} />
         </IconButton>
       </Box>
@@ -175,7 +230,7 @@ export default function AlertsBell() {
             <Box
               key={alert.id}
               onClick={() => {
-                setOpen(false);
+                closeDrawer();
                 navigate(alert.url || "/");
               }}
               sx={{
@@ -224,10 +279,49 @@ export default function AlertsBell() {
                   </Typography>
                 )}
               </Box>
+              {/* stopPropagation, or dismissing a row also navigates away on
+                  the same tap — the row itself is the link. */}
+              <IconButton
+                size="small"
+                aria-label={`Dismiss: ${alert.title}`}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  void handleDismiss(alert);
+                }}
+                sx={{ flexShrink: 0, alignSelf: "center", color: "text.secondary" }}
+              >
+                <CloseRoundedIcon sx={{ fontSize: 18 }} />
+              </IconButton>
             </Box>
           );
         })}
       </Box>
+
+      {/* Inline rather than a Snackbar, and deliberately without a timer.
+          An open Drawer is a modal, and MUI marks everything outside it
+          `aria-hidden` — so a snackbar portalled to the body would be
+          invisible to a screen reader for exactly as long as it was on
+          offer. In the list it acts on it is reachable, and it waits as long
+          as the drawer is open rather than racing a one-handed user. */}
+      {undoable && (
+        <>
+          <Divider />
+          <Box sx={{ px: 2, py: 1.25, display: "flex", alignItems: "center", gap: 1 }}>
+            <Typography variant="body2" sx={{ fontSize: 12.5, flex: 1 }} color="text.secondary">
+              Alert dismissed.
+            </Typography>
+            <Button
+              size="small"
+              onClick={() => {
+                if (undoable) void handleUndo(undoable);
+              }}
+              sx={{ textTransform: "none", fontWeight: 700, flexShrink: 0 }}
+            >
+              Undo
+            </Button>
+          </Box>
+        </>
+      )}
 
       {/* The one place worth saying that push and this list are different
           things: someone reading an alert here days late is exactly the person
@@ -276,7 +370,7 @@ export default function AlertsBell() {
         </Badge>
       </IconButton>
 
-      <Drawer anchor="right" open={open} onClose={() => setOpen(false)}>
+      <Drawer anchor="right" open={open} onClose={closeDrawer}>
         {body}
       </Drawer>
     </>

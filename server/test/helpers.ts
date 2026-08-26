@@ -43,6 +43,7 @@ import migration0016 from "../migrations/0016_add_boop_lines.sql?raw";
 import migration0017 from "../migrations/0017_add_push_subscriptions.sql?raw";
 import migration0018 from "../migrations/0018_add_feeding_trend_checks.sql?raw";
 import migration0019 from "../migrations/0019_add_alerts.sql?raw";
+import migration0020 from "../migrations/0020_add_alert_dismissals.sql?raw";
 
 type AppEnv = { Bindings: Env; Variables: { userId: number; userEmail: string; userName: string } };
 
@@ -127,6 +128,7 @@ export async function execScript(db: D1Database, script: string) {
 export async function applyMigrations(db: D1Database) {
   // Drop all tables first to ensure clean state between tests
   const dropSQL = `
+    DROP TABLE IF EXISTS alert_dismissals;
     DROP TABLE IF EXISTS alert_reads;
     DROP TABLE IF EXISTS alerts;
     DROP TABLE IF EXISTS feeding_trend_checks;
@@ -153,7 +155,7 @@ export async function applyMigrations(db: D1Database) {
   `;
 
   // Execute the real migration files in order to keep test schema in sync
-  const migrations = [migration0001, migration0002, migration0003, migration0004, migration0005, migration0006, migration0007, migration0008, migration0009, migration0010, migration0011, migration0012, migration0013, migration0014, migration0015, migration0016, migration0017, migration0018, migration0019];
+  const migrations = [migration0001, migration0002, migration0003, migration0004, migration0005, migration0006, migration0007, migration0008, migration0009, migration0010, migration0011, migration0012, migration0013, migration0014, migration0015, migration0016, migration0017, migration0018, migration0019, migration0020];
 
   await execScript(db, dropSQL + migrations.join("\n"));
 }

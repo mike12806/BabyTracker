@@ -40,6 +40,7 @@ vi.mock("../src/hooks/usePushNotifications", () => ({
 
 import AlertsBell from "../src/components/AlertsBell";
 import { DataRefreshProvider, useDataRefresh } from "../src/hooks/useDataRefresh";
+import { NotificationProvider } from "../src/hooks/useNotification";
 import { api } from "../src/api/client";
 import { usePushNotifications } from "../src/hooks/usePushNotifications";
 
@@ -80,9 +81,11 @@ function renderBell() {
   return render(
     <ThemeProvider theme={theme}>
       <MemoryRouter>
-        <DataRefreshProvider>
-          <Harness />
-        </DataRefreshProvider>
+        <NotificationProvider>
+          <DataRefreshProvider>
+            <Harness />
+          </DataRefreshProvider>
+        </NotificationProvider>
       </MemoryRouter>
     </ThemeProvider>,
   );
@@ -91,6 +94,7 @@ function renderBell() {
 beforeEach(() => {
   vi.clearAllMocks();
   mockApi.postOptional.mockResolvedValue({ last_read_at: "2026-08-20T10:00:00Z" });
+  mockApi.post.mockResolvedValue({ ok: true });
 });
 
 describe("AlertsBell", () => {
@@ -198,6 +202,49 @@ describe("AlertsBell", () => {
     await userEvent.click(screen.getByText("refresh"));
 
     expect(await screen.findByLabelText("Alerts (2 new)")).toBeInTheDocument();
+  });
+
+  it("takes a dismissed row off the list and tells the server", async () => {
+    feed([alert(1, { body: "Dismiss me." }), alert(2, { body: "Keep me." })], 0, "2026-08-21T10:00:00Z");
+    renderBell();
+
+    await userEvent.click(await screen.findByLabelText("Alerts"));
+    await screen.findByText("Dismiss me.");
+    await userEvent.click(screen.getAllByLabelText(/^Dismiss: /)[0]);
+
+    expect(mockApi.post).toHaveBeenCalledWith("/alerts/1/dismiss", {});
+    await waitFor(() => expect(screen.queryByText("Dismiss me.")).not.toBeInTheDocument());
+    // Only that row, and the drawer stays where it was.
+    expect(screen.getByText("Keep me.")).toBeInTheDocument();
+  });
+
+  it("puts the row back when the server won't take the dismissal", async () => {
+    feed([alert(1, { body: "Dismiss me." })], 0, "2026-08-21T10:00:00Z");
+    mockApi.post.mockRejectedValue(new Error("Network error - check your connection and try again."));
+    renderBell();
+
+    await userEvent.click(await screen.findByLabelText("Alerts"));
+    await screen.findByText("Dismiss me.");
+    await userEvent.click(screen.getByLabelText("Dismiss: Diaper reminder"));
+
+    // A row that vanished off a dismissal the server never recorded would be
+    // back on the next refresh anyway - better to say so now.
+    expect(await screen.findByText("Network error - check your connection and try again.")).toBeInTheDocument();
+    expect(screen.getByText("Dismiss me.")).toBeInTheDocument();
+  });
+
+  it("undoes a dismissal", async () => {
+    feed([alert(1, { body: "Mis-tapped." })], 0, "2026-08-21T10:00:00Z");
+    renderBell();
+
+    await userEvent.click(await screen.findByLabelText("Alerts"));
+    await screen.findByText("Mis-tapped.");
+    await userEvent.click(screen.getByLabelText("Dismiss: Diaper reminder"));
+    await screen.findByText("Alert dismissed.");
+    await userEvent.click(screen.getByRole("button", { name: "Undo" }));
+
+    expect(mockApi.post).toHaveBeenCalledWith("/alerts/1/restore", {});
+    expect(await screen.findByText("Mis-tapped.")).toBeInTheDocument();
   });
 
   it("offers to turn notifications on from the drawer when they are off", async () => {
