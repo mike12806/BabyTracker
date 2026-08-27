@@ -5,6 +5,13 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # Lets a run be started by hand against any ref. Without it, a PR whose
+  # checks never got created — a branch name reused after its previous PR was
+  # merged and the branch auto-deleted will do it, the check suite latches
+  # onto the stale run — can only be unstuck by pushing another commit, since
+  # the required checks are "expected" rather than failing and there is
+  # nothing to re-run.
+  workflow_dispatch:
 
 permissions:
   contents: read

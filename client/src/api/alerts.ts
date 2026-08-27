@@ -37,3 +37,20 @@ export async function fetchAlerts(): Promise<AlertFeed> {
 export function markAlertsRead(upTo: string | null): Promise<{ last_read_at: string }> {
   return api.postOptional<{ last_read_at: string }>("/alerts/read", upTo ? { up_to: upTo } : {});
 }
+
+/**
+ * Take one alert off this user's feed.
+ *
+ * `post`, not `postOptional`, unlike the read mark above: this one is a
+ * deliberate action with a visible result, so if the server can't be reached
+ * the app should say so in the usual way rather than quietly pretending the
+ * row is gone. The caller puts the row back when this rejects.
+ */
+export function dismissAlert(id: number): Promise<{ ok: boolean }> {
+  return api.post<{ ok: boolean }>(`/alerts/${id}/dismiss`, {});
+}
+
+/** Undo a dismissal. */
+export function restoreAlert(id: number): Promise<{ ok: boolean }> {
+  return api.post<{ ok: boolean }>(`/alerts/${id}/restore`, {});
+}

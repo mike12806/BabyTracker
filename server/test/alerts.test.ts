@@ -291,6 +291,136 @@ describe("GET /api/alerts", () => {
   });
 });
 
+describe("dismissing an alert", () => {
+  const app = createTestApp();
+
+  beforeEach(async () => {
+    await applyMigrations(env.DB);
+    await env.DB.prepare("INSERT INTO users (id, email, name) VALUES (1, 'a@example.com', 'A')").run();
+    await env.DB.prepare("INSERT INTO users (id, email, name) VALUES (2, 'b@example.com', 'B')").run();
+    await seedChild(1, "Mikey", 1);
+    // Both parents are linked to this child, so they share its alert rows.
+    await env.DB.prepare("INSERT INTO user_children (user_id, child_id) VALUES (2, 1)").run();
+  });
+
+  async function feedFor(email: string): Promise<FeedResponse> {
+    const res = await testRequest(app, env.DB).get("/api/alerts", { "X-Test-Email": email });
+    return (await res.json()) as FeedResponse;
+  }
+
+  it("takes the alert off the caller's feed", async () => {
+    await insertAlert(1, "one", "2024-07-15T10:00:00Z", "Dismiss me.");
+    await insertAlert(1, "two", "2024-07-15T11:00:00Z", "Keep me.");
+    const req = testRequest(app, env.DB);
+    const before = await feedFor("a@example.com");
+    const target = before.alerts.find((a) => a.body === "Dismiss me.")!;
+
+    const res = await req.post(`/api/alerts/${target.id}/dismiss`, {}, { "X-Test-Email": "a@example.com" });
+
+    expect(res.status).toBe(200);
+    const after = await feedFor("a@example.com");
+    expect(after.alerts.map((a) => a.body)).toEqual(["Keep me."]);
+  });
+
+  it("leaves it on the other parent's feed, unread", async () => {
+    await insertAlert(1, "shared", "2024-07-15T10:00:00Z", "Shared alert.");
+    const req = testRequest(app, env.DB);
+    const id = (await feedFor("a@example.com")).alerts[0].id;
+
+    await req.post(`/api/alerts/${id}/dismiss`, {}, { "X-Test-Email": "a@example.com" });
+
+    // The row is shared — hiding it for one reader must not hide it for the
+    // other, who may not have read it yet.
+    const theirs = await feedFor("b@example.com");
+    expect(theirs.alerts).toHaveLength(1);
+    expect(theirs.unread).toBe(1);
+  });
+
+  it("stops counting towards the caller's unread badge", async () => {
+    await insertAlert(1, "one", "2024-07-15T10:00:00Z");
+    await insertAlert(1, "two", "2024-07-15T11:00:00Z");
+    const req = testRequest(app, env.DB);
+    expect((await feedFor("a@example.com")).unread).toBe(2);
+    const id = (await feedFor("a@example.com")).alerts[0].id;
+
+    await req.post(`/api/alerts/${id}/dismiss`, {}, { "X-Test-Email": "a@example.com" });
+
+    expect((await feedFor("a@example.com")).unread).toBe(1);
+  });
+
+  it("keeps the underlying record — dismissing is not deleting", async () => {
+    await insertAlert(1, "one", "2024-07-15T10:00:00Z");
+    const req = testRequest(app, env.DB);
+    const id = (await feedFor("a@example.com")).alerts[0].id;
+
+    await req.post(`/api/alerts/${id}/dismiss`, {}, { "X-Test-Email": "a@example.com" });
+
+    const { results } = await env.DB.prepare("SELECT id FROM alerts").all();
+    expect(results).toHaveLength(1);
+  });
+
+  it("is idempotent", async () => {
+    await insertAlert(1, "one", "2024-07-15T10:00:00Z");
+    const req = testRequest(app, env.DB);
+    const id = (await feedFor("a@example.com")).alerts[0].id;
+
+    await req.post(`/api/alerts/${id}/dismiss`, {}, { "X-Test-Email": "a@example.com" });
+    const second = await req.post(`/api/alerts/${id}/dismiss`, {}, { "X-Test-Email": "a@example.com" });
+
+    expect(second.status).toBe(200);
+    const { results } = await env.DB.prepare("SELECT * FROM alert_dismissals").all();
+    expect(results).toHaveLength(1);
+  });
+
+  it("restores it again", async () => {
+    await insertAlert(1, "one", "2024-07-15T10:00:00Z", "Mis-tapped.");
+    const req = testRequest(app, env.DB);
+    const id = (await feedFor("a@example.com")).alerts[0].id;
+
+    await req.post(`/api/alerts/${id}/dismiss`, {}, { "X-Test-Email": "a@example.com" });
+    const res = await req.post(`/api/alerts/${id}/restore`, {}, { "X-Test-Email": "a@example.com" });
+
+    expect(res.status).toBe(200);
+    expect((await feedFor("a@example.com")).alerts.map((a) => a.body)).toEqual(["Mis-tapped."]);
+  });
+
+  it("refuses an alert belonging to a child the caller isn't linked to", async () => {
+    await env.DB.prepare("INSERT INTO users (id, email, name) VALUES (3, 'c@example.com', 'C')").run();
+    await seedChild(2, "Nolan", 3);
+    await insertAlert(2, "theirs", "2024-07-15T10:00:00Z");
+    const theirAlert = await env.DB.prepare("SELECT id FROM alerts WHERE dedupe_key = 'theirs'").first<{ id: number }>();
+
+    const res = await testRequest(app, env.DB).post(
+      `/api/alerts/${theirAlert!.id}/dismiss`,
+      {},
+      { "X-Test-Email": "a@example.com" },
+    );
+
+    expect(res.status).toBe(404);
+    const { results } = await env.DB.prepare("SELECT * FROM alert_dismissals").all();
+    expect(results).toHaveLength(0);
+  });
+
+  it("answers 404 for an alert that does not exist", async () => {
+    const res = await testRequest(app, env.DB).post("/api/alerts/999/dismiss", {}, { "X-Test-Email": "a@example.com" });
+    expect(res.status).toBe(404);
+  });
+
+  it("lets the dismissal go when the alert is pruned", async () => {
+    const now = new Date("2024-08-20T12:00:00.000Z");
+    await insertAlert(1, "old", "2024-07-15T10:00:00Z");
+    const req = testRequest(app, env.DB);
+    const id = (await feedFor("a@example.com")).alerts[0].id;
+    await req.post(`/api/alerts/${id}/dismiss`, {}, { "X-Test-Email": "a@example.com" });
+
+    await pruneAlerts(env as never, now);
+
+    // Cascaded with the row it referred to, rather than accumulating forever.
+    const { results } = await env.DB.prepare("SELECT * FROM alert_dismissals").all();
+    expect(results).toHaveLength(0);
+  });
+});
+
 describe("POST /api/alerts/read", () => {
   const app = createTestApp();
 

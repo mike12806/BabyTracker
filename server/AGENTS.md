@@ -54,4 +54,5 @@
 
 - Files named sequentially: `0001_create_children.sql`, `0002_create_feedings.sql`, etc.
 - Each migration should be reversible when possible (include comments with rollback SQL)
-- Apply with: `npx wrangler d1 migrations apply <DB_NAME>`
+- Applied automatically on deploy — `deploy-server.yml` runs `wrangler d1 migrations apply baby-tracker-db --remote` ahead of `wrangler deploy` on every push to main. It is idempotent (wrangler records which migrations have run), so merging the file is all that is needed; there is no manual step to remember or to tell anyone about.
+- Locally: `npx wrangler d1 migrations apply <DB_NAME> --local`

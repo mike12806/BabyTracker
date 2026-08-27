@@ -22,6 +22,15 @@ function toSecondPrecision(iso: string): string {
   return new Date(iso).toISOString().replace(/\.\d{3}Z$/, "Z");
 }
 
+/**
+ * "This user has not dismissed this alert" — the same predicate in the list
+ * and the count, so the badge can never disagree with what the drawer shows.
+ * Binds one `userId` where it is interpolated.
+ */
+const NOT_DISMISSED = `NOT EXISTS (
+  SELECT 1 FROM alert_dismissals d WHERE d.alert_id = a.id AND d.user_id = ?
+)`;
+
 interface AlertRow {
   id: number;
   child_id: number;
@@ -43,6 +52,9 @@ interface AlertRow {
  * read flag — the bell only needs "how many since you last looked". With no
  * row yet (nobody has opened the drawer on this account), everything in the
  * window counts as unread, which is the honest answer.
+ *
+ * Alerts this user has dismissed are left out of both the list and the count,
+ * and only for them — see `POST /:id/dismiss`.
  *
  * The bell refetches this on every foreground poll, so it is on the app's
  * hot path. It stays cheap by construction rather than by caching: `alerts`
@@ -67,19 +79,19 @@ alerts.get("/", async (c) => {
          FROM alerts a
          JOIN children c ON c.id = a.child_id
          JOIN user_children uc ON uc.child_id = a.child_id
-        WHERE uc.user_id = ?
+        WHERE uc.user_id = ? AND ${NOT_DISMISSED}
         ORDER BY a.created_at DESC, a.id DESC
         LIMIT ?`,
     )
-      .bind(userId, limit)
+      .bind(userId, userId, limit)
       .all<AlertRow>(),
     c.env.DB.prepare(
       `SELECT COUNT(*) AS n
          FROM alerts a
          JOIN user_children uc ON uc.child_id = a.child_id
-        WHERE uc.user_id = ? AND (? IS NULL OR a.created_at > ?)`,
+        WHERE uc.user_id = ? AND ${NOT_DISMISSED} AND (? IS NULL OR a.created_at > ?)`,
     )
-      .bind(userId, lastReadAt, lastReadAt)
+      .bind(userId, userId, lastReadAt, lastReadAt)
       .first<{ n: number }>(),
   ]);
 
@@ -124,6 +136,82 @@ alerts.post("/read", async (c) => {
     .first<{ last_read_at: string }>();
 
   return c.json({ ok: true, last_read_at: row?.last_read_at ?? upTo });
+});
+
+/**
+ * Is this alert one the caller is allowed to see at all?
+ *
+ * Same `user_children` scope the feed itself uses. Returns false both for an
+ * alert that doesn't exist and for one belonging to someone else's child, so
+ * the 404 below can't be used to probe for either.
+ */
+async function callerMayReadAlert(env: Env, userId: number, alertId: number): Promise<boolean> {
+  const row = await env.DB.prepare(
+    `SELECT 1 AS ok
+       FROM alerts a
+       JOIN user_children uc ON uc.child_id = a.child_id
+      WHERE a.id = ? AND uc.user_id = ?`,
+  )
+    .bind(alertId, userId)
+    .first<{ ok: number }>();
+  return row !== null;
+}
+
+/**
+ * POST /api/alerts/:id/dismiss — take one alert off this user's feed.
+ *
+ * Hides, never deletes. The `alerts` row is shared by everyone linked to the
+ * child, so removing it would take an alert off the other parent's bell too —
+ * possibly one they have not read yet — and would destroy the record of what
+ * was raised, which is the thing this feed exists to keep. A dismissal is
+ * therefore a per-user marker, and the row itself goes only when it ages out
+ * of the retention window.
+ *
+ * Idempotent: dismissing twice (a double tap, a retried request) is the same
+ * as dismissing once.
+ */
+alerts.post("/:id/dismiss", async (c) => {
+  const userId = c.get("userId");
+  const alertId = parseInt(c.req.param("id"), 10);
+
+  if (!alertId || !(await callerMayReadAlert(c.env, userId, alertId))) {
+    return c.json({ error: "Not found" }, 404);
+  }
+
+  await c.env.DB.prepare(
+    `INSERT INTO alert_dismissals (user_id, alert_id) VALUES (?, ?)
+     ON CONFLICT (user_id, alert_id) DO NOTHING`,
+  )
+    .bind(userId, alertId)
+    .run();
+
+  return c.json({ ok: true });
+});
+
+/**
+ * POST /api/alerts/:id/restore — undo a dismissal.
+ *
+ * What the drawer's Undo calls. This app is used one-handed, mid-feed, so a
+ * mis-tap on a small row is routine — and without an undo the only way back
+ * to a dismissed alert would be to have read it before dismissing it, which
+ * is exactly what a mis-tap prevents. Cheap to offer precisely because
+ * dismissing only ever wrote a marker.
+ *
+ * Idempotent, and a no-op when nothing was dismissed.
+ */
+alerts.post("/:id/restore", async (c) => {
+  const userId = c.get("userId");
+  const alertId = parseInt(c.req.param("id"), 10);
+
+  if (!alertId || !(await callerMayReadAlert(c.env, userId, alertId))) {
+    return c.json({ error: "Not found" }, 404);
+  }
+
+  await c.env.DB.prepare("DELETE FROM alert_dismissals WHERE user_id = ? AND alert_id = ?")
+    .bind(userId, alertId)
+    .run();
+
+  return c.json({ ok: true });
 });
 
 export { alerts };

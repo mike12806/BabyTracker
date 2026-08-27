@@ -168,6 +168,15 @@ here — it is the least dependable link in the chain.
   alert raised between the fetch and the tap would otherwise be cleared
   without ever having been seen. The server only ever moves the mark forward,
   so a second device with a stale drawer can't un-read anything.
+- **Dismissing is optimistic, per-user, and undoable.** The row leaves the
+  list on the tap and goes back if the server won't take it — what must never
+  happen is a screen showing a dismissal that was never recorded, so that
+  path reports the failure rather than swallowing it. The undo is rendered
+  *inside* the drawer rather than as a `Snackbar`: an open MUI Drawer is a
+  modal and marks everything outside it `aria-hidden`, so a portalled
+  snackbar would be invisible to a screen reader for exactly as long as it
+  was on offer. It has no timer either — this app is used one-handed, and an
+  undo that expires while you are holding a baby is not an undo.
 
 ## Auth
 

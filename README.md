@@ -264,8 +264,12 @@ sentence that was sent, word for word, rather than re-deriving it on read: a
 trend alert's figures describe the moment it was raised.
 
 Read state is per user and is a single "last read at" mark, so opening the
-drawer clears your badge without touching anyone else's. The feed keeps 30
-days and is pruned by the daily cron.
+drawer clears your badge without touching anyone else's. Dismissing an alert
+is per user too, and hides rather than deletes: the row is shared by everyone
+linked to the child, so throwing it away would take an alert off the other
+parent's bell — possibly one they haven't read — and destroy the record the
+feed exists to keep. Every dismissal can be undone from the drawer. The feed
+keeps 30 days and is pruned by the daily cron.
 
 ## Offline behaviour
 
