@@ -352,11 +352,18 @@ export default function AlertsBell() {
 
   return (
     <>
+      {/* A toggle, not an open button. The app bar sits at `zIndex.drawer + 1`
+          (see Layout), so it stays above the drawer's backdrop and the bell
+          keeps taking taps while the drawer is open — the backdrop never sees
+          them. Without this branch a second tap re-ran the open path against
+          an already-open drawer, which from the outside looked like the bell
+          had stopped working. */}
       <IconButton
         color="inherit"
         size="small"
-        onClick={() => void handleOpen()}
+        onClick={() => (open ? closeDrawer() : void handleOpen())}
         aria-label={unread > 0 ? `Alerts (${unread} new)` : "Alerts"}
+        aria-expanded={open}
         title="Alerts"
         sx={{ minWidth: 36, minHeight: 36 }}
       >

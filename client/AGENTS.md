@@ -168,6 +168,12 @@ here — it is the least dependable link in the chain.
   alert raised between the fetch and the tap would otherwise be cleared
   without ever having been seen. The server only ever moves the mark forward,
   so a second device with a stale drawer can't un-read anything.
+- **The bell is a toggle.** `Layout`'s app bar sits at `zIndex.drawer + 1`, so
+  it stays above the drawer's backdrop and the bell goes on receiving taps
+  while the drawer is open — the backdrop never sees them, which is why a
+  second tap has to close the drawer itself rather than relying on the
+  click-away. Anything else put in the app bar alongside it inherits the same
+  situation.
 - **Dismissing is optimistic, per-user, and undoable.** The row leaves the
   list on the tap and goes back if the server won't take it — what must never
   happen is a screen showing a dismissal that was never recorded, so that
