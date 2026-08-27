@@ -73,6 +73,7 @@ All entries are associated with a child. Multi-child support is required.
 ## Database
 
 - D1 migrations are plain SQL files in `server/migrations/`
+- **Migrations are applied automatically on every deploy** — `deploy-server.yml` runs `wrangler d1 migrations apply baby-tracker-db --remote` before the Worker upload, and wrangler tracks what it has already run, so a new migration file needs nothing beyond being merged. Never tell the user a migration "still needs applying": adding the file *is* shipping it.
 - Always create reversible migrations when possible
 - Use `INTEGER` for booleans (0/1) — D1 is SQLite-compatible
 - Store timestamps as ISO 8601 text strings
