@@ -204,6 +204,40 @@ describe("AlertsBell", () => {
     expect(await screen.findByLabelText("Alerts (2 new)")).toBeInTheDocument();
   });
 
+  it("closes the drawer when the bell is tapped again", async () => {
+    feed([alert(1)], 0, "2026-08-21T10:00:00Z");
+    renderBell();
+
+    // The app bar sits above the drawer's backdrop, so the bell keeps taking
+    // taps while the drawer is open — a second one has to close it rather
+    // than re-run the open path against an already-open drawer.
+    const bell = await screen.findByLabelText("Alerts");
+    await userEvent.click(bell);
+    await screen.findByText("Alert 1");
+    expect(bell).toHaveAttribute("aria-expanded", "true");
+
+    await userEvent.click(bell);
+
+    await waitFor(() => expect(screen.queryByText("Alert 1")).not.toBeInTheDocument());
+    expect(bell).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("does not refetch or re-mark read when the bell closes the drawer", async () => {
+    feed([alert(1)], 1);
+    renderBell();
+
+    const bell = await screen.findByLabelText("Alerts (1 new)");
+    await userEvent.click(bell);
+    await waitFor(() => expect(mockApi.postOptional).toHaveBeenCalledTimes(1));
+    const loadsAfterOpening = mockApi.getOptional.mock.calls.length;
+
+    await userEvent.click(screen.getByLabelText("Alerts"));
+
+    // Closing is not a visit: it asks the server for nothing.
+    expect(mockApi.getOptional.mock.calls.length).toBe(loadsAfterOpening);
+    expect(mockApi.postOptional).toHaveBeenCalledTimes(1);
+  });
+
   it("takes a dismissed row off the list and tells the server", async () => {
     feed([alert(1, { body: "Dismiss me." }), alert(2, { body: "Keep me." })], 0, "2026-08-21T10:00:00Z");
     renderBell();
