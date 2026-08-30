@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import type { Env } from "../types/env.js";
 import { verifyChildExists } from "./crud.js";
+import { announceChange } from "../live.js";
 import { insertOnce, readClientRequestId } from "./idempotency.js";
 
 type AppEnv = { Bindings: Env; Variables: { userId: number; userEmail: string; userName: string } };
@@ -69,6 +70,8 @@ router.post("/", async (c) => {
 
   if (!created) return c.json({ deleted: true });
 
+  await announceChange(c, childId, "todos");
+
   return c.json(created, 201);
 });
 
@@ -117,6 +120,9 @@ router.put("/:id", async (c) => {
     .run();
 
   const updated = await c.env.DB.prepare("SELECT * FROM todos WHERE id = ?").bind(id).first();
+
+  await announceChange(c, existing.child_id as number, "todos");
+
   return c.json(updated);
 });
 
@@ -125,6 +131,9 @@ router.delete("/:id", async (c) => {
   const existing = await c.env.DB.prepare("SELECT * FROM todos WHERE id = ?").bind(id).first();
   if (!existing) return c.json({ error: "Not found" }, 404);
   await c.env.DB.prepare("DELETE FROM todos WHERE id = ?").bind(id).run();
+
+  await announceChange(c, existing.child_id as number, "todos");
+
   return c.json({ ok: true });
 });
 

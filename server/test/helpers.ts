@@ -23,6 +23,7 @@ import { boopLines } from "../src/routes/boopLines.js";
 import { push } from "../src/routes/push.js";
 import { feedingTrend } from "../src/routes/feedingTrend.js";
 import { alerts } from "../src/routes/alerts.js";
+import { live } from "../src/routes/live.js";
 import type { MiddlewareHandler } from "hono";
 import migration0001 from "../migrations/0001_initial_schema.sql?raw";
 import migration0002 from "../migrations/0002_add_picture_blob.sql?raw";
@@ -82,6 +83,10 @@ export function createTestApp() {
   const app = new Hono<AppEnv>();
 
   app.use("/api/*", testAuthMiddleware);
+  // Mounted between the middlewares exactly as in src/index.ts — a 101 that
+  // went through `cacheControlMiddleware` would lose its socket, so the
+  // ordering is part of what these tests are checking.
+  app.route("/api/live", live);
   app.use("/api/*", cacheControlMiddleware);
 
   app.route("/api/auth", auth);
@@ -161,12 +166,23 @@ export async function applyMigrations(db: D1Database) {
 }
 
 /** Helper to make requests to the test app */
-export function testRequest(app: ReturnType<typeof createTestApp>, db: D1Database, photos?: R2Bucket) {
+export function testRequest(
+  app: ReturnType<typeof createTestApp>,
+  db: D1Database,
+  photos?: R2Bucket,
+  extraEnv?: Partial<Env>,
+) {
+  // `LIVE` is deliberately absent unless a test asks for it. Every write path
+  // announces its change, and `notifyChange` no-ops without the binding — so
+  // the tests that are not about live updates neither pay for a Durable Object
+  // round trip nor depend on one, which is the same thing production does when
+  // the binding is missing.
   const env = {
     DB: db,
     PHOTOS: photos as R2Bucket,
     CF_ACCESS_TEAM_DOMAIN: "test.cloudflareaccess.com",
     CF_ACCESS_AUD: "test-aud",
+    ...extraEnv,
   };
 
   return {

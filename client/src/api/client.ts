@@ -1,6 +1,7 @@
 import { ApiError } from "./errors";
 import { markOffline, noteResponse } from "./freshness";
 import { FROM_CACHE_HEADER } from "../serviceWorkerContract";
+import { liveClientId } from "./live";
 
 export const API_BASE = import.meta.env.VITE_API_URL || "/api";
 
@@ -246,6 +247,13 @@ async function request<T>(
       credentials: "include",
       headers: {
         "Content-Type": "application/json",
+        // Names this tab's live connection, so the server can leave it out
+        // when it fans the resulting change out to everyone watching the
+        // child. Without it the device that just saved gets its own entry
+        // pushed back and rebuilds every list under the user, having already
+        // refreshed. Harmless on reads and when no socket is open — the
+        // server only ever uses it to skip a connection, never to find one.
+        "X-Live-Client": liveClientId(),
         ...options.headers,
       },
     },
@@ -306,6 +314,10 @@ export const api = {
     const res = await doFetch(path, {
       method: "POST",
       credentials: "include",
+      // No Content-Type — FormData sets its own multipart boundary — but the
+      // live id still belongs here, for the same reason it does on every other
+      // write: this device refreshes itself once the upload returns.
+      headers: { "X-Live-Client": liveClientId() },
       body: formData,
     });
 

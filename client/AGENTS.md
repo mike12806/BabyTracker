@@ -59,14 +59,46 @@ performance.** Decisions below follow from that ordering; don't trade upward.
   `useDataRefresh`, alongside `selectedChild`. A `useEffect` with only
   `[selectedChild]` never refetches after mount and will go stale.
 - `DataRefreshProvider` bumps `refreshKey` when the app is reopened
-  (`visibilitychange`, `focus`, bfcache `pageshow`), on a foreground poll, and
-  whenever an entry is saved. It holds refreshes back while a form is open —
-  see `isUserBusy` — so nothing rebuilds under a half-filled dialog.
+  (`visibilitychange`, `focus`, bfcache `pageshow`), on a live nudge, on a
+  poll, and whenever an entry is saved. It holds refreshes back while a form is
+  open — see `isUserBusy` — so nothing rebuilds under a half-filled dialog.
+- **The live socket replaces one trigger, not the machinery.** `api/live.ts`
+  holds one WebSocket per tab, pointed at the selected child by
+  `components/LiveConnection.tsx`, and what arrives on it is a nudge with no
+  entry data in it — the app still fetches over `/api/*`, so the no-cache rule
+  above is unaffected. Everything else here is unchanged and still needed: the
+  page is frozen on an installed PWA, so the socket is usually dead by the time
+  it thaws and the resume handlers are what notice. A change published while
+  the socket was down reached nobody and is never re-sent, which is why
+  reconnecting after a gap longer than `REFRESH_THROTTLE_MS` refetches.
+- **A nudge is not subject to `REFRESH_THROTTLE_MS`.** That throttle suppresses
+  duplicate refreshes of data nobody touched; a nudge is the server stating
+  that something *was* touched, so putting it behind the throttle would
+  silently drop the second of two entries logged seconds apart — the exact case
+  the socket exists for. `LIVE_COALESCE_MS` collapses bursts instead. A nudge
+  held by an open form re-checks itself every `LIVE_HELD_RECHECK_MS` rather
+  than waiting on `focusout`, which a backdrop-dismissed dialog never fires.
+- **The poll stays, slower.** `LIVE_BACKSTOP_POLL_MS` (5 min) while the socket
+  is delivering, `FOREGROUND_POLL_MS` (1 min) whenever it is not. Do not delete
+  the poll: a socket that has quietly stopped delivering looks exactly like a
+  household where nobody has logged anything, and the ordering at the top of
+  this section puts never showing stale data above both cost and performance.
+  The 45s heartbeat in `api/live.ts` is the fast detector; the poll is the slow
+  one underneath it.
+- **A socket that will not open is a supported state.** A browser is never told
+  why an upgrade failed — the WebSocket API hides the HTTP status — so an
+  Access policy that rejects upgrades, a proxy that strips them and a dead
+  network are indistinguishable from the client. After `COLD_ATTEMPT_LIMIT`
+  attempts that never reached the server's greeting, the app stops trying and
+  goes back to the 1-minute poll, re-probing when it is next brought to the
+  front. Nothing else changes; only latency does.
 - `FOREGROUND_POLL_MS` is a freshness lever first. A Dashboard refresh is 12
   requests, five of them `limit=500`, so a device left open all day polls tens
   of millions of D1 rows a month — against the 25 billion rows/month the
   Workers Paid plan includes, and $0.001/million beyond it. Redo that maths
   before shortening it further, and note it would bite hard on the free plan.
+  With the socket up this is the fallback rather than the main path, so the
+  figure above is now a ceiling reached only when live updates are unavailable.
 - `FROM_CACHE_HEADER` handling in `freshness.ts` (and the clock-skew fallback
   under it) looks vestigial but is load-bearing during upgrades: a previous
   build's worker serves the one load it takes to replace it, and that worker
@@ -130,6 +162,12 @@ because the radio was down is not honesty, it is data loss.
 - **Two tabs share one queue.** Concurrent flushes are safe (the key
   deduplicates), and a `storage` listener keeps the other tab's rendering from
   going stale.
+- **A backgrounded PWA's WebSocket dies, usually silently.** iOS freezes the
+  page rather than closing it, so timers do not run and `onclose` often never
+  fires — the socket has to be probed (`revalidateLive`) on resume rather than
+  waited on. This is why the live socket lives in the page and not in the
+  service worker, which on iOS is shorter-lived still. WebSockets themselves
+  work fine in an installed PWA; it is the backgrounding that ends them.
 
 ### Conflicts on reconnect
 

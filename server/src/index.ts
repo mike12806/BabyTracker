@@ -42,6 +42,7 @@ import { boopLines } from "./routes/boopLines.js";
 import { push } from "./routes/push.js";
 import { feedingTrend } from "./routes/feedingTrend.js";
 import { alerts } from "./routes/alerts.js";
+import { live } from "./routes/live.js";
 
 type AppEnv = { Bindings: Env; Variables: { userId: number; userEmail: string; userName: string } };
 
@@ -49,6 +50,15 @@ const app = new Hono<AppEnv>();
 
 // All API routes require Cloudflare Access authentication
 app.use("/api/*", authMiddleware);
+
+// Live updates, mounted between the two middlewares on purpose.
+//
+// Above `cacheControlMiddleware` because a 101 response carries a `webSocket`
+// that does not survive being rebuilt to add a header, and below
+// `authMiddleware` because a socket is authenticated exactly like every other
+// request here. The middleware skips 101s on its own too — this ordering is
+// the belt, that is the braces.
+app.route("/api/live", live);
 
 // No intermediary may hand back a stale copy of a reply — see the middleware.
 app.use("/api/*", cacheControlMiddleware);
@@ -133,6 +143,15 @@ const REMINDERS_CRON = "*/5 * * * *";
  * out on its own.
  */
 const FEEDING_TREND_CRON = "0 15,16,20,21,23,0 * * *";
+
+/**
+ * The live-update Durable Object, re-exported so wrangler can find it.
+ *
+ * `durable_objects.bindings[].class_name` in wrangler.toml is resolved against
+ * this module's exports, so the class has to be visible from the entrypoint
+ * even though nothing in this file calls it.
+ */
+export { ChildLive } from "./live.js";
 
 export default {
   fetch: app.fetch,

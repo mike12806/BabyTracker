@@ -5,6 +5,7 @@ import { AppThemeProvider } from "./hooks/useTheme";
 import { AuthProvider, useAuth } from "./hooks/useAuth";
 import { ChildProvider } from "./hooks/useChildren";
 import { DataRefreshProvider } from "./hooks/useDataRefresh";
+import { LiveConnection } from "./components/LiveConnection";
 import { NotificationProvider } from "./hooks/useNotification";
 import { VolumeUnitProvider } from "./hooks/useVolumeUnit";
 import { PushNotificationsProvider } from "./hooks/usePushNotifications";
@@ -73,6 +74,10 @@ export default function App() {
                 everything else. */}
             <DataRefreshProvider>
               <ChildProvider>
+                {/* Inside ChildProvider because it needs the selected child,
+                    outside the routes because the socket should not be torn
+                    down and rebuilt every time someone changes page. */}
+                <LiveConnection />
                 <NotificationProvider>
                   <VolumeUnitProvider>
                     <PushNotificationsProvider>

@@ -16,6 +16,31 @@ migrations_dir = "migrations"
 binding = "PHOTOS"
 bucket_name = "baby-tracker-photos"
 
+# Live updates — one Durable Object per child, holding the open WebSockets for
+# every device currently looking at that child. See src/live.ts.
+#
+# A DO rather than a plain Worker because a Worker isolate cannot be addressed
+# by a later request: the POST that logs a feed has no way to reach the socket
+# some earlier isolate left open. `child:<id>` is a name both halves can derive
+# from the child every write already names.
+#
+# Sockets are accepted with the hibernation API, so an idle household is
+# evicted from memory and billed nothing for duration — the object only runs
+# while it is actually fanning a change out. At this app's volume (a few
+# devices, a few dozen entries a day) both requests and duration sit inside
+# the Workers Paid included allowances.
+[[durable_objects.bindings]]
+name = "LIVE"
+class_name = "ChildLive"
+
+# SQLite-backed, which is the default for new classes. The object stores
+# nothing — the version of a child's data is whatever D1 says it is, and the
+# only per-socket state is the connection id, which rides on the socket's own
+# attachment and survives hibernation with it.
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["ChildLive"]
+
 # Daily summary delivery. The cron enqueues one message per reader and the
 # consumer renders and sends it, so a send that fails to SES is retried rather
 # than logged and dropped — cron triggers do not re-run, so that used to lose

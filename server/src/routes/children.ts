@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import type { Env } from "../types/env.js";
 import { claimClientRequestId, findClaimedRowId, readClientRequestId } from "./idempotency.js";
+import { announceChange } from "../live.js";
 
 type AppEnv = { Bindings: Env; Variables: { userId: number; userEmail: string; userName: string } };
 
@@ -104,6 +105,10 @@ children.put("/:id", async (c) => {
     .bind(childId)
     .first();
 
+  // A rename or a corrected birth date changes the hero card and every age on
+  // screen, so the other device is showing something wrong until it refetches.
+  await announceChange(c, childId, "children");
+
   return c.json(child);
 });
 
@@ -122,6 +127,10 @@ children.delete("/:id", async (c) => {
   }
 
   await c.env.DB.prepare("DELETE FROM children WHERE id = ?").bind(childId).run();
+
+  // Anyone still looking at this child needs to find out now rather than by
+  // getting a 404 off their next save.
+  await announceChange(c, childId, "children");
 
   return c.json({ ok: true });
 });
@@ -210,6 +219,11 @@ children.post("/:id/photo", async (c) => {
     return c.json({ error: "Couldn't save the photo. Please try again." }, 500);
   }
 
+  // The photo URL is cache-busted with the child's `updated_at`, which the
+  // write above just moved — so the other device needs the new child row
+  // before it will fetch the new face.
+  await announceChange(c, childId, "children");
+
   return c.json({ ok: true });
 });
 
@@ -297,6 +311,8 @@ children.delete("/:id/photo", async (c) => {
   )
     .bind(childId)
     .run();
+
+  await announceChange(c, childId, "children");
 
   return c.json({ ok: true });
 });
