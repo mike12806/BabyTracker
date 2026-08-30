@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import type { Env } from "../types/env.js";
 import { verifyChildExists } from "./crud.js";
+import { announceChange } from "../live.js";
 import { insertOnce, readClientRequestId } from "./idempotency.js";
 
 type AppEnv = { Bindings: Env; Variables: { userId: number; userEmail: string; userName: string } };
@@ -59,6 +60,10 @@ timers.post("/", async (c) => {
 
   if (!timer) return c.json({ deleted: true });
 
+  // A running timer is the one thing here that is *only* true while it runs,
+  // so the other phone showing "no timer" is wrong the moment this returns.
+  await announceChange(c, body.child_id, "timers");
+
   return c.json(timer, 201);
 });
 
@@ -87,6 +92,8 @@ timers.put("/:id/stop", async (c) => {
     .bind(id)
     .first();
 
+  await announceChange(c, existing.child_id as number, "timers");
+
   return c.json(timer);
 });
 
@@ -95,8 +102,10 @@ timers.delete("/:id", async (c) => {
   const userId = c.get("userId");
   const id = parseInt(c.req.param("id"), 10);
 
+  // `child_id` rather than `1`: the row is about to be gone, and it is the
+  // only place left that says whose timer list needs refreshing.
   const existing = await c.env.DB.prepare(
-    "SELECT 1 FROM timers WHERE id = ? AND user_id = ?"
+    "SELECT child_id FROM timers WHERE id = ? AND user_id = ?"
   )
     .bind(id, userId)
     .first();
@@ -106,6 +115,9 @@ timers.delete("/:id", async (c) => {
   }
 
   await c.env.DB.prepare("DELETE FROM timers WHERE id = ?").bind(id).run();
+
+  await announceChange(c, existing.child_id as number, "timers");
+
   return c.json({ ok: true });
 });
 

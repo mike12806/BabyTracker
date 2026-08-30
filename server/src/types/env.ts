@@ -3,10 +3,21 @@ import type { DailyNoteJob } from "../scheduled/dailyNote.js";
 import type { BoopLineJob } from "../scheduled/boopLines.js";
 import type { ReminderJob } from "../scheduled/reminders.js";
 import type { FeedingTrendJob } from "../scheduled/feedingTrend.js";
+import type { ChildLive } from "../live.js";
 
 export interface Env {
   DB: D1Database;
   PHOTOS: R2Bucket;
+  /**
+   * Live-update fan-out, one Durable Object per child. See `src/live.ts`.
+   *
+   * Optional for the same reason the queues are: local dev without
+   * `wrangler dev` and any test that does not care has no binding, and
+   * `notifyChange` returns quietly rather than failing the write. The client
+   * falls back to polling when the socket will not open, so an absent binding
+   * costs latency, never correctness.
+   */
+  LIVE?: DurableObjectNamespace<ChildLive>;
   CF_ACCESS_TEAM_DOMAIN: string;
   CF_ACCESS_AUD: string;
   DEV_MODE?: string;

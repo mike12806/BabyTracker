@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { api, pingServer, REQUEST_TIMEOUT_MS, GENERATION_TIMEOUT_MS } from "../src/api/client";
 import { getStaleSince, resetFreshness } from "../src/api/freshness";
+import { liveClientId } from "../src/api/live";
 
 // We need to mock fetch at the global level to test the api client
 const mockFetch = vi.fn();
@@ -31,6 +32,9 @@ describe("API Client", () => {
       credentials: "include",
       headers: {
         "Content-Type": "application/json",
+        // Names this tab's live socket so the server can skip it when fanning
+        // the change out — see `api/live.ts`.
+        "X-Live-Client": liveClientId(),
       },
       // Every request carries a deadline — see REQUEST_TIMEOUT_MS.
       signal: expect.any(AbortSignal),
@@ -53,6 +57,9 @@ describe("API Client", () => {
       credentials: "include",
       headers: {
         "Content-Type": "application/json",
+        // Names this tab's live socket so the server can skip it when fanning
+        // the change out — see `api/live.ts`.
+        "X-Live-Client": liveClientId(),
       },
       signal: expect.any(AbortSignal),
     });
@@ -73,6 +80,9 @@ describe("API Client", () => {
       credentials: "include",
       headers: {
         "Content-Type": "application/json",
+        // Names this tab's live socket so the server can skip it when fanning
+        // the change out — see `api/live.ts`.
+        "X-Live-Client": liveClientId(),
       },
       signal: expect.any(AbortSignal),
     });

@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import type { Env } from "../types/env.js";
 import { insertOnce, readClientRequestId } from "./idempotency.js";
+import { announceChange } from "../live.js";
 
 type AppEnv = { Bindings: Env; Variables: { userId: number; userEmail: string; userName: string } };
 
@@ -115,6 +116,8 @@ export function createChildScopedCrud(config: CrudRouteConfig) {
     // to hand back, and resurrecting the entry would undo a deliberate delete.
     if (!created) return c.json({ deleted: true });
 
+    await announceChange(c, childId);
+
     return c.json(created, 201);
   });
 
@@ -153,6 +156,10 @@ export function createChildScopedCrud(config: CrudRouteConfig) {
       .bind(id)
       .first();
 
+    // `existing.child_id`, not the body: an edit does not carry a child_id,
+    // and the row's own child is who was watching it anyway.
+    await announceChange(c, existing.child_id as number);
+
     return c.json(updated);
   });
 
@@ -171,6 +178,10 @@ export function createChildScopedCrud(config: CrudRouteConfig) {
     }
 
     await c.env.DB.prepare(`DELETE FROM ${table} WHERE id = ?`).bind(id).run();
+
+    // A delete is as much a change as a create — the other caregiver's list is
+    // showing a row that is gone.
+    await announceChange(c, existing.child_id as number);
 
     return c.json({ ok: true });
   });

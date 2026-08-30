@@ -18,6 +18,13 @@ import type { MiddlewareHandler } from "hono";
  */
 export const cacheControlMiddleware: MiddlewareHandler = async (c, next) => {
   await next();
+  // A 101 is a WebSocket handshake, not a reply anyone can cache. Setting a
+  // header rebuilds the Response, and a rebuilt Response loses the `webSocket`
+  // that is the entire point of it — the socket would open and then never
+  // deliver anything. `/api/live` is mounted above this middleware so it
+  // should never arrive here anyway; this is what makes that ordering a
+  // safeguard rather than the only thing holding the feature up.
+  if (c.res.status === 101) return;
   if (!c.res.headers.has("Cache-Control")) {
     c.header("Cache-Control", "no-store");
   }

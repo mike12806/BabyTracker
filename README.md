@@ -271,6 +271,21 @@ parent's bell — possibly one they haven't read — and destroy the record the
 feed exists to keep. Every dismissal can be undone from the drawer. The feed
 keeps 30 days and is pruned by the daily cron.
 
+## Live updates
+
+Log a feed on one phone and it appears on the other one's dashboard straight
+away, rather than up to a minute later. Each device holds a WebSocket to the
+child it is looking at; every write tells that child's Durable Object, which
+nudges everyone else watching. The nudge carries no entry data — it only says
+"something changed", and the app fetches it over the ordinary API, so nothing
+is cached and nothing can be stale.
+
+The poll it replaced is still there underneath, at five minutes instead of one.
+A socket that has quietly stopped delivering looks exactly like a quiet
+afternoon, and this app would rather pay for a slow poll than show a stale
+number. If the socket cannot be established at all the app notices after a few
+attempts and goes back to polling every minute, which is where it started.
+
 ## Offline behaviour
 
 The app is installed as a PWA and used in places the wifi doesn't reach, so

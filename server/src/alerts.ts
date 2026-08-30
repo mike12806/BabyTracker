@@ -19,6 +19,7 @@
  */
 
 import type { Env } from "./types/env.js";
+import { notifyChange } from "./live.js";
 
 export type AlertKind = "diaper" | "feeding" | "feeding_trend";
 
@@ -60,7 +61,18 @@ export async function recordAlert(env: Env, alert: NewAlert): Promise<boolean> {
     )
       .bind(alert.childId, alert.kind, alert.title, alert.body, alert.url ?? "/", alert.dedupeKey)
       .run();
-    return (result.meta?.changes ?? 0) > 0;
+    const recorded = (result.meta?.changes ?? 0) > 0;
+
+    // Only on a row that was actually written. `ON CONFLICT DO NOTHING` means
+    // a doubled cron firing lands here twice for one occasion, and nudging on
+    // the second would have every open app refetch to find the alert it is
+    // already showing.
+    //
+    // No origin id: this is a cron, not a device, so there is no connection to
+    // skip and everyone watching the child should hear it.
+    if (recorded) await notifyChange(env, alert.childId, "alerts");
+
+    return recorded;
   } catch (error) {
     console.error(`Failed to record the alert "${alert.dedupeKey}":`, error);
     return false;
