@@ -24,6 +24,13 @@ export interface PushPayload {
   title: string;
   body: string;
   url: string;
+  /**
+   * Notification `tag`, when the message is one the app may want to take back
+   * off the screen later — reminders are (see `reminderNotificationTag`),
+   * feeding-trend alerts are not. Left out of the JSON entirely when absent,
+   * so an untagged push is byte for byte what it was before this existed.
+   */
+  tag?: string;
 }
 
 function base64UrlToBytes(b64url: string): Uint8Array {

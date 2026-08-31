@@ -31,6 +31,18 @@ const NOT_DISMISSED = `NOT EXISTS (
   SELECT 1 FROM alert_dismissals d WHERE d.alert_id = a.id AND d.user_id = ?
 )`;
 
+/**
+ * "The thing this alert was raised about is still true."
+ *
+ * An overdue reminder is answered by the next feed or diaper change being
+ * logged, which stamps `resolved_at` — see
+ * `migrations/0021_add_alert_resolution.sql`. Unlike a dismissal this is not
+ * per user: the gap ended for everyone linked to the child at once, so the
+ * alert leaves both parents' feeds together and takes no `userId` binding
+ * with it. The row itself stays, so the record of what fired survives.
+ */
+const UNRESOLVED = "a.resolved_at IS NULL";
+
 interface AlertRow {
   id: number;
   child_id: number;
@@ -54,7 +66,9 @@ interface AlertRow {
  * window counts as unread, which is the honest answer.
  *
  * Alerts this user has dismissed are left out of both the list and the count,
- * and only for them — see `POST /:id/dismiss`.
+ * and only for them — see `POST /:id/dismiss`. Resolved alerts are left out
+ * too, but for everyone: an overdue reminder is answered the moment the next
+ * feed or diaper change is logged, and that is true of whoever is reading.
  *
  * The bell refetches this on every foreground poll, so it is on the app's
  * hot path. It stays cheap by construction rather than by caching: `alerts`
@@ -79,7 +93,7 @@ alerts.get("/", async (c) => {
          FROM alerts a
          JOIN children c ON c.id = a.child_id
          JOIN user_children uc ON uc.child_id = a.child_id
-        WHERE uc.user_id = ? AND ${NOT_DISMISSED}
+        WHERE uc.user_id = ? AND ${UNRESOLVED} AND ${NOT_DISMISSED}
         ORDER BY a.created_at DESC, a.id DESC
         LIMIT ?`,
     )
@@ -89,7 +103,7 @@ alerts.get("/", async (c) => {
       `SELECT COUNT(*) AS n
          FROM alerts a
          JOIN user_children uc ON uc.child_id = a.child_id
-        WHERE uc.user_id = ? AND ${NOT_DISMISSED} AND (? IS NULL OR a.created_at > ?)`,
+        WHERE uc.user_id = ? AND ${UNRESOLVED} AND ${NOT_DISMISSED} AND (? IS NULL OR a.created_at > ?)`,
     )
       .bind(userId, userId, lastReadAt, lastReadAt)
       .first<{ n: number }>(),

@@ -5,4 +5,5 @@ export const feedings = createChildScopedCrud({
   columns: ["type", "start_time", "end_time", "amount", "amount_unit", "notes"],
   requiredColumns: ["type", "start_time"],
   orderBy: "start_time",
+  clearsReminderKind: "feeding",
 });

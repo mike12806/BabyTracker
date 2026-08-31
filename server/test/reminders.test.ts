@@ -1,6 +1,13 @@
 import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from "vitest";
 import { env } from "cloudflare:test";
-import { enqueueReminderChecks, deliverReminder, enqueueConfirmation, type ReminderJob } from "../src/scheduled/reminders.js";
+import {
+  enqueueReminderChecks,
+  deliverReminder,
+  enqueueConfirmation,
+  clearReminderAlerts,
+  reminderNotificationTag,
+  type ReminderJob,
+} from "../src/scheduled/reminders.js";
 import { generateVapidKeys } from "../src/pushSend.js";
 import { applyMigrations } from "./helpers";
 
@@ -234,5 +241,110 @@ describe("enqueueConfirmation", () => {
     await enqueueConfirmation({ ...env, ...VAPID_ENV, REMINDER_QUEUE: undefined } as unknown as typeof env, sub!.id);
 
     expect(fetchSpy).toHaveBeenCalled();
+  });
+});
+
+describe("clearReminderAlerts", () => {
+  beforeEach(async () => {
+    await applyMigrations(env.DB);
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2024-01-15T12:00:00.000Z"));
+    await seedChildWithSubscriber();
+    await env.DB.prepare(
+      "INSERT INTO feedings (child_id, start_time, type) VALUES (1, '2024-01-15T08:00:00.000Z', 'bottle_formula')"
+    ).run();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it("closes the open reminder once the child is no longer overdue", async () => {
+    await enqueueReminderChecks({ ...env, REMINDER_QUEUE: fakeQueue().binding } as unknown as typeof env);
+    await env.DB.prepare(
+      "INSERT INTO feedings (child_id, start_time, type) VALUES (1, '2024-01-15T11:58:00.000Z', 'bottle_formula')"
+    ).run();
+
+    expect(await clearReminderAlerts(env as unknown as typeof env, 1, "feeding")).toBe(true);
+
+    const row = await env.DB.prepare("SELECT resolved_at FROM alerts WHERE kind = 'feeding'").first<{
+      resolved_at: string | null;
+    }>();
+    expect(row?.resolved_at).toBe("2024-01-15T12:00:00Z");
+  });
+
+  it("leaves it open when the child is still overdue", async () => {
+    await enqueueReminderChecks({ ...env, REMINDER_QUEUE: fakeQueue().binding } as unknown as typeof env);
+    // Backfilled, and older than the one that was already there — she has
+    // still not been fed since 08:00, so the alert is still true.
+    await env.DB.prepare(
+      "INSERT INTO feedings (child_id, start_time, type) VALUES (1, '2024-01-15T07:00:00.000Z', 'bottle_formula')"
+    ).run();
+
+    expect(await clearReminderAlerts(env as unknown as typeof env, 1, "feeding")).toBe(false);
+
+    const row = await env.DB.prepare("SELECT resolved_at FROM alerts WHERE kind = 'feeding'").first<{
+      resolved_at: string | null;
+    }>();
+    expect(row?.resolved_at).toBeNull();
+  });
+
+  it("frees the gap claim, so the next gap is still notified about", async () => {
+    const first = fakeQueue();
+    await enqueueReminderChecks({ ...env, REMINDER_QUEUE: first.binding } as unknown as typeof env);
+    expect(first.sent.map((j) => j.kind).sort()).toEqual(["diaper", "feeding"]);
+
+    // The feed is logged with the time it actually happened, which is a
+    // couple of minutes *before* the reminder arrived. Without dropping the
+    // spent claim, `last_notified_at` (12:00) would still be ahead of the
+    // newest feeding (11:58) at the next check and the following gap would
+    // pass in silence.
+    await env.DB.prepare(
+      "INSERT INTO feedings (child_id, start_time, type) VALUES (1, '2024-01-15T11:58:00.000Z', 'bottle_formula')"
+    ).run();
+    await clearReminderAlerts(env as unknown as typeof env, 1, "feeding");
+
+    vi.setSystemTime(new Date("2024-01-15T15:00:00.000Z"));
+    const second = fakeQueue();
+    await enqueueReminderChecks({ ...env, REMINDER_QUEUE: second.binding } as unknown as typeof env);
+    expect(second.sent.map((j) => j.kind)).toContain("feeding");
+  });
+
+  it("does nothing when there is no alert to close", async () => {
+    await env.DB.prepare(
+      "INSERT INTO feedings (child_id, start_time, type) VALUES (1, '2024-01-15T11:58:00.000Z', 'bottle_formula')"
+    ).run();
+
+    // The ordinary case — a feed logged with nothing outstanding.
+    expect(await clearReminderAlerts(env as unknown as typeof env, 1, "feeding")).toBe(false);
+  });
+});
+
+describe("reminderNotificationTag", () => {
+  beforeEach(async () => {
+    await applyMigrations(env.DB);
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2024-01-15T12:00:00.000Z"));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("names the child and the kind, so the app can find the notification again", () => {
+    // The client rebuilds this same string from the alerts feed — see
+    // `client/src/utils/reminderNotifications.ts`. Changing the shape on one
+    // side alone leaves answered reminders sitting on the lock screen.
+    expect(reminderNotificationTag(7, "diaper")).toBe("reminder:7:diaper");
+  });
+
+  it("is reachable from the queued job, which carries the child", async () => {
+    await seedChildWithSubscriber();
+    const queue = fakeQueue();
+
+    await enqueueReminderChecks({ ...env, REMINDER_QUEUE: queue.binding } as unknown as typeof env);
+
+    expect(queue.sent.every((job) => job.childId === 1)).toBe(true);
   });
 });

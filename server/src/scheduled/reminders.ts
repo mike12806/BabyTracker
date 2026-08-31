@@ -1,6 +1,6 @@
 import type { Env } from "../types/env.js";
 import { sendPushMessage } from "../pushSend.js";
-import { recordAlert } from "../alerts.js";
+import { recordAlert, resolveAlerts } from "../alerts.js";
 
 /** Queue name, as declared in `wrangler.toml` — see `queueNames.test.ts`. */
 export const REMINDER_QUEUE = "baby-tracker-reminders";
@@ -12,6 +12,16 @@ export interface ReminderJob {
   /** Unused for "confirmation" — there's no child to name. */
   childName: string;
   kind: "diaper" | "feeding" | "confirmation";
+  /**
+   * Which child the reminder is about, carried so the delivered notification
+   * can be tagged with the gap it belongs to — see `reminderNotificationTag`.
+   *
+   * Optional because a job already sitting on the queue when this shipped
+   * doesn't have it, and because a confirmation has no child. A tagless
+   * notification still shows exactly as before; it just isn't one the app can
+   * take off the lock screen later.
+   */
+  childId?: number;
 }
 
 const KIND_CONFIG = {
@@ -29,6 +39,73 @@ const KIND_CONFIG = {
  */
 export function reminderBody(childName: string, kind: "diaper" | "feeding"): string {
   return `No ${KIND_CONFIG[kind].label} logged for ${childName} in over 2 hours 45 minutes.`;
+}
+
+/**
+ * The `tag` a reminder notification is shown under, and the identity the app
+ * uses to take it back off the screen.
+ *
+ * Shared with the client (`client/src/utils/reminderNotifications.ts`), which
+ * rebuilds the same string from the alerts feed: a notification whose tag no
+ * longer names an open alert has been answered and is closed. Keyed on child
+ * and kind rather than on the alert row, because that is the identity the OS
+ * needs — a second reminder for the same child and kind should replace the
+ * one on the lock screen, not stack a duplicate beneath it.
+ */
+export function reminderNotificationTag(childId: number, kind: "diaper" | "feeding"): string {
+  return `reminder:${childId}:${kind}`;
+}
+
+/**
+ * Close the open reminder alerts of one kind for a child, if the entry that
+ * just arrived actually answers them.
+ *
+ * Called from the create path for feedings and diaper changes (see
+ * `routes/crud.ts`). The condition is deliberately the *same* one the cron
+ * uses to raise the alert, asked of the table rather than of the entry that
+ * was just posted: an alert says "nothing logged in over 2 hours 45 minutes",
+ * so it is answered exactly when that has stopped being true. Backfilling
+ * last night's 2am feed therefore does not clear this morning's reminder —
+ * the child is still overdue, the alert is still telling the truth, and
+ * clearing it on the strength of any entry at all would let a bit of
+ * record-keeping silence a live one.
+ *
+ * Returns whether anything was closed.
+ */
+export async function clearReminderAlerts(
+  env: Env,
+  childId: number,
+  kind: "diaper" | "feeding",
+  now = new Date(),
+): Promise<boolean> {
+  const cutoff = new Date(now.getTime() - REMINDER_THRESHOLD_MS).toISOString();
+  const { table, timeColumn } = KIND_CONFIG[kind];
+
+  const recent = await env.DB.prepare(
+    `SELECT 1 AS ok FROM ${table} WHERE child_id = ? AND ${timeColumn} >= ? LIMIT 1`,
+  )
+    .bind(childId, cutoff)
+    .first<{ ok: number }>();
+
+  if (!recent) return false;
+
+  // The gap `reminder_state` is holding open has just been answered, so the
+  // claim on it is spent. Dropping it matters because that row remembers the
+  // *clock time the push went out*, not the entry that ended the gap: give
+  // the feed its real time — 11:58, a minute or two before the reminder that
+  // prompted it landed — and the next check finds `last_notified_at` still
+  // ahead of the newest activity and stays quiet, swallowing the following
+  // gap's reminder entirely. With the row gone the next gap is judged on the
+  // entries alone, which is the only thing that should decide it.
+  //
+  // This cannot make it nag twice about one gap: a fresh notification still
+  // needs a fresh 2 hour 45 minute silence, and we have just established
+  // there isn't one.
+  await env.DB.prepare("DELETE FROM reminder_state WHERE child_id = ? AND kind = ?")
+    .bind(childId, kind)
+    .run();
+
+  return (await resolveAlerts(env, childId, [kind], now)) > 0;
 }
 
 const childNameExpr = `TRIM(first_name || CASE WHEN last_name IS NOT NULL AND last_name != '' THEN ' ' || last_name ELSE '' END)`;
@@ -116,7 +193,7 @@ async function checkOne(
     .all<{ id: number }>();
 
   for (const sub of subscriptions.results) {
-    const job: ReminderJob = { subscriptionId: sub.id, childName, kind };
+    const job: ReminderJob = { subscriptionId: sub.id, childName, kind, childId };
     if (env.REMINDER_QUEUE) {
       await env.REMINDER_QUEUE.send(job);
     } else {
@@ -148,6 +225,9 @@ export async function deliverReminder(env: Env, job: ReminderJob): Promise<void>
     title: "Baby Tracker",
     body: reminderBody(job.childName, job.kind),
     url: "/",
+    // Absent on a job queued before this field existed — the service worker
+    // simply shows an untagged notification then, exactly as it used to.
+    tag: job.childId ? reminderNotificationTag(job.childId, job.kind) : undefined,
   });
 }
 

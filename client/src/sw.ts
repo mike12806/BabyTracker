@@ -82,17 +82,27 @@ registerRoute(
 // Two things push to this app: diaper/feeding reminders (see
 // server/src/scheduled/reminders.ts) and feeding-trend alerts (see
 // server/src/scheduled/feedingTrend.ts). Both send the same
-// { title, body, url } payload, so nothing here needs to tell them apart.
+// { title, body, url } shape, so nothing here needs to tell them apart.
 // The payload is always fresh at the moment it's pushed — the server decides
 // "overdue" or "trending below" right before sending — so unlike API data
 // there's nothing here that can go stale by being shown.
+//
+// A reminder adds a `tag` naming the child and the kind it is about, which
+// does two things. A second reminder for the same gap replaces the one on the
+// lock screen instead of stacking under it; and because the app rebuilds the
+// same tag from the alerts feed, it can take the notification back off once
+// the feed or change it asked for has been logged — see
+// `utils/reminderNotifications.ts` for why that is the app's job and not the
+// server's. Undefined for a trend alert and for anything pushed by a Worker
+// predating the field, which shows untagged exactly as it did before.
 self.addEventListener("push", (event) => {
-  const data: { title?: string; body?: string; url?: string } = event.data?.json() ?? {};
+  const data: { title?: string; body?: string; url?: string; tag?: string } = event.data?.json() ?? {};
   event.waitUntil(
     self.registration.showNotification(data.title ?? "Baby Tracker", {
       body: data.body,
       icon: "/icons/icon-192.png",
       badge: "/icons/icon-192.png",
+      tag: data.tag,
       data: { url: data.url ?? "/" },
     })
   );

@@ -483,3 +483,132 @@ describe("POST /api/alerts/read", () => {
     expect(theirs.unread).toBe(1);
   });
 });
+
+/**
+ * An overdue reminder is a statement about a gap — "nothing logged in over
+ * 2 hours 45 minutes" — so the entry that ends the gap answers it. What is
+ * worth pinning down is *who* it is answered for (everyone linked to the
+ * child, because the gap ended for all of them) and *when* it isn't answered
+ * at all (an entry that leaves the child just as overdue as before).
+ */
+describe("logging the entry an overdue reminder asked for", () => {
+  const app = createTestApp();
+
+  beforeEach(async () => {
+    await applyMigrations(env.DB);
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2024-01-15T12:00:00.000Z"));
+    await env.DB.prepare("INSERT INTO users (id, email, name) VALUES (1, 'a@example.com', 'A')").run();
+    await env.DB.prepare("INSERT INTO users (id, email, name) VALUES (2, 'b@example.com', 'B')").run();
+    await seedChild(1, "Mikey", 1);
+    // Both parents share this child, and so share its alert rows.
+    await env.DB.prepare("INSERT INTO user_children (user_id, child_id) VALUES (2, 1)").run();
+    // Nothing logged for hours: the cron has something to complain about on
+    // both counts.
+    await env.DB.prepare(
+      "INSERT INTO diaper_changes (child_id, time, type) VALUES (1, '2024-01-15T08:00:00.000Z', 'wet')",
+    ).run();
+    await env.DB.prepare(
+      "INSERT INTO feedings (child_id, start_time, type) VALUES (1, '2024-01-15T08:00:00.000Z', 'bottle_formula')",
+    ).run();
+    await enqueueReminderChecks({ ...env, REMINDER_QUEUE: fakeQueue() } as never);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  async function feedFor(email: string): Promise<FeedResponse> {
+    const res = await testRequest(app, env.DB).get("/api/alerts", { "X-Test-Email": email });
+    return (await res.json()) as FeedResponse;
+  }
+
+  /** Log an entry through the real route, as the app does. */
+  async function logFeeding(startTime: string) {
+    return testRequest(app, env.DB).post(
+      "/api/feedings",
+      { child_id: 1, type: "bottle_formula", start_time: startTime },
+      { "X-Test-Email": "a@example.com" },
+    );
+  }
+
+  it("takes the reminder off the feed", async () => {
+    expect((await feedFor("a@example.com")).alerts.map((a) => a.kind).sort()).toEqual(["diaper", "feeding"]);
+
+    const res = await logFeeding("2024-01-15T12:00:00.000Z");
+    expect(res.status).toBe(201);
+
+    // The feeding reminder is answered; the diaper one is not — nobody has
+    // changed her.
+    expect((await feedFor("a@example.com")).alerts.map((a) => a.kind)).toEqual(["diaper"]);
+  });
+
+  it("takes it off the other parent's feed too, and out of their badge", async () => {
+    await logFeeding("2024-01-15T12:00:00.000Z");
+
+    // Unlike a dismissal: the gap ended for whoever was asleep through it as
+    // much as for whoever logged the feed, so leaving it on their bell would
+    // ask them to work out for themselves that it had been dealt with.
+    const theirs = await feedFor("b@example.com");
+    expect(theirs.alerts.map((a) => a.kind)).toEqual(["diaper"]);
+    expect(theirs.unread).toBe(1);
+  });
+
+  it("leaves the reminder standing when the entry doesn't end the gap", async () => {
+    // Backfilling last night's feed is record-keeping, not an answer: she was
+    // last fed at 08:00 before it and is still overdue after it.
+    const res = await logFeeding("2024-01-15T07:00:00.000Z");
+    expect(res.status).toBe(201);
+
+    expect((await feedFor("a@example.com")).alerts.map((a) => a.kind).sort()).toEqual(["diaper", "feeding"]);
+  });
+
+  it("answers only its own kind of reminder", async () => {
+    await testRequest(app, env.DB).post(
+      "/api/diaper-changes",
+      { child_id: 1, time: "2024-01-15T12:00:00.000Z", type: "wet" },
+      { "X-Test-Email": "a@example.com" },
+    );
+
+    expect((await feedFor("a@example.com")).alerts.map((a) => a.kind)).toEqual(["feeding"]);
+  });
+
+  it("keeps the record — answering is not deleting", async () => {
+    await logFeeding("2024-01-15T12:00:00.000Z");
+
+    const row = await env.DB.prepare("SELECT resolved_at FROM alerts WHERE kind = 'feeding'").first<{
+      resolved_at: string | null;
+    }>();
+    expect(row?.resolved_at).toBe("2024-01-15T12:00:00Z");
+  });
+
+  it("still raises the next gap's reminder afterwards", async () => {
+    await logFeeding("2024-01-15T12:00:00.000Z");
+
+    vi.setSystemTime(new Date("2024-01-15T15:30:00.000Z"));
+    await enqueueReminderChecks({ ...env, REMINDER_QUEUE: fakeQueue() } as never);
+
+    // A fresh row for the fresh gap, and it is on the feed — the answered one
+    // stays resolved and out of the way.
+    const feed = await feedFor("a@example.com");
+    expect(feed.alerts.filter((a) => a.kind === "feeding")).toHaveLength(1);
+    const { results } = await env.DB.prepare("SELECT id FROM alerts WHERE kind = 'feeding'").all();
+    expect(results).toHaveLength(2);
+  });
+
+  it("does nothing to a feeding-trend alert, which one feed does not answer", async () => {
+    await env.DB.prepare(
+      `INSERT INTO alerts (child_id, kind, title, body, url, dedupe_key, created_at)
+       VALUES (1, 'feeding_trend', 'Feeding trend', 'Below the usual pace.', '/', 'trend:1', '2024-01-15T11:00:00Z')`,
+    ).run();
+
+    await logFeeding("2024-01-15T12:00:00.000Z");
+
+    // It is a statement about the whole day's pace, not about a gap, so a
+    // single feed is not the thing that settles it.
+    expect((await feedFor("a@example.com")).alerts.map((a) => a.kind).sort()).toEqual([
+      "diaper",
+      "feeding_trend",
+    ]);
+  });
+});

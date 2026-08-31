@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { Env } from "../types/env.js";
 import { insertOnce, readClientRequestId } from "./idempotency.js";
 import { announceChange } from "../live.js";
+import { clearReminderAlerts } from "../scheduled/reminders.js";
 
 type AppEnv = { Bindings: Env; Variables: { userId: number; userEmail: string; userName: string } };
 
@@ -21,6 +22,15 @@ interface CrudRouteConfig {
   requiredColumns: string[];
   /** Column used for default ordering (descending). Defaults to "created_at". */
   orderBy?: string;
+  /**
+   * The overdue reminder an entry in this table answers, if any.
+   *
+   * Set on feedings and diaper changes: those are the two things a reminder
+   * nags about, so logging one is what closes an outstanding alert. Whether
+   * the entry actually ends the gap is `clearReminderAlerts`'s call, not this
+   * flag's — see `scheduled/reminders.ts`.
+   */
+  clearsReminderKind?: "diaper" | "feeding";
 }
 
 /**
@@ -29,7 +39,7 @@ interface CrudRouteConfig {
  * All routes expect child_id as a query param (GET list) or in the body.
  */
 export function createChildScopedCrud(config: CrudRouteConfig) {
-  const { table, columns, requiredColumns, orderBy = "created_at" } = config;
+  const { table, columns, requiredColumns, orderBy = "created_at", clearsReminderKind } = config;
   const router = new Hono<AppEnv>();
 
   // GET / — list entries, filtered by child_id query param
@@ -115,6 +125,20 @@ export function createChildScopedCrud(config: CrudRouteConfig) {
     // create did happen, so this is not an error; there is simply nothing left
     // to hand back, and resurrecting the entry would undo a deliberate delete.
     if (!created) return c.json({ deleted: true });
+
+    // A reminder is a statement about a gap, so the entry that ends the gap
+    // answers it: the alert comes off the bell — everyone's, not just this
+    // caller's — and the notification comes off the lock screen on the next
+    // refresh. Deliberately after the insert rather than instead of part of
+    // it: an alert left standing is a stale bell, not a lost entry, so it
+    // must not be able to fail the save. `clearReminderAlerts` swallows its
+    // own errors for the same reason.
+    //
+    // A deduplicated retry lands here too, and harmlessly: the second call
+    // finds nothing open and does nothing. Same for an outbox flush, which
+    // is the case that matters most — the phone that logged the feed offline
+    // is the one still showing the reminder.
+    if (clearsReminderKind) await clearReminderAlerts(c.env, childId, clearsReminderKind);
 
     await announceChange(c, childId);
 
