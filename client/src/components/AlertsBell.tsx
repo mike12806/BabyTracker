@@ -22,6 +22,7 @@ import { useDataRefresh } from "../hooks/useDataRefresh";
 import { usePushNotifications } from "../hooks/usePushNotifications";
 import { useNotification } from "../hooks/useNotification";
 import { formatRelativeTime } from "../utils/dateTime";
+import { closeAnsweredReminderNotifications } from "../utils/reminderNotifications";
 import { buildCategoryColors, type CategoryKey } from "../theme/categoryColors";
 import type { Alert } from "../types/models";
 
@@ -39,6 +40,11 @@ import type { Alert } from "../types/models";
  *  - **It is never cached**, like every other read in this app. A closed
  *    drawer holds whatever the last fetch returned, and the feed refetches
  *    with everything else on `refreshKey`.
+ *  - **It tidies the lock screen.** A push is a copy of an alert that lives on
+ *    the device, and nothing the server does can retract it. Every successful
+ *    fetch closes the reminder notifications this feed no longer accounts for,
+ *    so the phone stops saying nobody has fed her once somebody has — see
+ *    `utils/reminderNotifications.ts`.
  *  - **Dismissing hides, for this user only.** The alert row is shared with
  *    everyone linked to the child, so tidying your own bell must not take an
  *    unread alert off theirs. It is offered with an undo because this app gets
@@ -91,6 +97,14 @@ export default function AlertsBell() {
       setAlerts(feed.alerts);
       setUnread(feed.unread);
       setFailed(false);
+      // The feed is the app's only complete picture of what is still
+      // outstanding, so it is also where the lock screen gets tidied: a
+      // reminder that has been answered — usually by the feed or change
+      // somebody just logged — is taken off this device's notifications
+      // here. Only on a fetch that succeeded; an empty list from a failed
+      // one is not evidence that anything was answered. Not awaited: it is
+      // housekeeping, and the badge should not wait on the OS for it.
+      void closeAnsweredReminderNotifications(feed.alerts);
       return feed;
     } catch {
       // The bell is garnish next to the numbers on the page behind it — the

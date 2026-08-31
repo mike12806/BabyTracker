@@ -1,0 +1,31 @@
+-- When the thing an alert was raised about stops being true.
+--
+-- The reminder alerts here are all of the form "nothing has been logged for
+-- this child in over 2 hours 45 minutes". That is a statement about a gap,
+-- and the moment the next feed or diaper change is logged the gap is over --
+-- the alert is answered, for everyone, not just for whoever happened to log
+-- it. Leaving it on the bell (and on the lock screen) after that asks the
+-- other parent to work out for themselves that it has already been dealt
+-- with, which is exactly the nagging the reminder_state claim exists to
+-- avoid.
+--
+-- Resolved, not deleted, and not written as a row per user in
+-- `alert_dismissals`:
+--
+--  * Deleting would destroy the record the feed exists to keep -- an alert
+--    that fired and was answered half an hour later still happened, and the
+--    dedupe_key that stops a doubled cron re-logging it lives on this row.
+--  * A dismissal is one person tidying their own bell, so it is deliberately
+--    per user. This is not that: the condition itself ended, so it ends for
+--    every reader at once, including the ones who never opened the app.
+--
+-- NULL means still open. The feed hides resolved alerts from both the list
+-- and the unread count.
+ALTER TABLE alerts ADD COLUMN resolved_at TEXT;
+
+-- Every write path for a feeding or a diaper change asks "is there an open
+-- reminder of this kind for this child?", so that lookup is on the app's
+-- hottest path rather than the cron's. Partial, because the answer is only
+-- ever wanted for open rows and almost every row in the table is resolved or
+-- of another kind.
+CREATE INDEX idx_alerts_open_by_child_kind ON alerts(child_id, kind) WHERE resolved_at IS NULL;

@@ -271,6 +271,26 @@ parent's bell — possibly one they haven't read — and destroy the record the
 feed exists to keep. Every dismissal can be undone from the drawer. The feed
 keeps 30 days and is pruned by the daily cron.
 
+An overdue reminder also clears itself once it has been answered. It says
+nothing has been logged in over 2 hours 45 minutes, so logging the next feed
+or diaper change settles it: the alert leaves the bell, and it leaves it for
+both parents at once, because the gap ended for whoever slept through it as
+much as for whoever ended it. That is the one difference from a dismissal,
+which is one person tidying their own list. The row itself stays, marked
+resolved, so the record of what fired survives.
+
+Backfilling doesn't count. Whether the alert has been answered is decided by
+asking the same question the cron asks — is this child still overdue? — so
+logging last night's 2am feed this morning leaves today's reminder standing,
+which is right, because she still hasn't been fed.
+
+The notification on the lock screen goes too. Nothing the server does can
+retract a push once it has been delivered, so the app closes it: reminder
+notifications are tagged with the child and kind they are about, and every
+time the bell refreshes it closes the ones its feed no longer accounts for.
+That covers the other parent's phone as well as the one the feed was logged
+on, and it needs no second push to do it.
+
 ## Live updates
 
 Log a feed on one phone and it appears on the other one's dashboard straight
