@@ -95,19 +95,24 @@ jobs:
       # Unlike a queue, a KV namespace is bound by *id*, and that id is in
       # wrangler.toml — in git. So this step cannot self-heal the way the queue
       # step above does: creating a namespace here would produce an id nothing
-      # references. What it can do is turn the failure the deploy would give
-      # anyway ("binding not found") into the two lines that fix it. The probe
-      # is a cheap listing, which fails if and only if the id in wrangler.toml
-      # does not resolve.
+      # references. What it can do is fail before the upload rather than after,
+      # so a Worker is never left live with a binding that goes nowhere. The
+      # probe is a cheap listing, which fails if and only if the binding in
+      # wrangler.toml does not resolve to a namespace this token can read.
       #
-      # Needs Workers KV Storage:Edit on CLOUDFLARE_API_TOKEN, same token as
-      # everything else here.
+      # wrangler's own output is echoed on failure, and that is the point of
+      # the step rather than an aside: exactly two things make this fail — the
+      # namespace is genuinely missing, or the token lacks Workers KV Storage —
+      # and only wrangler's message distinguishes them. Swallowing it (the
+      # first version of this step sent stderr to /dev/null) left a reader with
+      # a hint naming both causes and no evidence for either.
       - name: Verify KV namespace
         run: |
-          if npx wrangler kv key list --binding CACHE --remote --prefix __kv_meta > /dev/null 2>&1; then
+          if OUTPUT=$(npx wrangler kv key list --binding CACHE --remote --prefix __kv_meta 2>&1); then
             echo "CACHE namespace resolves — continuing."
           else
-            echo "::error::The CACHE namespace id in server/wrangler.toml does not resolve on this account. Run 'npx wrangler kv namespace create baby-tracker-cache' and put the id it prints into the [[kv_namespaces]] block, or check that CLOUDFLARE_API_TOKEN has the Workers KV Storage:Edit permission."
+            echo "$OUTPUT"
+            echo "::error::Could not read the CACHE namespace bound in server/wrangler.toml — see wrangler's output above. Either CLOUDFLARE_API_TOKEN is missing the Workers KV Storage:Edit permission (an authentication or authorization error), or the namespace id does not exist on this account (create one with 'npx wrangler kv namespace create baby-tracker-cache' and put the id it prints into the [[kv_namespaces]] block)."
             exit 1
           fi
         working-directory: server
