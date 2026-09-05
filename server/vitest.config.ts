@@ -8,6 +8,7 @@ export default defineConfig({
       miniflare: {
         d1Databases: { DB: "test-db" },
         r2Buckets: { PHOTOS: "test-photos" },
+        kvNamespaces: { CACHE: "test-cache" },
       },
     }),
   ],

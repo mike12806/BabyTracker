@@ -19,6 +19,9 @@
  */
 
 import type { Env } from "../types/env.js";
+import { cacheDelete, cached } from "../kv/cache.js";
+import { boopPoolKey } from "../kv/keys.js";
+import { BOOP_POOL_TTL_SECONDS } from "../kv/ttl.js";
 
 export type BoopMood = "day" | "night";
 
@@ -174,6 +177,11 @@ async function storeBoopLines(env: Env, mood: BoopMood, lines: string[]): Promis
        SELECT id FROM boop_lines WHERE mood = ? ORDER BY created_at DESC, id DESC LIMIT ?
      )`,
   ).bind(mood, mood, POOL_CAP_PER_MOOD).run();
+
+  // The cached pool now describes rows that are no longer the newest ones.
+  // Both moods share one cache entry, so either mood's refresh drops it — a
+  // pool this small is not worth splitting to save one D1 read a week.
+  await cacheDelete(env, boopPoolKey());
 }
 
 export interface MoodRefreshResult {
@@ -244,9 +252,22 @@ interface BoopLineRow {
   body: string;
 }
 
-/** The current pool for both moods, newest first — what the client merges
- *  with its own built-in lines. */
+/**
+ * The current pool for both moods, newest first — what the client merges with
+ * its own built-in lines.
+ *
+ * Cached in KV, and close to the ideal candidate for it: the rows change once
+ * a week, every session fetches them, and the value is a handful of joke
+ * captions, so an hour-old copy is not a state anyone could be misled by. The
+ * two D1 reads underneath only happen after a refresh has dropped the key, or
+ * once an hour, whichever comes first.
+ */
 export async function fetchBoopLinePool(env: Env): Promise<Record<BoopMood, string[]>> {
+  return cached(env, boopPoolKey(), BOOP_POOL_TTL_SECONDS, () => readBoopLinePool(env));
+}
+
+/** The pool straight from D1, bypassing the cache. */
+async function readBoopLinePool(env: Env): Promise<Record<BoopMood, string[]>> {
   const [day, night] = await Promise.all(
     (["day", "night"] as const).map((mood) =>
       env.DB.prepare(

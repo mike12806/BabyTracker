@@ -1,5 +1,8 @@
 import { MiddlewareHandler } from "hono";
 import type { Env } from "../types/env.js";
+import { cacheDelete, cacheGet, cachePut } from "../kv/cache.js";
+import { jwksKey, userKey } from "../kv/keys.js";
+import { JWKS_TTL_SECONDS, USER_TTL_SECONDS } from "../kv/ttl.js";
 
 type AppEnv = { Bindings: Env; Variables: { userId: number; userEmail: string; userName: string } };
 
@@ -12,6 +15,22 @@ interface JwtPayload {
   iss?: string;
 }
 
+/** A JWK as Access publishes it — `kid` is what picks one out of the set. */
+type SigningKey = JsonWebKey & { kid?: string };
+
+interface Jwks {
+  keys: SigningKey[];
+}
+
+interface CachedUser {
+  id: number;
+  email: string;
+  name: string;
+}
+
+const UPSERT_USER_SQL =
+  "INSERT INTO users (email, name, created_at, updated_at) VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), strftime('%Y-%m-%dT%H:%M:%SZ', 'now')) ON CONFLICT(email) DO UPDATE SET name = excluded.name, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')";
+
 function decodeJwtPayload(token: string): JwtPayload | null {
   const parts = token.split(".");
   if (parts.length !== 3) return null;
@@ -23,7 +42,53 @@ function decodeJwtPayload(token: string): JwtPayload | null {
   }
 }
 
-async function verifyJwt(token: string, certsUrl: string, audience: string): Promise<JwtPayload | null> {
+/** Ask Cloudflare Access for the current signing keys. */
+async function fetchJwks(certsUrl: string): Promise<Jwks | null> {
+  const certsRes = await fetch(certsUrl);
+  if (!certsRes.ok) return null;
+  return (await certsRes.json()) as Jwks;
+}
+
+/**
+ * The signing key for one `kid`, from KV when possible.
+ *
+ * Before this cache every single authenticated request made a subrequest to
+ * `cdn-cgi/access/certs` before it could do anything else — the same three or
+ * four keys, fetched again for every page load, on the critical path of every
+ * response. They are public, identical for everyone, and rotate on the order of
+ * weeks, which is about as good as a cache candidate gets.
+ *
+ * The rotation is handled by the miss rather than by the TTL: an unknown `kid`
+ * re-fetches immediately, so the first request signed with a new key pays one
+ * extra fetch and every request after it is served from KV. Without that, a
+ * rotation would 401 every caregiver until the hour ran out.
+ */
+async function signingKeyFor(env: Env, certsUrl: string, kid: string | undefined): Promise<SigningKey | null> {
+  const key = jwksKey();
+  const cachedJwks = await cacheGet<Jwks>(env, key);
+  const fromCache = cachedJwks?.keys?.find((k) => k.kid === kid);
+  if (fromCache) return fromCache;
+
+  const fresh = await fetchJwks(certsUrl);
+  if (!fresh?.keys) return null;
+  const match = fresh.keys.find((k) => k.kid === kid) ?? null;
+
+  // Only rewrite when the fetch actually taught us something. A `kid` that is
+  // still unknown after a round trip is a bad token, not a rotation, and
+  // rewriting the identical key set for each one would spend the per-key KV
+  // write limit on requests that are going to be rejected anyway.
+  if (match || cachedJwks === undefined) {
+    await cachePut(env, key, fresh, JWKS_TTL_SECONDS);
+  }
+  return match;
+}
+
+async function verifyJwt(
+  env: Env,
+  token: string,
+  certsUrl: string,
+  audience: string,
+): Promise<JwtPayload | null> {
   const payload = decodeJwtPayload(token);
   if (!payload) return null;
 
@@ -33,15 +98,11 @@ async function verifyJwt(token: string, certsUrl: string, audience: string): Pro
   // Verify expiration
   if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) return null;
 
-  // Fetch CF Access public keys and verify signature
+  // Verify the signature against Access's published keys
   const parts = token.split(".");
   const header = JSON.parse(atob(parts[0].replace(/-/g, "+").replace(/_/g, "/"))) as { kid?: string; alg?: string };
 
-  const certsRes = await fetch(certsUrl);
-  if (!certsRes.ok) return null;
-
-  const certs = (await certsRes.json()) as { keys: JsonWebKey[] };
-  const matchingKey = certs.keys.find((k: JsonWebKey & { kid?: string }) => k.kid === header.kid);
+  const matchingKey = await signingKeyFor(env, certsUrl, header.kid);
   if (!matchingKey) return null;
 
   const key = await crypto.subtle.importKey(
@@ -61,22 +122,54 @@ async function verifyJwt(token: string, certsUrl: string, audience: string): Pro
   return payload;
 }
 
+/**
+ * The `users` row for this identity, creating it on first sight.
+ *
+ * Auth is the one path every request takes, so what used to be here — an
+ * unconditional upsert plus a select, two D1 round trips before a route
+ * handler saw the request — was the most-repeated database work in the Worker,
+ * and almost all of it rewrote a row with the values it already held.
+ *
+ * The cached copy is only trusted while the name still matches the one in the
+ * JWT, so a caregiver who renames their account still gets the upsert on their
+ * very next request rather than waiting out the TTL. The row's `updated_at`
+ * stops moving on every request as a result, which nothing reads; what it
+ * recorded was the last time the user made a request, not the last time
+ * anything about them changed.
+ *
+ * Auto-creation is unaffected: an email nobody has seen cannot be in the cache,
+ * so it takes the same insert it always did.
+ */
+async function resolveUser(env: Env, email: string, name: string): Promise<CachedUser | null> {
+  const key = userKey(email);
+
+  const hit = await cacheGet<CachedUser>(env, key);
+  if (hit && hit.name === name && hit.email === email) return hit;
+
+  await env.DB.prepare(UPSERT_USER_SQL).bind(email, name).run();
+
+  const user = await env.DB.prepare("SELECT id, email, name FROM users WHERE email = ?")
+    .bind(email)
+    .first<CachedUser>();
+
+  if (!user) {
+    // Whatever went wrong, do not leave a cached identity behind that outlives
+    // the row it describes.
+    await cacheDelete(env, key);
+    return null;
+  }
+
+  await cachePut(env, key, user, USER_TTL_SECONDS);
+  return user;
+}
+
 export const authMiddleware: MiddlewareHandler<AppEnv> = async (c, next) => {
   // Dev mode: bypass JWT verification for local development
   if (c.env.DEV_MODE === "true") {
     const email = c.req.header("X-Dev-Email") || "dev@example.com";
     const name = c.req.header("X-Dev-Name") || "Dev User";
 
-    await c.env.DB.prepare(
-      "INSERT INTO users (email, name, created_at, updated_at) VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), strftime('%Y-%m-%dT%H:%M:%SZ', 'now')) ON CONFLICT(email) DO UPDATE SET name = excluded.name, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')"
-    )
-      .bind(email, name)
-      .run();
-
-    const user = await c.env.DB.prepare("SELECT id, email, name FROM users WHERE email = ?")
-      .bind(email)
-      .first<{ id: number; email: string; name: string }>();
-
+    const user = await resolveUser(c.env, email, name);
     if (!user) {
       return c.json({ error: "Failed to resolve user" }, 500);
     }
@@ -102,7 +195,7 @@ export const authMiddleware: MiddlewareHandler<AppEnv> = async (c, next) => {
   }
 
   const certsUrl = `https://${c.env.CF_ACCESS_TEAM_DOMAIN}/cdn-cgi/access/certs`;
-  const payload = await verifyJwt(jwt, certsUrl, c.env.CF_ACCESS_AUD);
+  const payload = await verifyJwt(c.env, jwt, certsUrl, c.env.CF_ACCESS_AUD);
 
   if (!payload || !payload.email) {
     return c.json({ error: "Unauthorized" }, 401);
@@ -111,17 +204,7 @@ export const authMiddleware: MiddlewareHandler<AppEnv> = async (c, next) => {
   const email = payload.email;
   const name = payload.name || email;
 
-  // Upsert user on every request
-  await c.env.DB.prepare(
-    "INSERT INTO users (email, name, created_at, updated_at) VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), strftime('%Y-%m-%dT%H:%M:%SZ', 'now')) ON CONFLICT(email) DO UPDATE SET name = excluded.name, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')"
-  )
-    .bind(email, name)
-    .run();
-
-  const user = await c.env.DB.prepare("SELECT id, email, name FROM users WHERE email = ?")
-    .bind(email)
-    .first<{ id: number; email: string; name: string }>();
-
+  const user = await resolveUser(c.env, email, name);
   if (!user) {
     return c.json({ error: "Failed to resolve user" }, 500);
   }

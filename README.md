@@ -23,6 +23,7 @@ A baby tracking application inspired by [Baby Buddy](https://github.com/babybudd
 | Server | Hono (TypeScript) | Cloudflare Workers |
 | Database | D1 (SQLite) | Cloudflare D1 |
 | Object Storage | R2 | Cloudflare R2 |
+| Read cache | Workers KV | In front of D1 and the Access JWKS; never a source of truth |
 | Auth | Cloudflare Access | JWT validation |
 | Email delivery | Cloudflare Queues + SES | Retried, with a dead letter queue |
 | Daily note generation | Cloudflare Queues | Retried; template note written up front |
@@ -344,6 +345,69 @@ A few deliberate limits:
   can't tell "logged twice" from "fed twice", and deleting a real second feed
   is the worse mistake.
 
+## The KV cache
+
+D1 stays the source of truth for everything. Workers KV sits in front of it as
+a read cache, for the handful of values where a slightly stale answer is still
+a correct answer — see `server/src/kv/`.
+
+That last part is the whole rule, and it is stricter than "is this read hot".
+KV is eventually consistent: a write can take up to a minute to be visible in
+every location. For a note written by a 5am cron that is nothing; for a feed
+logged thirty seconds ago by the other parent it would be the bug this app most
+needs to not have. **Entry data is never cached in KV**, and neither are
+settings, which one caregiver changes and expects to see immediately.
+
+What is cached, and what each one was costing:
+
+| Key | Was | Now |
+|-----|-----|-----|
+| `v1:access-jwks` | A subrequest to `cdn-cgi/access/certs` on **every** authenticated request | One fetch an hour, plus one immediately on an unrecognised `kid` so a key rotation is picked up in a single request rather than after the TTL |
+| `v1:user:<email>` | A `users` upsert **and** a select before any route handler ran | One D1 round trip per caregiver per five minutes; still upserts the moment the name in the Access JWT changes, so a rename is not delayed |
+| `v1:boop-lines` | Two D1 reads per session, for rows a cron rewrites weekly | One read an hour, dropped as soon as a refresh stores new lines |
+| `v1:daily-note:<child>` | One D1 read per dashboard load, for a row written once a day | One read an hour, dropped by `storeNote` — including when the queue consumer replaces the template note with the AI one |
+
+Two properties keep this from being able to break anything:
+
+- **The binding is optional.** `Env.CACHE` is optional like `LIVE` and the
+  queues, and every helper in `src/kv/cache.ts` swallows its own errors. With
+  no binding, or with KV having a bad minute, every call degrades to a miss and
+  the caller reads D1 exactly as it did before. Tests run this way by default.
+- **Invalidation is the mechanism, the TTL is the backstop.** Each value is
+  dropped explicitly by whatever writes it; the TTL only bounds the damage when
+  that is missed.
+
+### Migrations
+
+KV has no migration system of its own, so this repo brings one:
+`server/scripts/kv-migrate.mjs`, run by `deploy-server.yml` after every deploy.
+It does two things.
+
+**Numbered migrations** in `server/kv-migrations/` run once each, in filename
+order, recorded under a `__kv_migration:` key in the namespace itself. Merging
+a file is all it takes to ship it, exactly like the D1 migrations.
+
+**The version sweep** runs every time and is deliberately never recorded. Every
+cache key lives behind `KV_SCHEMA_VERSION` in `server/src/kv/keys.ts`, so
+changing the *shape* of a stored value does not need a migration at all — you
+bump the constant, and the deployed Worker stops reading the old keys at the
+instant it goes live, with no window in which new code could deserialize a
+value written by old code. The sweep then deletes what was abandoned. Because
+it is not ledgered, it runs again after the next bump with no new file to
+remember to write.
+
+These run *after* `wrangler deploy` while the D1 migrations run before it, and
+that is on purpose: a cache migration can never be a precondition for the new
+code being correct, and the sweep specifically must run afterwards, since until
+the upload lands the "abandoned" keys are still the ones the live Worker is
+reading. See `server/kv-migrations/README.md`.
+
+```sh
+npm run kv:migrate -w server          # miniflare's local KV
+npm run kv:status -w server           # what a remote run would do
+npm run kv:migrate:remote -w server   # the real namespace
+```
+
 ## Deployment
 
 ### 1. Create Cloudflare resources
@@ -362,11 +426,21 @@ npx wrangler queues create baby-tracker-daily-note
 npx wrangler queues create baby-tracker-boop-lines
 npx wrangler queues create baby-tracker-reminders
 npx wrangler queues create baby-tracker-feeding-trend
+
+# KV namespace for the read cache — put the id it prints into the
+# [[kv_namespaces]] block in server/wrangler.toml
+npx wrangler kv namespace create baby-tracker-cache
 ```
 
 Queues require the Workers Paid plan, and the API token used by CI needs
-**Queues:Edit** in addition to Workers and D1 permissions — `wrangler deploy`
-rejects a Worker whose queue bindings do not resolve.
+**Queues:Edit** and **Workers KV Storage:Edit** in addition to Workers and D1
+permissions — `wrangler deploy` rejects a Worker whose queue or KV bindings do
+not resolve.
+
+Unlike the queues, the KV namespace is bound by id rather than by name, so the
+deploy workflow cannot create it for you: an id it generated would not be the
+one in `wrangler.toml`. It checks instead, and fails with these two lines if
+the binding does not resolve.
 
 ### Secrets
 
@@ -387,13 +461,17 @@ verified recipients).
 
 ### 2. Configure
 
-Update `server/wrangler.toml` with your D1 database ID, Cloudflare Access team domain, and audience tag.
+Update `server/wrangler.toml` with your D1 database ID, KV namespace ID, Cloudflare Access team domain, and audience tag.
 
 ### 3. Run migrations
 
 ```sh
 npx wrangler d1 migrations apply baby-tracker-db
+npm run kv:migrate:remote -w server
 ```
+
+Both are idempotent and both run automatically on every deploy — the D1 ones
+before the upload, the KV ones after it.
 
 ### 4. Deploy
 
@@ -424,10 +502,13 @@ Add both the Pages site and Worker API to a Cloudflare Access application to pro
 │   └── test/
 ├── server/              # Hono Cloudflare Worker
 │   ├── src/
+│   │   ├── kv/           # Read cache over KV (keys, TTLs, helpers)
 │   │   ├── middleware/   # Auth (CF Access JWT)
 │   │   ├── routes/       # REST API routes
 │   │   └── types/        # Env bindings
 │   ├── migrations/       # D1 SQL migrations
+│   ├── kv-migrations/    # KV migrations, applied by scripts/kv-migrate.mjs
+│   ├── scripts/          # One-off tooling (VAPID keygen, KV migration runner)
 │   ├── seed/             # Sample data
 │   └── test/
 └── package.json          # npm workspaces root

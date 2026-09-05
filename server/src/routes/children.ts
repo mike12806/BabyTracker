@@ -2,6 +2,9 @@ import { Hono } from "hono";
 import type { Env } from "../types/env.js";
 import { claimClientRequestId, findClaimedRowId, readClientRequestId } from "./idempotency.js";
 import { announceChange } from "../live.js";
+import { cached } from "../kv/cache.js";
+import { dailyNoteKey } from "../kv/keys.js";
+import { DAILY_NOTE_TTL_SECONDS } from "../kv/ttl.js";
 
 type AppEnv = { Bindings: Env; Variables: { userId: number; userEmail: string; userName: string } };
 
@@ -235,6 +238,12 @@ children.post("/:id/photo", async (c) => {
 // leave the card blank rather than describing last Tuesday as "yesterday".
 const DAILY_NOTE_MAX_AGE_DAYS = 3;
 
+interface DailyNoteRow {
+  note_date: string;
+  body: string;
+  source: string;
+}
+
 children.get("/:id/daily-note", async (c) => {
   const childId = parseInt(c.req.param("id"), 10);
 
@@ -246,19 +255,32 @@ children.get("/:id/daily-note", async (c) => {
     return c.json({ error: "Child not found" }, 404);
   }
 
+  // Cached in KV, and dropped by `storeNote` whenever a note is written, so
+  // the hour-long TTL is only ever the backstop. Note what is cached: the
+  // newest note there is, with no age filter, and the "is it recent enough to
+  // show" cutoff applied afterwards. Caching the *answer* instead would freeze
+  // the cutoff at the moment of the miss, and a note could then go on being
+  // served for an hour after it stopped qualifying.
+  //
+  // `null` is cached too — a child whose cron has not run yet is a normal
+  // answer, and an uncacheable one would mean every dashboard load for that
+  // child went to D1 anyway.
+  const note = await cached(c.env, dailyNoteKey(childId), DAILY_NOTE_TTL_SECONDS, async () => {
+    const row = await c.env.DB.prepare(
+      `SELECT note_date, body, source FROM child_daily_notes
+       WHERE child_id = ?
+       ORDER BY note_date DESC LIMIT 1`
+    )
+      .bind(childId)
+      .first<DailyNoteRow>();
+    return row ?? null;
+  });
+
   const oldest = new Date(Date.now() - DAILY_NOTE_MAX_AGE_DAYS * 86400000)
     .toISOString()
     .slice(0, 10);
 
-  const note = await c.env.DB.prepare(
-    `SELECT note_date, body, source FROM child_daily_notes
-     WHERE child_id = ? AND note_date >= ?
-     ORDER BY note_date DESC LIMIT 1`
-  )
-    .bind(childId, oldest)
-    .first<{ note_date: string; body: string; source: string }>();
-
-  return c.json({ note: note ?? null });
+  return c.json({ note: note && note.note_date >= oldest ? note : null });
 });
 
 // GET /api/children/:id/photo — serve the photo from R2

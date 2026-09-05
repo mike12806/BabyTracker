@@ -25,6 +25,11 @@ class_name = "ChildLive"
 tag = "v1"
 new_sqlite_classes = ["ChildLive"]
 
+# The KV cache, like D1 and R2 above, comes from vitest.config.ts — Miniflare
+# emulates KV locally at no cost, so the cache is exercised for real rather than
+# stubbed. Individual tests still choose whether to pass the binding: most do
+# not, which is also what production does when KV is unreachable.
+
 [vars]
 CF_ACCESS_TEAM_DOMAIN = "test.cloudflareaccess.com"
 CF_ACCESS_AUD = "test-aud"
