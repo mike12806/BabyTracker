@@ -29,6 +29,7 @@
  * the queues.
  */
 
+import type { Context } from "hono";
 import type { Env } from "../types/env.js";
 
 /**
@@ -98,22 +99,58 @@ export async function cacheDelete(env: Env, key: string): Promise<void> {
   }
 }
 
+/** `ExecutionContext.waitUntil`, narrowed to what the cache needs from it. */
+export type WaitUntil = (promise: Promise<unknown>) => void;
+
+/**
+ * The `waitUntil` for this request, or `undefined` where there isn't one.
+ *
+ * Hono's `c.executionCtx` *throws* rather than returning undefined when the
+ * context was built without one, which is the normal case in tests (a plain
+ * `app.request()` passes no ExecutionContext). Catching that here keeps every
+ * call site a one-liner instead of each having to know that.
+ */
+export function backgroundWrites(c: Context): WaitUntil | undefined {
+  try {
+    const ctx = c.executionCtx;
+    return (promise) => ctx.waitUntil(promise);
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * Read through the cache: hit, or run `load()` and write what it returns.
  *
  * `load` is never wrapped in a try/catch — a D1 failure is a real failure and
  * belongs to the caller, unlike a KV one.
+ *
+ * **Pass `waitUntil` from anything serving a request.** Without it the write
+ * back is awaited, which puts a KV round trip on the response path of every
+ * miss — and makes a miss *slower* than not caching at all, since the caller
+ * now waits for the D1 read *and* the KV write where before it waited only for
+ * the read. That is a real regression on exactly the requests that were
+ * already the slow ones, and it is invisible in a hit-rate metric.
+ *
+ * The write cannot simply be left unawaited instead: a promise the Worker
+ * runtime does not know about may be cancelled once the response is sent, so
+ * the cache would quietly never populate. `waitUntil` is what keeps it alive
+ * past the response. `cachePut` swallows its own errors, so the promise handed
+ * over never rejects.
  */
 export async function cached<T>(
   env: Env,
   key: string,
   ttlSeconds: number,
   load: () => Promise<T>,
+  waitUntil?: WaitUntil,
 ): Promise<T> {
   const hit = await cacheGet<T>(env, key);
   if (hit !== undefined) return hit;
 
   const value = await load();
-  await cachePut(env, key, value, ttlSeconds);
+  const write = cachePut(env, key, value, ttlSeconds);
+  if (waitUntil) waitUntil(write);
+  else await write;
   return value;
 }

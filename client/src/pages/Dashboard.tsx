@@ -205,7 +205,7 @@ export default function Dashboard() {
 
     (async () => {
       try {
-        const [f, d, s, t, tt, p, temp, n, m, td, note] = await Promise.all([
+        const [f, d, s, t, tt, p, temp, n, m, td] = await Promise.all([
           api.get<Feeding[]>(`/feedings?child_id=${childId}&limit=500`),
           api.get<DiaperChange[]>(`/diaper-changes?child_id=${childId}&limit=500`),
           api.get<SleepEntry[]>(`/sleep?child_id=${childId}&limit=500`),
@@ -218,18 +218,6 @@ export default function Dashboard() {
           api.get<Note[]>(`/notes?child_id=${childId}&limit=50`),
           api.get<Medication[]>(`/medications?child_id=${childId}&limit=50`),
           api.get<Todo[]>(`/todos?child_id=${childId}&limit=200`),
-          // Written once a day by the cron and cached server-side, so this is
-          // a plain row read — opening the dashboard never costs a generation.
-          //
-          // Caught rather than awaited alongside the rest: the note is the one
-          // thing on this page nobody needs, and a server that 404s it (an
-          // older deploy, a failed migration) must not take the numbers down
-          // with it.
-          api
-            .getOptional<{ note: { body: string; source: "ai" | "fallback" } | null }>(
-              `/children/${childId}/daily-note`,
-            )
-            .catch(() => ({ note: null })),
         ]);
         if (cancelled) return;
         setSavedFeedings(f);
@@ -242,12 +230,34 @@ export default function Dashboard() {
         setSavedNotes(n);
         setSavedMedications(m);
         setTodos(td);
-        setDailyNote(note.note?.body ?? null);
-        setDailyNoteSource(note.note?.source ?? null);
       } catch (err) {
         if (!cancelled) notify(err instanceof Error ? err.message : "Failed to load data.", "error");
       }
     })();
+
+    // The daily note, fetched alongside the batch above but deliberately not
+    // awaited *with* it.
+    //
+    // It used to sit inside that Promise.all, which meant the one-row note
+    // could not paint until the slowest of eleven requests had landed — six of
+    // them `limit=500` lists. However fast the note endpoint got, the card was
+    // still waiting on a full feeding history to arrive. Nothing else on the
+    // page derives from it, so it has no reason to share their deadline.
+    //
+    // Failures stay silent for the same reason they always did: the note is
+    // the one thing here nobody needs, and a server that 404s it (an older
+    // deploy, a failed migration) must not put an error toast in front of
+    // numbers that loaded perfectly well.
+    api
+      .getOptional<{ note: { body: string; source: "ai" | "fallback" } | null }>(
+        `/children/${childId}/daily-note`,
+      )
+      .then((note) => {
+        if (cancelled) return;
+        setDailyNote(note.note?.body ?? null);
+        setDailyNoteSource(note.note?.source ?? null);
+      })
+      .catch(() => {});
 
     return () => {
       cancelled = true;

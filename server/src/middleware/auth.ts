@@ -1,6 +1,7 @@
 import { MiddlewareHandler } from "hono";
 import type { Env } from "../types/env.js";
-import { cacheDelete, cacheGet, cachePut } from "../kv/cache.js";
+import { backgroundWrites, cacheDelete, cacheGet, cachePut } from "../kv/cache.js";
+import type { WaitUntil } from "../kv/cache.js";
 import { jwksKey, userKey } from "../kv/keys.js";
 import { JWKS_TTL_SECONDS, USER_TTL_SECONDS } from "../kv/ttl.js";
 
@@ -63,7 +64,12 @@ async function fetchJwks(certsUrl: string): Promise<Jwks | null> {
  * extra fetch and every request after it is served from KV. Without that, a
  * rotation would 401 every caregiver until the hour ran out.
  */
-async function signingKeyFor(env: Env, certsUrl: string, kid: string | undefined): Promise<SigningKey | null> {
+async function signingKeyFor(
+  env: Env,
+  certsUrl: string,
+  kid: string | undefined,
+  waitUntil?: WaitUntil,
+): Promise<SigningKey | null> {
   const key = jwksKey();
   const cachedJwks = await cacheGet<Jwks>(env, key);
   const fromCache = cachedJwks?.keys?.find((k) => k.kid === kid);
@@ -78,7 +84,12 @@ async function signingKeyFor(env: Env, certsUrl: string, kid: string | undefined
   // rewriting the identical key set for each one would spend the per-key KV
   // write limit on requests that are going to be rejected anyway.
   if (match || cachedJwks === undefined) {
-    await cachePut(env, key, fresh, JWKS_TTL_SECONDS);
+    // Off the response path — see `cached` in kv/cache.ts. This one is on
+    // *every* request that misses, so awaiting it would put a KV write in
+    // front of every reply for five minutes out of every five minutes.
+    const write = cachePut(env, key, fresh, JWKS_TTL_SECONDS);
+    if (waitUntil) waitUntil(write);
+    else await write;
   }
   return match;
 }
@@ -88,6 +99,7 @@ async function verifyJwt(
   token: string,
   certsUrl: string,
   audience: string,
+  waitUntil?: WaitUntil,
 ): Promise<JwtPayload | null> {
   const payload = decodeJwtPayload(token);
   if (!payload) return null;
@@ -102,7 +114,7 @@ async function verifyJwt(
   const parts = token.split(".");
   const header = JSON.parse(atob(parts[0].replace(/-/g, "+").replace(/_/g, "/"))) as { kid?: string; alg?: string };
 
-  const matchingKey = await signingKeyFor(env, certsUrl, header.kid);
+  const matchingKey = await signingKeyFor(env, certsUrl, header.kid, waitUntil);
   if (!matchingKey) return null;
 
   const key = await crypto.subtle.importKey(
@@ -140,7 +152,12 @@ async function verifyJwt(
  * Auto-creation is unaffected: an email nobody has seen cannot be in the cache,
  * so it takes the same insert it always did.
  */
-async function resolveUser(env: Env, email: string, name: string): Promise<CachedUser | null> {
+async function resolveUser(
+  env: Env,
+  email: string,
+  name: string,
+  waitUntil?: WaitUntil,
+): Promise<CachedUser | null> {
   const key = userKey(email);
 
   const hit = await cacheGet<CachedUser>(env, key);
@@ -159,7 +176,10 @@ async function resolveUser(env: Env, email: string, name: string): Promise<Cache
     return null;
   }
 
-  await cachePut(env, key, user, USER_TTL_SECONDS);
+  // Off the response path, same as the JWKS write above.
+  const write = cachePut(env, key, user, USER_TTL_SECONDS);
+  if (waitUntil) waitUntil(write);
+  else await write;
   return user;
 }
 
@@ -169,7 +189,7 @@ export const authMiddleware: MiddlewareHandler<AppEnv> = async (c, next) => {
     const email = c.req.header("X-Dev-Email") || "dev@example.com";
     const name = c.req.header("X-Dev-Name") || "Dev User";
 
-    const user = await resolveUser(c.env, email, name);
+    const user = await resolveUser(c.env, email, name, backgroundWrites(c));
     if (!user) {
       return c.json({ error: "Failed to resolve user" }, 500);
     }
@@ -195,7 +215,7 @@ export const authMiddleware: MiddlewareHandler<AppEnv> = async (c, next) => {
   }
 
   const certsUrl = `https://${c.env.CF_ACCESS_TEAM_DOMAIN}/cdn-cgi/access/certs`;
-  const payload = await verifyJwt(c.env, jwt, certsUrl, c.env.CF_ACCESS_AUD);
+  const payload = await verifyJwt(c.env, jwt, certsUrl, c.env.CF_ACCESS_AUD, backgroundWrites(c));
 
   if (!payload || !payload.email) {
     return c.json({ error: "Unauthorized" }, 401);
@@ -204,7 +224,7 @@ export const authMiddleware: MiddlewareHandler<AppEnv> = async (c, next) => {
   const email = payload.email;
   const name = payload.name || email;
 
-  const user = await resolveUser(c.env, email, name);
+  const user = await resolveUser(c.env, email, name, backgroundWrites(c));
   if (!user) {
     return c.json({ error: "Failed to resolve user" }, 500);
   }

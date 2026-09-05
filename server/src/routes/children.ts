@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import type { Env } from "../types/env.js";
 import { claimClientRequestId, findClaimedRowId, readClientRequestId } from "./idempotency.js";
 import { announceChange } from "../live.js";
-import { cached } from "../kv/cache.js";
+import { backgroundWrites, cached } from "../kv/cache.js";
 import { dailyNoteKey } from "../kv/keys.js";
 import { DAILY_NOTE_TTL_SECONDS } from "../kv/ttl.js";
 
@@ -265,16 +265,22 @@ children.get("/:id/daily-note", async (c) => {
   // `null` is cached too — a child whose cron has not run yet is a normal
   // answer, and an uncacheable one would mean every dashboard load for that
   // child went to D1 anyway.
-  const note = await cached(c.env, dailyNoteKey(childId), DAILY_NOTE_TTL_SECONDS, async () => {
-    const row = await c.env.DB.prepare(
-      `SELECT note_date, body, source FROM child_daily_notes
-       WHERE child_id = ?
-       ORDER BY note_date DESC LIMIT 1`
-    )
-      .bind(childId)
-      .first<DailyNoteRow>();
-    return row ?? null;
-  });
+  const note = await cached(
+    c.env,
+    dailyNoteKey(childId),
+    DAILY_NOTE_TTL_SECONDS,
+    async () => {
+      const row = await c.env.DB.prepare(
+        `SELECT note_date, body, source FROM child_daily_notes
+         WHERE child_id = ?
+         ORDER BY note_date DESC LIMIT 1`
+      )
+        .bind(childId)
+        .first<DailyNoteRow>();
+      return row ?? null;
+    },
+    backgroundWrites(c),
+  );
 
   const oldest = new Date(Date.now() - DAILY_NOTE_MAX_AGE_DAYS * 86400000)
     .toISOString()
