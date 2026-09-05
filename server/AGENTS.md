@@ -54,6 +54,7 @@
 - Cache `null` where "there is nothing" is a real answer — the envelope in `cache.ts` exists to tell it apart from a miss, and without it a child with no note yet would read D1 on every dashboard load
 - Cache the *row*, not the answer. Anything time-dependent (an age cutoff, a "within N days" filter) is re-applied after the read, or the cache freezes the clock at the moment of the miss
 - Never cache entry data or user settings — see the rule in the root `AGENTS.md`. If you are reaching for a cache to make a list endpoint faster, the answer is an index, not KV
+- `JWKS_TTL_SECONDS` is the one TTL here that is a *security* bound, not a freshness one: it governs how long a signing key Cloudflare has withdrawn stays trusted. Raising it to save fetches trades a revocation window for nothing that matters — a new key is already picked up on the first request that carries it
 
 ## Error Handling
 
