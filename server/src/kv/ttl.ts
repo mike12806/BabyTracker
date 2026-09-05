@@ -11,12 +11,23 @@
  */
 
 /**
- * Cloudflare Access's signing keys. Access publishes the next key well before
- * it starts signing with it, and `verifyJwt` re-fetches immediately on an
- * unknown `kid` anyway, so a rotation is picked up in one request rather than
- * one hour — this only bounds how long a *withdrawn* key stays trusted.
+ * Cloudflare Access's signing keys.
+ *
+ * Read what this number actually governs, because it is not freshness in the
+ * usual sense. A *new* key is picked up in a single request — `signingKeyFor`
+ * re-fetches the moment it sees a `kid` it does not recognise — so rotation
+ * never waits on the TTL. What the TTL alone bounds is the opposite case: how
+ * long a key that Cloudflare has **withdrawn** goes on being trusted here. If a
+ * signing key were ever revoked as compromised, this is the window in which
+ * this Worker would still accept tokens signed with it.
+ *
+ * Five minutes rather than an hour for that reason. The cost of the shorter
+ * window is close to nothing — one extra fetch per five minutes per location,
+ * for a small public document, against the many thousands of requests those
+ * five minutes otherwise cover — and it is the only cached value here whose
+ * staleness is a security question rather than a cosmetic one.
  */
-export const JWKS_TTL_SECONDS = 3600;
+export const JWKS_TTL_SECONDS = 300;
 
 /**
  * A caregiver's `users` row. Short, because it is the one cached value keyed to

@@ -362,7 +362,7 @@ What is cached, and what each one was costing:
 
 | Key | Was | Now |
 |-----|-----|-----|
-| `v1:access-jwks` | A subrequest to `cdn-cgi/access/certs` on **every** authenticated request | One fetch an hour, plus one immediately on an unrecognised `kid` so a key rotation is picked up in a single request rather than after the TTL |
+| `v1:access-jwks` | A subrequest to `cdn-cgi/access/certs` on **every** authenticated request | One fetch per five minutes, plus one immediately on an unrecognised `kid` so a key rotation is picked up in a single request rather than after the TTL. Short because the TTL alone bounds how long a *withdrawn* key stays trusted — the one cached value whose staleness is a security question |
 | `v1:user:<email>` | A `users` upsert **and** a select before any route handler ran | One D1 round trip per caregiver per five minutes; still upserts the moment the name in the Access JWT changes, so a rename is not delayed |
 | `v1:boop-lines` | Two D1 reads per session, for rows a cron rewrites weekly | One read an hour, dropped as soon as a refresh stores new lines |
 | `v1:daily-note:<child>` | One D1 read per dashboard load, for a row written once a day | One read an hour, dropped by `storeNote` — including when the queue consumer replaces the template note with the AI one |
