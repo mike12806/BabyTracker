@@ -37,6 +37,15 @@ jobs:
       - name: Run server tests
         run: npm run test -w server
 
+      # Applies the KV migrations against Miniflare's local KV: no credentials,
+      # no network, nothing touched on the account. It says nothing about the
+      # state of the production namespace — that is the deploy's job — but it
+      # does catch the failure that would otherwise only surface halfway
+      # through a deploy: a migration file that throws, or one the runner
+      # cannot load at all.
+      - name: Apply KV migrations (local)
+        run: npm run kv:migrate -w server
+
   test-client:
     name: Client Tests
     runs-on: ubuntu-24.04

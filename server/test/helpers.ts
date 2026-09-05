@@ -1,5 +1,6 @@
 /// <reference types="vite/client" />
 import { Hono } from "hono";
+import { env as testEnv } from "cloudflare:test";
 import { cors } from "hono/cors";
 import type { Env } from "../src/types/env.js";
 import { cacheControlMiddleware } from "../src/middleware/cacheControl.js";
@@ -130,7 +131,22 @@ export async function execScript(db: D1Database, script: string) {
   }
 }
 
-/** Run the migration SQL against a D1 database for test setup. Drops and recreates all tables. */
+/**
+ * Empty the KV cache namespace.
+ *
+ * Called by `applyMigrations` rather than left to individual tests: everything
+ * in KV is derived from D1, so resetting the database without resetting the
+ * cache leaves behind a copy of a world that no longer exists — and it will be
+ * served, because a cache hit never reaches the tables the reset just rebuilt.
+ */
+export async function resetCache(cache: KVNamespace = testEnv.CACHE) {
+  if (!cache) return;
+  const { keys } = await cache.list();
+  await Promise.all(keys.map((key) => cache.delete(key.name)));
+}
+
+/** Run the migration SQL against a D1 database for test setup. Drops and
+ *  recreates all tables, and empties the derived KV cache with them. */
 export async function applyMigrations(db: D1Database) {
   // Drop all tables first to ensure clean state between tests
   const dropSQL = `
@@ -164,6 +180,7 @@ export async function applyMigrations(db: D1Database) {
   const migrations = [migration0001, migration0002, migration0003, migration0004, migration0005, migration0006, migration0007, migration0008, migration0009, migration0010, migration0011, migration0012, migration0013, migration0014, migration0015, migration0016, migration0017, migration0018, migration0019, migration0020, migration0021];
 
   await execScript(db, dropSQL + migrations.join("\n"));
+  await resetCache();
 }
 
 /** Helper to make requests to the test app */

@@ -18,6 +18,16 @@ export interface Env {
    * costs latency, never correctness.
    */
   LIVE?: DurableObjectNamespace<ChildLive>;
+  /**
+   * Read-through cache in front of D1 and the Cloudflare Access JWKS. See
+   * `src/kv/cache.ts` for what is allowed in it and what is not.
+   *
+   * Optional for the same reason `LIVE` is: nothing stored in KV is a source
+   * of truth, so every helper in `src/kv` degrades to a miss without the
+   * binding and the caller reads D1 exactly as it did before. Tests and local
+   * dev that do not care about caching simply leave it out.
+   */
+  CACHE?: KVNamespace;
   CF_ACCESS_TEAM_DOMAIN: string;
   CF_ACCESS_AUD: string;
   DEV_MODE?: string;

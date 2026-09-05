@@ -9,7 +9,10 @@
     "deploy": "wrangler deploy",
     "test": "vitest run",
     "test:watch": "vitest",
-    "db:seed": "wrangler d1 execute baby-tracker-db --local --file=seed/seed.sql"
+    "db:seed": "wrangler d1 execute baby-tracker-db --local --file=seed/seed.sql",
+    "kv:migrate": "node scripts/kv-migrate.mjs --local",
+    "kv:migrate:remote": "node scripts/kv-migrate.mjs --remote",
+    "kv:status": "node scripts/kv-migrate.mjs --remote --dry-run"
   },
   "dependencies": {
     "hono": "4.13.5"

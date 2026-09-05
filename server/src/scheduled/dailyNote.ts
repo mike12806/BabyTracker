@@ -14,6 +14,8 @@
  */
 
 import type { Env } from "../types/env.js";
+import { cacheDelete } from "../kv/cache.js";
+import { dailyNoteKey } from "../kv/keys.js";
 import { computeDailyWindow, volumeTotal, type AmountRow, type VolumeUnit } from "./dailySummary.js";
 
 /**
@@ -636,6 +638,13 @@ async function storeNote(
        source = excluded.source,
        updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')`,
   ).bind(childId, noteDate, body, source).run();
+
+  // The single choke point for note writes, and so the single place the
+  // dashboard's cached copy has to be dropped. It matters most for the
+  // template-then-AI sequence: the cron writes the fallback and the queue
+  // consumer overwrites it minutes later, and without this the card would
+  // keep showing the template until the TTL ran out.
+  await cacheDelete(env, dailyNoteKey(childId));
 }
 
 /** Write the deterministic note straight away, before any model is asked.

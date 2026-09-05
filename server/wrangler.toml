@@ -16,6 +16,27 @@ migrations_dir = "migrations"
 binding = "PHOTOS"
 bucket_name = "baby-tracker-photos"
 
+# Read-through cache, in front of D1 and the Cloudflare Access JWKS. See
+# src/kv/cache.ts for the rule about what may live in it — briefly: only values
+# that are derived from something else, and only where an answer up to a minute
+# behind is still a correct answer. Entry data is never cached here, because
+# two caregivers looking at the same child is exactly the case KV's eventual
+# consistency would get wrong.
+#
+# The three things that qualify today were each paying a round trip they did
+# not need to: the Access signing keys (a subrequest on *every* authenticated
+# request, for a public document that rotates every few weeks), the caller's
+# `users` row (an upsert plus a select before any route handler ran), and the
+# per-child daily note and boop lines (written once a day and once a week
+# respectively, read on every dashboard load).
+#
+# KV has no migrations of its own, so this repo brings its own runner —
+# scripts/kv-migrate.mjs, run by deploy-server.yml after every deploy. See
+# kv-migrations/README.md.
+[[kv_namespaces]]
+binding = "CACHE"
+id = "a3182ee4f85146aca5e4aff361e0bf2e"
+
 # Live updates — one Durable Object per child, holding the open WebSockets for
 # every device currently looking at that child. See src/live.ts.
 #

@@ -90,11 +90,57 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
+      # The KV cache namespace, checked rather than created.
+      #
+      # Unlike a queue, a KV namespace is bound by *id*, and that id is in
+      # wrangler.toml — in git. So this step cannot self-heal the way the queue
+      # step above does: creating a namespace here would produce an id nothing
+      # references. What it can do is turn the failure the deploy would give
+      # anyway ("binding not found") into the two lines that fix it. The probe
+      # is a cheap listing, which fails if and only if the id in wrangler.toml
+      # does not resolve.
+      #
+      # Needs Workers KV Storage:Edit on CLOUDFLARE_API_TOKEN, same token as
+      # everything else here.
+      - name: Verify KV namespace
+        run: |
+          if npx wrangler kv key list --binding CACHE --remote --prefix __kv_meta > /dev/null 2>&1; then
+            echo "CACHE namespace resolves — continuing."
+          else
+            echo "::error::The CACHE namespace id in server/wrangler.toml does not resolve on this account. Run 'npx wrangler kv namespace create baby-tracker-cache' and put the id it prints into the [[kv_namespaces]] block, or check that CLOUDFLARE_API_TOKEN has the Workers KV Storage:Edit permission."
+            exit 1
+          fi
+        working-directory: server
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
       # Deploy the Worker. Wrangler deploy is atomic — the new version
       # only goes live after a successful upload. R2 bucket binding is
       # declared in wrangler.toml and provisioned once via dashboard/CLI.
       - name: Deploy Worker
         run: npx wrangler deploy
+        working-directory: server
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      # KV migrations, and note that these run *after* the upload while the D1
+      # ones run before it. That is not an oversight: nothing in the KV
+      # namespace is a source of truth — every value is a read-through cache of
+      # something D1 or Cloudflare Access already holds — so a KV migration can
+      # never be a precondition for the new code being correct, only a tidy-up
+      # after it.
+      #
+      # The version sweep in particular has to run afterwards. It deletes keys
+      # belonging to a superseded KV_SCHEMA_VERSION, and until the upload lands
+      # those "abandoned" keys are still the ones the live Worker is reading.
+      #
+      # Idempotent like the D1 step: applied migrations are recorded in the
+      # namespace itself, so merging a file in server/kv-migrations/ is all it
+      # takes to ship it. See server/kv-migrations/README.md.
+      - name: Apply KV migrations
+        run: npm run kv:migrate:remote
         working-directory: server
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
