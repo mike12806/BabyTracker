@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import type { Env } from "../types/env.js";
 import { fetchBoopLinePool, refreshBoopLines } from "../scheduled/boopLines.js";
+import { backgroundWrites } from "../kv/cache.js";
 
 type AppEnv = { Bindings: Env; Variables: { userId: number; userEmail: string; userName: string } };
 
@@ -10,7 +11,7 @@ const boopLines = new Hono<AppEnv>();
 // with its own built-in lines. Empty arrays (no rows yet, or an environment
 // with no AI binding) are a normal answer, not an error.
 boopLines.get("/", async (c) => {
-  const pool = await fetchBoopLinePool(c.env);
+  const pool = await fetchBoopLinePool(c.env, backgroundWrites(c));
   return c.json(pool);
 });
 

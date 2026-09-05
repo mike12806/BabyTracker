@@ -20,6 +20,7 @@
 
 import type { Env } from "../types/env.js";
 import { cacheDelete, cached } from "../kv/cache.js";
+import type { WaitUntil } from "../kv/cache.js";
 import { boopPoolKey } from "../kv/keys.js";
 import { BOOP_POOL_TTL_SECONDS } from "../kv/ttl.js";
 
@@ -262,8 +263,11 @@ interface BoopLineRow {
  * two D1 reads underneath only happen after a refresh has dropped the key, or
  * once an hour, whichever comes first.
  */
-export async function fetchBoopLinePool(env: Env): Promise<Record<BoopMood, string[]>> {
-  return cached(env, boopPoolKey(), BOOP_POOL_TTL_SECONDS, () => readBoopLinePool(env));
+export async function fetchBoopLinePool(
+  env: Env,
+  waitUntil?: WaitUntil,
+): Promise<Record<BoopMood, string[]>> {
+  return cached(env, boopPoolKey(), BOOP_POOL_TTL_SECONDS, () => readBoopLinePool(env), waitUntil);
 }
 
 /** The pool straight from D1, bypassing the cache. */
