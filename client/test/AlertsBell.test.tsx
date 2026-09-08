@@ -281,6 +281,37 @@ describe("AlertsBell", () => {
     expect(await screen.findByText("Mis-tapped.")).toBeInTheDocument();
   });
 
+  it("offers to mark a read alert unread again, but not one that already is", async () => {
+    feed(
+      [
+        alert(2, { body: "Already new.", created_at: "2026-08-20T12:00:00Z" }),
+        alert(1, { body: "Read last time.", created_at: "2026-08-19T09:00:00Z" }),
+      ],
+      1,
+      "2026-08-20T08:00:00Z",
+    );
+    renderBell();
+
+    await userEvent.click(await screen.findByLabelText("Alerts (1 new)"));
+    await screen.findByText("Already new.");
+
+    // One button, not two: the fresh alert already is what this would produce.
+    expect(screen.getAllByLabelText(/^Mark unread: /)).toHaveLength(1);
+  });
+
+  it("marks a read alert unread and moves it back under the badge", async () => {
+    feed([alert(1, { body: "Read last time." })], 0, "2026-08-21T10:00:00Z");
+    mockApi.post.mockResolvedValue({ ok: true, last_read_at: "2026-08-20T09:59:59Z" });
+    renderBell();
+
+    await userEvent.click(await screen.findByLabelText("Alerts"));
+    await screen.findByText("Read last time.");
+    await userEvent.click(screen.getByLabelText("Mark unread: Diaper reminder"));
+
+    expect(mockApi.post).toHaveBeenCalledWith("/alerts/1/unread", {});
+    await screen.findByText("New");
+  });
+
   it("offers to turn notifications on from the drawer when they are off", async () => {
     const subscribe = vi.fn(async () => {});
     vi.mocked(usePushNotifications).mockReturnValue({

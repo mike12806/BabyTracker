@@ -484,6 +484,95 @@ describe("POST /api/alerts/read", () => {
   });
 });
 
+describe("POST /api/alerts/:id/unread", () => {
+  const app = createTestApp();
+
+  beforeEach(async () => {
+    await applyMigrations(env.DB);
+    await env.DB.prepare("INSERT INTO users (id, email, name) VALUES (1, 'a@example.com', 'A')").run();
+    await seedChild(1, "Mikey", 1);
+  });
+
+  it("puts a read alert back in the unread count", async () => {
+    await insertAlert(1, "one", "2024-07-15T10:00:00Z");
+    const req = testRequest(app, env.DB);
+    await req.post("/api/alerts/read", {}, { "X-Test-Email": "a@example.com" });
+
+    const before = (await (await req.get("/api/alerts", { "X-Test-Email": "a@example.com" })).json()) as FeedResponse;
+    expect(before.unread).toBe(0);
+    const target = before.alerts[0];
+
+    await req.post(`/api/alerts/${target.id}/unread`, {}, { "X-Test-Email": "a@example.com" });
+
+    const after = (await (await req.get("/api/alerts", { "X-Test-Email": "a@example.com" })).json()) as FeedResponse;
+    expect(after.unread).toBe(1);
+  });
+
+  it("reopens later alerts too — the mark is a single watermark, not a per-alert flag", async () => {
+    await insertAlert(1, "one", "2024-07-15T10:00:00Z");
+    await insertAlert(1, "two", "2024-07-15T12:00:00Z");
+    const req = testRequest(app, env.DB);
+    await req.post("/api/alerts/read", { up_to: "2024-07-15T12:00:00Z" }, { "X-Test-Email": "a@example.com" });
+
+    const before = (await (await req.get("/api/alerts", { "X-Test-Email": "a@example.com" })).json()) as FeedResponse;
+    expect(before.unread).toBe(0);
+    const older = before.alerts.find((a) => a.created_at === "2024-07-15T10:00:00Z")!;
+
+    await req.post(`/api/alerts/${older.id}/unread`, {}, { "X-Test-Email": "a@example.com" });
+
+    const after = (await (await req.get("/api/alerts", { "X-Test-Email": "a@example.com" })).json()) as FeedResponse;
+    expect(after.unread).toBe(2);
+  });
+
+  it("is a no-op when the alert is already unread", async () => {
+    await insertAlert(1, "one", "2024-07-15T10:00:00Z");
+    const req = testRequest(app, env.DB);
+
+    const before = (await (await req.get("/api/alerts", { "X-Test-Email": "a@example.com" })).json()) as FeedResponse;
+    expect(before.unread).toBe(1);
+    const target = before.alerts[0];
+
+    await req.post(`/api/alerts/${target.id}/unread`, {}, { "X-Test-Email": "a@example.com" });
+
+    const after = (await (await req.get("/api/alerts", { "X-Test-Email": "a@example.com" })).json()) as FeedResponse;
+    expect(after.unread).toBe(1);
+  });
+
+  it("is per user — one account's unread doesn't touch the other's mark", async () => {
+    await env.DB.prepare("INSERT INTO users (id, email, name) VALUES (2, 'b@example.com', 'B')").run();
+    await env.DB.prepare("INSERT INTO user_children (user_id, child_id) VALUES (2, 1)").run();
+    await insertAlert(1, "shared", "2024-07-15T10:00:00Z");
+    const req = testRequest(app, env.DB);
+    await req.post("/api/alerts/read", {}, { "X-Test-Email": "a@example.com" });
+    await req.post("/api/alerts/read", {}, { "X-Test-Email": "b@example.com" });
+
+    const feed = (await (await req.get("/api/alerts", { "X-Test-Email": "a@example.com" })).json()) as FeedResponse;
+    await req.post(`/api/alerts/${feed.alerts[0].id}/unread`, {}, { "X-Test-Email": "a@example.com" });
+
+    const mine = (await (await req.get("/api/alerts", { "X-Test-Email": "a@example.com" })).json()) as FeedResponse;
+    const theirs = (await (await req.get("/api/alerts", { "X-Test-Email": "b@example.com" })).json()) as FeedResponse;
+    expect(mine.unread).toBe(1);
+    expect(theirs.unread).toBe(0);
+  });
+
+  it("404s for an alert belonging to someone else's child", async () => {
+    await env.DB.prepare("INSERT INTO users (id, email, name) VALUES (2, 'b@example.com', 'B')").run();
+    await seedChild(2, "Other", 2);
+    await insertAlert(2, "theirs", "2024-07-15T10:00:00Z");
+    const req = testRequest(app, env.DB);
+
+    const theirs = (await (await req.get("/api/alerts", { "X-Test-Email": "b@example.com" })).json()) as FeedResponse;
+    const res = await req.post(`/api/alerts/${theirs.alerts[0].id}/unread`, {}, { "X-Test-Email": "a@example.com" });
+
+    expect(res.status).toBe(404);
+  });
+
+  it("404s for an alert that doesn't exist", async () => {
+    const res = await testRequest(app, env.DB).post("/api/alerts/999/unread", {}, { "X-Test-Email": "a@example.com" });
+    expect(res.status).toBe(404);
+  });
+});
+
 /**
  * An overdue reminder is a statement about a gap — "nothing logged in over
  * 2 hours 45 minutes" — so the entry that ends the gap answers it. What is

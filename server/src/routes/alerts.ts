@@ -228,4 +228,48 @@ alerts.post("/:id/restore", async (c) => {
   return c.json({ ok: true });
 });
 
+/**
+ * POST /api/alerts/:id/unread — put an alert back in front of this user's read mark.
+ *
+ * The read mark is a single watermark (`alert_reads.last_read_at`), not a
+ * per-alert flag — see `GET /` above — so there is no way to reopen just this
+ * one row. Walking the mark back to just before this alert's `created_at` is
+ * the closest equivalent, and it necessarily reopens anything raised since.
+ * `/read` above only ever moves the mark forward, to guard against a stale
+ * drawer on another device resetting it — but this is the one place a
+ * backward move is asked for on purpose, so it is allowed to happen once,
+ * regardless of what the mark already says.
+ */
+alerts.post("/:id/unread", async (c) => {
+  const userId = c.get("userId");
+  const alertId = parseInt(c.req.param("id"), 10);
+
+  if (!alertId || !(await callerMayReadAlert(c.env, userId, alertId))) {
+    return c.json({ error: "Not found" }, 404);
+  }
+
+  const alert = await c.env.DB.prepare("SELECT created_at FROM alerts WHERE id = ?")
+    .bind(alertId)
+    .first<{ created_at: string }>();
+  if (!alert) return c.json({ error: "Not found" }, 404);
+
+  const before = toSecondPrecision(new Date(new Date(alert.created_at).getTime() - 1000).toISOString());
+
+  await c.env.DB.prepare(
+    `INSERT INTO alert_reads (user_id, last_read_at) VALUES (?, ?)
+     ON CONFLICT(user_id) DO UPDATE
+        SET last_read_at = excluded.last_read_at,
+            updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+      WHERE alert_reads.last_read_at > excluded.last_read_at`,
+  )
+    .bind(userId, before)
+    .run();
+
+  const row = await c.env.DB.prepare("SELECT last_read_at FROM alert_reads WHERE user_id = ?")
+    .bind(userId)
+    .first<{ last_read_at: string }>();
+
+  return c.json({ ok: true, last_read_at: row?.last_read_at ?? before });
+});
+
 export { alerts };

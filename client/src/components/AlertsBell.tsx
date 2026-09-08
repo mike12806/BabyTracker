@@ -17,7 +17,8 @@ import BabyChangingStationIcon from "@mui/icons-material/BabyChangingStation";
 import RestaurantIcon from "@mui/icons-material/Restaurant";
 import TrendingDownRoundedIcon from "@mui/icons-material/TrendingDownRounded";
 import NotificationsOffRoundedIcon from "@mui/icons-material/NotificationsOffRounded";
-import { dismissAlert, fetchAlerts, markAlertsRead, restoreAlert } from "../api/alerts";
+import MarkEmailUnreadRoundedIcon from "@mui/icons-material/MarkEmailUnreadRounded";
+import { dismissAlert, fetchAlerts, markAlertsRead, restoreAlert, unreadAlert } from "../api/alerts";
 import { useDataRefresh } from "../hooks/useDataRefresh";
 import { usePushNotifications } from "../hooks/usePushNotifications";
 import { useNotification } from "../hooks/useNotification";
@@ -174,6 +175,25 @@ export default function AlertsBell() {
     }
   };
 
+  /**
+   * Put a read alert back in front of the read mark.
+   *
+   * There is no per-alert read flag to flip (see `alerts.ts` on the server) —
+   * the mark is a single watermark, so reopening this row necessarily reopens
+   * anything raised since it too. `newSince` and `unread` are pushed back to
+   * match what the server just recorded, rather than refetching, so the row
+   * turns "New" the moment the tap lands.
+   */
+  const handleMarkUnread = async (alert: Alert) => {
+    try {
+      const result = await unreadAlert(alert.id);
+      setNewSince(result.last_read_at);
+      setUnread(alerts.filter((a) => a.created_at > result.last_read_at).length);
+    } catch (err) {
+      notify(err instanceof Error ? err.message : "Couldn't mark that alert unread.", "error");
+    }
+  };
+
   const handleUndo = async (alert: Alert) => {
     setUndoable(null);
     setAlerts((current) => (current.some((a) => a.id === alert.id) ? current : [...current, alert].sort(byNewest)));
@@ -293,19 +313,36 @@ export default function AlertsBell() {
                   </Typography>
                 )}
               </Box>
-              {/* stopPropagation, or dismissing a row also navigates away on
-                  the same tap — the row itself is the link. */}
-              <IconButton
-                size="small"
-                aria-label={`Dismiss: ${alert.title}`}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  void handleDismiss(alert);
-                }}
-                sx={{ flexShrink: 0, alignSelf: "center", color: "text.secondary" }}
-              >
-                <CloseRoundedIcon sx={{ fontSize: 18 }} />
-              </IconButton>
+              {/* stopPropagation on both, or tapping either also navigates
+                  away on the same tap — the row itself is the link. Mark-
+                  unread only makes sense once a row has actually been read;
+                  a fresh one is already what it would produce. */}
+              <Box sx={{ display: "flex", flexShrink: 0, alignSelf: "center" }}>
+                {!fresh && (
+                  <IconButton
+                    size="small"
+                    aria-label={`Mark unread: ${alert.title}`}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      void handleMarkUnread(alert);
+                    }}
+                    sx={{ color: "text.secondary" }}
+                  >
+                    <MarkEmailUnreadRoundedIcon sx={{ fontSize: 18 }} />
+                  </IconButton>
+                )}
+                <IconButton
+                  size="small"
+                  aria-label={`Dismiss: ${alert.title}`}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    void handleDismiss(alert);
+                  }}
+                  sx={{ color: "text.secondary" }}
+                >
+                  <CloseRoundedIcon sx={{ fontSize: 18 }} />
+                </IconButton>
+              </Box>
             </Box>
           );
         })}
