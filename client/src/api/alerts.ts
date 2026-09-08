@@ -54,3 +54,11 @@ export function dismissAlert(id: number): Promise<{ ok: boolean }> {
 export function restoreAlert(id: number): Promise<{ ok: boolean }> {
   return api.post<{ ok: boolean }>(`/alerts/${id}/restore`, {});
 }
+
+/**
+ * Put an alert back in front of the read mark, so it (and anything raised
+ * since it) counts as unread again.
+ */
+export function unreadAlert(id: number): Promise<{ ok: boolean; last_read_at: string }> {
+  return api.post<{ ok: boolean; last_read_at: string }>(`/alerts/${id}/unread`, {});
+}
