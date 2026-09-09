@@ -439,7 +439,9 @@ describe("Dashboard – quick action buttons", () => {
     expect(await screen.findByRole("button", { name: /^feeding$/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /^diaper$/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /^sleep$/i })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /^note$/i })).toHaveTextContent(/quick journal/i);
+    expect(screen.queryByRole("button", { name: /^pump$/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^tummy$/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^note$/i })).toBeNull();
   });
 
   it("opens the quick-log feeding dialog when the Feeding button is clicked", async () => {
