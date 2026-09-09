@@ -38,6 +38,8 @@ interface ActivityEntry extends ActivityFeedEntry {
   id: number;
   child_name: string;
   logged_by: string;
+  /** Set only when the entry was edited after creation, by whoever last edited it. */
+  edited_by: string | null;
 }
 
 interface ActivityResponse {
@@ -849,18 +851,41 @@ export default function ActivityPage() {
                             </Box>
                           </Box>
 
-                          {/* Time */}
-                          <Typography
-                            variant="caption"
-                            color="text.secondary"
+                          {/* Time, and who logged it */}
+                          <Box
                             sx={{
-                              whiteSpace: "nowrap",
-                              fontWeight: 500,
+                              display: "flex",
+                              flexDirection: "column",
+                              alignItems: "flex-end",
                               flexShrink: 0,
                             }}
                           >
-                            {formatTime(entry.event_time)}
-                          </Typography>
+                            <Typography
+                              variant="caption"
+                              color="text.secondary"
+                              sx={{
+                                whiteSpace: "nowrap",
+                                fontWeight: 500,
+                              }}
+                            >
+                              {formatTime(entry.event_time)}
+                            </Typography>
+                            {(entry.edited_by || entry.logged_by) && (
+                              <Typography
+                                variant="caption"
+                                color="text.disabled"
+                                noWrap
+                                title={
+                                  entry.edited_by
+                                    ? `Logged by ${entry.logged_by}, edited by ${entry.edited_by}`
+                                    : `Logged by ${entry.logged_by}`
+                                }
+                                sx={{ fontSize: "0.7rem", maxWidth: 96 }}
+                              >
+                                {entry.edited_by ? `edited · ${entry.edited_by}` : entry.logged_by}
+                              </Typography>
+                            )}
+                          </Box>
 
                           {editPath && (
                             <ChevronRightIcon
