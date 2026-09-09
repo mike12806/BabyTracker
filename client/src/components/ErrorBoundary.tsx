@@ -46,34 +46,57 @@ interface State {
 const CHUNK_LOAD_ERROR_PATTERN =
   /dynamically imported module|error loading dynamically imported module|importing a module script failed|is not a valid javascript mime type/i;
 
-/** sessionStorage key: the build id we last auto-reloaded for a chunk-load failure. */
+/** sessionStorage key: `<build id>:<auto-reloads already spent on it>`. */
 const CHUNK_RELOAD_KEY = "chunkReloadBuild";
+
+/**
+ * How long to wait before each successive auto-reload, and — by its length —
+ * how many to allow per build.
+ *
+ * One immediate reload is not enough. A deploy is not a single instant: the
+ * new `index.html` goes live before the edge stops answering the new chunk
+ * URLs from cache, so a device that loads mid-deploy gets the new shell and a
+ * stale answer for its chunks, and retrying in the same millisecond just gets
+ * the same stale answer. That is exactly the window a reload has to outlast,
+ * and it closes in seconds rather than instantly — so the retries spread out
+ * to cover it (immediately, then +5s, then +15s) instead of spending the only
+ * attempt before anything can have changed.
+ *
+ * It stays bounded: after the last one the app stops reloading itself and
+ * shows the card with the manual button, because past this point the cause is
+ * not a deploy in flight — it is a broken deploy or a dead network, and
+ * neither is fixed by looping.
+ */
+const CHUNK_RELOAD_DELAYS_MS = [0, 5_000, 15_000];
 
 function isChunkLoadError(error: Error): boolean {
   return CHUNK_LOAD_ERROR_PATTERN.test(error.message);
 }
 
 /**
- * Whether it's worth reloading for this error: only once per build. If the
- * reload already happened for the build currently running and the same class
- * of error came right back, reloading again would just loop forever (a
- * persistent deploy problem, or no network at all) — fall through to the
- * manual "Reload" button instead.
+ * How long to wait before the next auto-reload, or null when this build has
+ * used them all up (or storage is unavailable, so spent attempts can't be
+ * counted and looping can't be ruled out).
+ *
+ * The count is keyed by build id: a device that reloads into a *different*
+ * build has escaped the failure that was being retried, and starts fresh.
  */
-function shouldAutoReloadForChunkError(): boolean {
+function nextChunkReloadDelay(): number | null {
   try {
-    if (sessionStorage.getItem(CHUNK_RELOAD_KEY) === __BUILD_ID__) return false;
-    sessionStorage.setItem(CHUNK_RELOAD_KEY, __BUILD_ID__);
-    return true;
+    const [build, spent] = (sessionStorage.getItem(CHUNK_RELOAD_KEY) ?? "").split(":");
+    const attempts = build === __BUILD_ID__ ? Number(spent) || 0 : 0;
+    if (attempts >= CHUNK_RELOAD_DELAYS_MS.length) return null;
+    sessionStorage.setItem(CHUNK_RELOAD_KEY, `${__BUILD_ID__}:${attempts + 1}`);
+    return CHUNK_RELOAD_DELAYS_MS[attempts];
   } catch {
-    // Private browsing / storage disabled: can't remember we've already
-    // tried, so don't risk looping.
-    return false;
+    return null;
   }
 }
 
 export default class ErrorBoundary extends Component<Props, State> {
   state: State = { error: null, reloading: false };
+
+  private reloadTimer: ReturnType<typeof setTimeout> | null = null;
 
   static getDerivedStateFromError(error: Error): State {
     return { error, reloading: false };
@@ -84,13 +107,23 @@ export default class ErrorBoundary extends Component<Props, State> {
     // there is. Keep the component stack — it is what names the culprit.
     console.error("Unhandled render error", error, info.componentStack);
 
-    if (isChunkLoadError(error) && shouldAutoReloadForChunkError()) {
-      // Skip the alarming crash card for a case that isn't really a crash —
-      // just an app shell fetching a chunk out from under it. The reload
-      // navigates away, so this state never has to be unwound.
-      this.setState({ reloading: true });
-      window.location.reload();
-    }
+    if (!isChunkLoadError(error)) return;
+
+    const delay = nextChunkReloadDelay();
+    if (delay === null) return;
+
+    // Skip the alarming crash card for a case that isn't really a crash —
+    // just an app shell fetching a chunk out from under it. The reload
+    // navigates away, so this state never has to be unwound.
+    this.setState({ reloading: true });
+    this.reloadTimer = setTimeout(() => window.location.reload(), delay);
+  }
+
+  componentWillUnmount(): void {
+    // Navigating away from the failed page (the nav stays live around it)
+    // cancels the pending reload — the user has moved on, and pulling the
+    // page out from under them seconds later would be the bug, not the fix.
+    if (this.reloadTimer !== null) clearTimeout(this.reloadTimer);
   }
 
   private handleReload = (): void => {
