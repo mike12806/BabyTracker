@@ -110,13 +110,10 @@ function isTodoOverdue(todo: Todo): boolean {
 }
 
 type CatIcons = { [K in CategoryKey]?: React.ReactElement };
-const CAT_ICONS: CatIcons = {
-  feed: <RestaurantIcon sx={{ fontSize: 18 }} />,
-  diaper: <BabyChangingStationIcon sx={{ fontSize: 18 }} />,
-  sleep: <BedtimeIcon sx={{ fontSize: 18 }} />,
-  pump: <OpacityIcon sx={{ fontSize: 18 }} />,
-  tummy: <AccessibilityNewIcon sx={{ fontSize: 18 }} />,
-  note: <NoteIcon sx={{ fontSize: 18 }} />,
+const CAT_ICONS_LG: CatIcons = {
+  feed: <RestaurantIcon sx={{ fontSize: 24 }} />,
+  diaper: <BabyChangingStationIcon sx={{ fontSize: 24 }} />,
+  sleep: <BedtimeIcon sx={{ fontSize: 24 }} />,
 };
 
 const CAT_ICONS_SM: CatIcons = {
@@ -336,8 +333,6 @@ export default function Dashboard() {
   const lastFeeding = feedings[0] ?? null;
   const lastDiaper = diapers[0] ?? null;
   const activeSleep = sleeps.find((s) => !s.end_time) ?? null;
-  const lastPump = pumpings[0] ?? null;
-  const lastTummy = tummyTimes[0] ?? null;
 
   const todaySleepMins = sleeps
     .filter((s) => s.start_time >= todayStartIso)
@@ -380,24 +375,6 @@ export default function Dashboard() {
       detail: activeSleep ? `Napping ${formatDuration(activeSleep.start_time, null)}` : (sleeps[0] ? formatDuration(sleeps[0].start_time, sleeps[0].end_time) : ""),
       live: !!activeSleep,
       onClick: () => setQuickLogCategory("sleep"),
-    },
-    {
-      cat: "pump", label: "Pump",
-      last: lastPump ? formatRelativeTime(lastPump.start_time) : "No data",
-      detail: lastPump ? formatEntryAmount(lastPump, unit) ?? "" : "",
-      onClick: () => setQuickLogCategory("pump"),
-    },
-    {
-      cat: "tummy", label: "Tummy",
-      last: lastTummy ? formatRelativeTime(lastTummy.start_time) : "No data",
-      detail: lastTummy ? formatDuration(lastTummy.start_time, lastTummy.end_time) : "",
-      onClick: () => setQuickLogCategory("tummy"),
-    },
-    {
-      cat: "note", label: "Note",
-      last: "",
-      detail: "Quick journal",
-      onClick: () => setQuickLogCategory("note"),
     },
   ];
 
@@ -577,7 +554,7 @@ export default function Dashboard() {
       </Box>
 
       {/* Tile grid */}
-      <Box sx={{ display: "grid", gridTemplateColumns: { xs: "repeat(2, minmax(0, 1fr))", sm: "repeat(3, minmax(0, 1fr))" }, gap: 0.75, mb: 1.75 }}>
+      <Box sx={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: { xs: 1, sm: 1.5 }, mb: 1.75 }}>
         {tiles.map((tile) => {
           const c = cat[tile.cat];
           return (
@@ -587,24 +564,24 @@ export default function Dashboard() {
               onClick={tile.onClick}
               sx={{
                 position: "relative",
-                borderRadius: "12px",
-                p: { xs: "8px 10px", sm: "10px 12px" },
+                borderRadius: "16px",
+                p: { xs: "14px 8px", sm: "20px 14px" },
                 bgcolor: c.tile,
                 border: `1px solid ${c.edge}`,
-                minHeight: { xs: 52, sm: 56 },
+                minHeight: { xs: 108, sm: 132 },
                 display: "flex",
-                flexDirection: "row",
-                justifyContent: "flex-start",
+                flexDirection: "column",
+                justifyContent: "center",
                 alignItems: "center",
-                gap: { xs: 1, sm: 1.25 },
+                gap: { xs: 0.75, sm: 1 },
                 overflow: "hidden",
-                textAlign: "left",
+                textAlign: "center",
               }}
             >
               {tile.live && (
                 <Box
                   sx={{
-                    position: "absolute", top: 7, right: 7, width: 6, height: 6,
+                    position: "absolute", top: 9, right: 9, width: 8, height: 8,
                     borderRadius: 99, bgcolor: c.solid,
                     boxShadow: `0 0 0 3px ${c.solid}33`,
                   }}
@@ -612,22 +589,21 @@ export default function Dashboard() {
               )}
               <Box
                 sx={{
-                  width: { xs: 30, sm: 34 }, height: { xs: 30, sm: 34 }, borderRadius: "9px",
+                  width: { xs: 44, sm: 52 }, height: { xs: 44, sm: 52 }, borderRadius: "13px",
                   bgcolor: c.solid, color: isDark ? "#0c1018" : "#fff",
                   display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
                 }}
               >
-                {CAT_ICONS[tile.cat]}
+                {CAT_ICONS_LG[tile.cat]}
               </Box>
-              <Box sx={{ minWidth: 0, flex: 1 }}>
-                <Typography sx={{ fontSize: { xs: 12.5, sm: 13.5 }, fontWeight: 700, color: c.ink, letterSpacing: "-0.01em", lineHeight: 1.15 }} noWrap>
+              <Box sx={{ minWidth: 0, width: "100%" }}>
+                <Typography sx={{ fontSize: { xs: 15, sm: 17 }, fontWeight: 700, color: c.ink, letterSpacing: "-0.01em", lineHeight: 1.2 }} noWrap>
                   {tile.label}
                 </Typography>
-                <Typography sx={{ fontSize: { xs: 10.5, sm: 11.5 }, color: c.ink, opacity: 0.72, mt: 0.125, lineHeight: 1.2 }} noWrap>
+                <Typography sx={{ fontSize: { xs: 11.5, sm: 13 }, color: c.ink, opacity: 0.72, mt: 0.25, lineHeight: 1.25 }} noWrap>
                   {tile.last || tile.detail}
                 </Typography>
               </Box>
-              <AddIcon sx={{ fontSize: { xs: 15, sm: 16 }, color: c.solid, opacity: 0.55, flexShrink: 0 }} />
             </ButtonBase>
           );
         })}
