@@ -106,6 +106,22 @@ performance.** Decisions below follow from that ordering; don't trade upward.
   on activate. Keep the header check until no installed device predates it.
 - What *is* cached: the precached app shell (versioned per build) and Google
   Fonts. Neither is data, and neither can be stale in the data sense.
+- **Navigations ask the network for the shell first** (`utils/appShell.ts`),
+  with the precached shell as the fallback after `SHELL_NETWORK_TIMEOUT_MS`,
+  on a network error, on a 5xx, or when the browser reports itself offline.
+  Serving the precached shell first meant every launch after a deploy started
+  on the previous build and then reloaded itself once the worker had fetched
+  the new one — the app visibly loading twice, most often when it was brought
+  back to the front. Everything the edge answers is passed through as-is,
+  including the redirect Cloudflare Access replies to an expired session with.
+- **An update only reloads the page if it changes the build on screen.** The
+  worker reports every build it activates, and after the change above that
+  routinely includes the build the page fetched at launch a few seconds
+  earlier. `utils/workerBuild.ts` asks the worker over a `MessageChannel`
+  (`BUILD_ID_REQUEST`) and compares against `__BUILD_ID__`; only a genuine
+  difference reaches `createDeferredReload`. No answer counts as a difference —
+  a needless reload costs one launch, a skipped one leaves the device on an old
+  build, which is the failure this path exists to prevent.
 - API responses are `Cache-Control: no-store` so no HTTP cache in between can
   answer on the server's behalf.
 

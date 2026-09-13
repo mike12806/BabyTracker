@@ -5,6 +5,7 @@
 // without bundling the module.
 
 import { createDeferredReload } from "./utils/deferredReload";
+import { updateChangesBuild } from "./utils/workerBuild";
 
 export function registerServiceWorker(): void {
   if (typeof window === "undefined") return;
@@ -25,8 +26,18 @@ export function registerServiceWorker(): void {
         //
         // (`onNeedRefresh` is never called in autoUpdate mode; `onNeedReload`
         // is the hook that suppresses the plugin's built-in reload.)
+        //
+        // The worker reports every build it activates, including the one this
+        // page is already running: a launch fetches the live shell (see
+        // `utils/appShell.ts`) and the worker finishes precaching that same
+        // build seconds later. Reloading then is a second load of the app with
+        // nothing to show for it — the "why did it load twice?" that
+        // foregrounding the installed app produced after every deploy — so ask
+        // the worker what it has before asking for a reload.
         onNeedReload() {
-          pendingUpdate.request();
+          void updateChangesBuild().then((changed) => {
+            if (changed) pendingUpdate.request();
+          });
         },
       });
     })

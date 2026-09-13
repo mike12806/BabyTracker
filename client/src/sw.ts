@@ -32,6 +32,8 @@ import { NavigationRoute, registerRoute } from "workbox-routing";
 import { StaleWhileRevalidate } from "workbox-strategies";
 import { ExpirationPlugin } from "workbox-expiration";
 import { CacheableResponsePlugin } from "workbox-cacheable-response";
+import { createShellHandler } from "./utils/appShell";
+import { BUILD_ID_REQUEST, type BuildIdReply } from "./serviceWorkerContract";
 
 declare const self: ServiceWorkerGlobalScope & {
   __WB_MANIFEST: Array<{ url: string; revision: string | null }>;
@@ -54,15 +56,30 @@ self.addEventListener("activate", (event) => {
 cleanupOutdatedCaches();
 precacheAndRoute(self.__WB_MANIFEST);
 
-// Navigations are served the precached shell, except where the request has to
-// reach the edge: /api/auth/login runs Cloudflare Access's redirect flow, and
-// /cdn-cgi/ is its callback — answering either with cached HTML means the auth
-// cookie is never set and the installed app spins forever.
+// Navigations are answered with the shell that is live, falling back to the
+// precached one when the network is slow, down, or broken — see
+// `utils/appShell.ts` for why that way round, and what it costs. Excluded are
+// the requests that have to reach the edge: /api/auth/login runs Cloudflare
+// Access's redirect flow, and /cdn-cgi/ is its callback — answering either
+// with cached HTML means the auth cookie is never set and the installed app
+// spins forever.
 registerRoute(
-  new NavigationRoute(createHandlerBoundToURL("index.html"), {
+  new NavigationRoute(createShellHandler(createHandlerBoundToURL("index.html")), {
     denylist: [/^\/api\//, /^\/cdn-cgi\//],
   })
 );
+
+// Which build this worker serves.
+//
+// Asked by the page whenever the worker reports a new build, so that an update
+// the page is *already running* does not turn into a second visible load of
+// the app. See `serviceWorkerContract.ts` and `utils/workerBuild.ts`.
+self.addEventListener("message", (event) => {
+  const data = event.data as { type?: string } | null;
+  if (data?.type !== BUILD_ID_REQUEST) return;
+  const reply: BuildIdReply = { buildId: __BUILD_ID__ };
+  event.ports[0]?.postMessage(reply);
+});
 
 // No route matches /api/* — deliberately. Those requests pass straight
 // through to the network and fail honestly when it's down.
