@@ -43,6 +43,8 @@ import { push } from "./routes/push.js";
 import { feedingTrend } from "./routes/feedingTrend.js";
 import { alerts } from "./routes/alerts.js";
 import { live } from "./routes/live.js";
+import { dispatch, EVENTS_QUEUE } from "./events/bus.js";
+import type { DomainEvent } from "./events/types.js";
 
 type AppEnv = { Bindings: Env; Variables: { userId: number; userEmail: string; userName: string } };
 
@@ -234,9 +236,36 @@ export default {
    * meant to avoid creating.
    */
   async queue(
-    batch: MessageBatch<DailySummaryJob | DailyNoteJob | BoopLineJob | ReminderJob | FeedingTrendJob>,
+    batch: MessageBatch<
+      DailySummaryJob | DailyNoteJob | BoopLineJob | ReminderJob | FeedingTrendJob | DomainEvent
+    >,
     env: Env,
   ): Promise<void> {
+    // The domain event bus. One message is one event, and the dispatcher runs
+    // every subscriber that cares about it — see `events/bus.ts`.
+    //
+    // Retried per message like every consumer below, and for the usual reason
+    // here: a retry re-runs every subscriber on that event, so the ones that
+    // already succeeded must be able to do nothing the second time. That is
+    // the idempotence requirement `SUBSCRIBERS` documents, and it is why this
+    // queue can be one queue rather than one per subscriber.
+    if (batch.queue === EVENTS_QUEUE) {
+      for (const message of batch.messages) {
+        const event = message.body as DomainEvent;
+        try {
+          await dispatch(env, event);
+          message.ack();
+        } catch (err) {
+          console.error(
+            `Event dispatch failed for ${event?.type} on child ${event?.childId}:`,
+            err,
+          );
+          message.retry();
+        }
+      }
+      return;
+    }
+
     if (batch.queue === FEEDING_TREND_QUEUE) {
       for (const message of batch.messages) {
         const job = message.body as FeedingTrendJob;

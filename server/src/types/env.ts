@@ -4,6 +4,7 @@ import type { BoopLineJob } from "../scheduled/boopLines.js";
 import type { ReminderJob } from "../scheduled/reminders.js";
 import type { FeedingTrendJob } from "../scheduled/feedingTrend.js";
 import type { ChildLive } from "../live.js";
+import type { DomainEvent } from "../events/types.js";
 
 export interface Env {
   DB: D1Database;
@@ -28,6 +29,16 @@ export interface Env {
    * dev that do not care about caching simply leave it out.
    */
   CACHE?: KVNamespace;
+  /**
+   * The domain event bus — see `src/events/bus.ts`.
+   *
+   * Optional like every other queue here, and it matters more than most: with
+   * no binding `emit` dispatches its subscribers inline, which is exactly what
+   * the write paths did before the bus existed. So the tests and local dev
+   * without `wrangler dev` keep the old ordering, and the create tests that
+   * predate this pass unchanged.
+   */
+  EVENTS?: Queue<DomainEvent>;
   CF_ACCESS_TEAM_DOMAIN: string;
   CF_ACCESS_AUD: string;
   DEV_MODE?: string;

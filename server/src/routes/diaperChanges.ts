@@ -5,5 +5,4 @@ export const diaperChanges = createChildScopedCrud({
   columns: ["time", "type", "color", "notes"],
   requiredColumns: ["time", "type"],
   orderBy: "time",
-  clearsReminderKind: "diaper",
 });

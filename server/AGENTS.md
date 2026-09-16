@@ -14,6 +14,7 @@
 - `src/routes/` — One file per resource (children, feedings, diapers, sleep, etc.)
 - `src/middleware/` — Hono middleware (auth, error handling)
 - `src/kv/` — The KV read cache: `keys.ts` (every key, all versioned), `ttl.ts` (how long each may be wrong for), `cache.ts` (the read-through helpers)
+- `src/events/` — The domain event bus: `types.ts` (every event shape), `bus.ts` (publish and dispatch), `subscribers.ts` (what reacts to what)
 - `src/db/` — Database query helpers and types
 - `src/types/` — Shared TypeScript types
 - `migrations/` — D1 migration SQL files
@@ -55,6 +56,15 @@
 - Cache the *row*, not the answer. Anything time-dependent (an age cutoff, a "within N days" filter) is re-applied after the read, or the cache freezes the clock at the moment of the miss
 - Never cache entry data or user settings — see the rule in the root `AGENTS.md`. If you are reaching for a cache to make a list endpoint faster, the answer is an index, not KV
 - `JWKS_TTL_SECONDS` is the one TTL here that is a *security* bound, not a freshness one: it governs how long a signing key Cloudflare has withdrawn stays trusted. Raising it to save fetches trades a revocation window for nothing that matters — a new key is already picked up on the first request that carries it
+
+## Event Patterns
+
+- `emit(env, entryEvent(type, fields), waitUntil)` is the only way to publish. Pass `waitUntil` from anything serving a request so the send never lands on the response path
+- Events carry identity (`childId`, `table`, `entryId`), never the row's contents — re-read D1 in the subscriber
+- A new reaction to a write is a new `Subscriber` in `subscribers.ts`, not a call added to the route. If you are editing `crud.ts` to make something happen after a save, that is the signal you want a subscriber
+- Subscribers must be idempotent and must not depend on each other or on order
+- `EVENTS` is optional; without it `emit` dispatches inline, which is what the tests run on. A test that needs the queued path passes its own fake binding (see `test/events.test.ts`)
+- Adding a queue means adding it to the `Create queues` step in `deploy-server.yml` — wrangler rejects a deploy whose binding names a queue that does not exist
 
 ## Error Handling
 
