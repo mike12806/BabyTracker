@@ -1,4 +1,5 @@
 import type { Env } from "./types/env.js";
+import { recordPush, type PushOutcome } from "./telemetry.js";
 
 /**
  * Web Push, built directly on `crypto.subtle` — no `web-push` npm dependency,
@@ -196,9 +197,23 @@ export async function generateVapidKeys(): Promise<{ publicKey: string; privateK
  * deletes the row and returns rather than throwing. Any other failure throws,
  * for the queue consumer to retry.
  */
-export async function sendPushMessage(env: Env, subscription: PushSubscriptionKeys, payload: PushPayload): Promise<void> {
+export async function sendPushMessage(
+  env: Env,
+  subscription: PushSubscriptionKeys,
+  payload: PushPayload,
+  /**
+   * What the push is about, for telemetry only — "reminder", "feeding_trend".
+   * Defaults rather than being required so a caller that does not care about
+   * the breakdown is unchanged, and so this can never be the reason a send
+   * does not compile.
+   */
+  kind: string = "unknown",
+): Promise<void> {
+  const record = (outcome: PushOutcome) => recordPush(env, kind, outcome);
+
   if (!env.VAPID_PUBLIC_KEY || !env.VAPID_PRIVATE_KEY || !env.VAPID_SUBJECT) {
     console.error("Push notification skipped: VAPID keys are not configured.");
+    record("skipped");
     return;
   }
 
@@ -223,12 +238,21 @@ export async function sendPushMessage(env: Env, subscription: PushSubscriptionKe
 
   if (response.status === 404 || response.status === 410) {
     await env.DB.prepare("DELETE FROM push_subscriptions WHERE endpoint = ?").bind(subscription.endpoint).run();
+    // Recorded as its own outcome rather than as a failure: this is the push
+    // service working correctly and telling us a device is gone. It is worth
+    // counting precisely because it looks like nothing from everywhere else —
+    // a household whose sends are mostly `expired` has quietly stopped being
+    // reachable, and no error is raised anywhere when that happens.
+    record("expired");
     return;
   }
 
   if (!response.ok) {
+    record("failed");
     throw new Error(`Push send failed: ${response.status} ${await response.text()}`);
   }
+
+  record("sent");
 }
 
 // Exposed for the encrypt/decrypt round-trip test.

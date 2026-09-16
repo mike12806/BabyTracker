@@ -31,6 +31,7 @@
 
 import type { Context } from "hono";
 import type { Env } from "../types/env.js";
+import { cacheKeyKind, recordCacheAccess } from "../telemetry.js";
 
 /**
  * KV's own floor for `expirationTtl`. Anything shorter is rejected outright,
@@ -146,6 +147,11 @@ export async function cached<T>(
   waitUntil?: WaitUntil,
 ): Promise<T> {
   const hit = await cacheGet<T>(env, key);
+  // Recorded here rather than in `cacheGet` on purpose: this is the only
+  // caller for which "miss" means a D1 read is about to happen, which is the
+  // thing a hit rate is actually about. A bare `cacheGet` elsewhere is a
+  // different question.
+  recordCacheAccess(env, cacheKeyKind(key), hit !== undefined);
   if (hit !== undefined) return hit;
 
   const value = await load();

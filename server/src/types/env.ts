@@ -28,6 +28,16 @@ export interface Env {
    * dev that do not care about caching simply leave it out.
    */
   CACHE?: KVNamespace;
+  /**
+   * Workers Analytics Engine, for what the infrastructure actually did — see
+   * `src/telemetry.ts`.
+   *
+   * Optional for the same reason `CACHE` is, and more so: nothing reads these
+   * points back, so a missing binding costs a gap in a dashboard and nothing
+   * else. Every function in `telemetry.ts` no-ops without it, which is what
+   * runs in the tests and in local dev.
+   */
+  METRICS?: AnalyticsEngineDataset;
   CF_ACCESS_TEAM_DOMAIN: string;
   CF_ACCESS_AUD: string;
   DEV_MODE?: string;

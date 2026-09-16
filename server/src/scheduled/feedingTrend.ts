@@ -813,5 +813,5 @@ export async function deliverFeedingTrendAlert(env: Env, job: FeedingTrendJob): 
     title: "Baby Tracker",
     body: job.body,
     url: "/",
-  });
+  }, "feeding_trend");
 }

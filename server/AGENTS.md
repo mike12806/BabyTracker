@@ -5,6 +5,7 @@
 - Hono as the HTTP router
 - Cloudflare D1 (SQLite) for persistence
 - Cloudflare KV (`CACHE`) as a read cache in front of D1 — never a source of truth
+- Workers Analytics Engine (`METRICS`) for infrastructure telemetry — write-only, optional, never on a correctness path
 - Cloudflare Access for auth (JWT validation)
 - Deployed as a single Cloudflare Worker
 
@@ -14,6 +15,7 @@
 - `src/routes/` — One file per resource (children, feedings, diapers, sleep, etc.)
 - `src/middleware/` — Hono middleware (auth, error handling)
 - `src/kv/` — The KV read cache: `keys.ts` (every key, all versioned), `ttl.ts` (how long each may be wrong for), `cache.ts` (the read-through helpers)
+- `src/telemetry.ts` — Every Analytics Engine event, and the positional schema they share
 - `src/db/` — Database query helpers and types
 - `src/types/` — Shared TypeScript types
 - `migrations/` — D1 migration SQL files
@@ -55,6 +57,14 @@
 - Cache the *row*, not the answer. Anything time-dependent (an age cutoff, a "within N days" filter) is re-applied after the read, or the cache freezes the clock at the moment of the miss
 - Never cache entry data or user settings — see the rule in the root `AGENTS.md`. If you are reaching for a cache to make a list endpoint faster, the answer is an index, not KV
 - `JWKS_TTL_SECONDS` is the one TTL here that is a *security* bound, not a freshness one: it governs how long a signing key Cloudflare has withdrawn stays trusted. Raising it to save fetches trades a revocation window for nothing that matters — a new key is already picked up on the first request that carries it
+
+## Telemetry Patterns
+
+- One function per event in `src/telemetry.ts`; call sites never touch `writeDataPoint` directly
+- The layout is the schema — Analytics Engine addresses `blob1..blob20` by position, not by name. `blob1` is the event name, every other position is documented on its function, and a position keeps its meaning forever. Append, never repurpose
+- Put a 1/0 in `doubles` alongside any string outcome worth a rate: `avg(double1)` is the figure anyone actually wants, and it is awkward to get from a blob
+- Record at the point that already knows the answer. The queue outcome is recorded in `index.ts` where `ack`/`retry` is decided, the cache hit in `cached()` where a miss means a D1 read is about to happen — not in a wrapper that has to guess
+- `METRICS` is optional and every function no-ops without it. That is the path the tests and local dev take, so it is the common case, not a degraded one
 
 ## Error Handling
 

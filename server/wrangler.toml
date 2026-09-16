@@ -191,6 +191,37 @@ retry_delay = 60
 [ai]
 binding = "AI"
 
+# Workers Analytics Engine — what the infrastructure above actually did, as
+# opposed to what it was designed to do. See src/telemetry.ts for the schema
+# and the reasoning; briefly: nearly every binding in this file is wired to
+# fail quietly (the AI chain falls back to a template, KV degrades to a D1
+# read, a queue retries, a dead push subscription is deleted), and the sum of
+# those correct-in-isolation behaviours is a Worker that cannot tell you
+# whether it is working or barely working.
+#
+# Not a replacement for the log lines next to each of them: `console.error`
+# says "this went wrong, here is the message", and this says how often, over
+# months, in SQL. A log line cannot be aggregated after the fact.
+#
+# The dataset is created on the first write, so unlike the queues and the KV
+# namespace there is nothing for the deploy workflow to provision first.
+[[analytics_engine_datasets]]
+binding = "METRICS"
+dataset = "baby_tracker_metrics"
+
+# Workers Logs. Off by default, which meant the `console.error` calls this
+# repo leans on throughout were only visible to whoever happened to be holding
+# a `wrangler tail` open at the time — that is, never, for anything that
+# happened overnight on a cron.
+#
+# `head_sampling_rate = 1` keeps all of them. At this app's volume (a handful
+# of devices and a few dozen entries a day) the free allowance is not in sight,
+# and a sampled log is worse than no log for the thing these are for: a
+# one-off failure nobody was watching.
+[observability]
+enabled = true
+head_sampling_rate = 1
+
 [triggers]
 # Five crons. The first two, both after midnight Eastern so each covers the
 # prior full ET day, staggered so the note is written before the email that

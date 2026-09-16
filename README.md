@@ -34,6 +34,7 @@ A baby tracking application inspired by [Baby Buddy](https://github.com/babybudd
 | Feeding trend delivery | Cloudflare Queues | Retried; one job per subscribed device |
 | In-app alerts feed | D1 (`alerts`) | Written where the alert is decided, read back by the app's bell |
 | Offline writes | Device-local outbox | Foreground flush, deduplicated server-side by `client_request_id` |
+| Telemetry | Workers Analytics Engine | What the infrastructure above actually did — AI fallbacks, queue retries, push expiries, cache hit rate |
 
 ## Getting Started
 
@@ -406,6 +407,71 @@ reading. See `server/kv-migrations/README.md`.
 npm run kv:migrate -w server          # miniflare's local KV
 npm run kv:status -w server           # what a remote run would do
 npm run kv:migrate:remote -w server   # the real namespace
+```
+
+## Telemetry
+
+Almost every piece of infrastructure in this app is built to fail quietly, and
+each of those decisions is right on its own: a missing `AI` binding writes the
+template note, a KV hiccup degrades to a D1 read, a push to a dead subscription
+deletes the row, a queue consumer retries. Together they add up to a Worker
+that cannot tell you the difference between working and barely working. The
+daily note has a three-model fallback chain and nothing answered "how often do
+we reach the second model", or "did anyone get a real note this week".
+
+So each of those outcomes is also written to Workers Analytics Engine, bound as
+`METRICS` and defined in `server/src/telemetry.ts`:
+
+| Event | Answers |
+|-------|---------|
+| `generation` | Did the model write this, or did the template stand in — and which model, for which feature |
+| `queue` | Acked or retried, on which queue, **on which attempt** |
+| `push` | Delivered, expired, failed, or skipped for missing VAPID keys |
+| `cache` | Hit or miss, by key kind |
+
+The attempt count is the point of recording the queue at all. A queue that acks
+everything first time and one that acks everything on the third look identical
+from outside — both drain, neither dead-letters — and only the second is
+quietly spending its `max_retries` budget, one bad minute from losing messages
+for real. `push` separates `expired` from `failed` for the same reason: a
+device that silently unsubscribed raises no error anywhere, so a household
+whose sends are mostly `expired` is invisible from every other angle.
+
+This is not a replacement for the `console.error` calls next to each of them.
+A log line says "this went wrong, here is the message"; these say how often,
+over months, in SQL. A log line cannot be aggregated after the fact — which is
+also why `[observability]` is now on in `wrangler.toml`, with no head sampling:
+until then those log lines were only visible to whoever happened to be holding
+a `wrangler tail` open, which is nobody, for anything that happened overnight
+on a cron.
+
+**The schema is positional.** Analytics Engine has no column names — the SQL
+API addresses `blob1..blob20` by index — so the layout *is* the schema, in a
+way a normal struct is not. Moving what lives in `blob3` does not break a
+query, it changes what the query means, and a window spanning the deploy
+silently mixes both meanings into one number. The rule is therefore the same
+one `KV_SCHEMA_VERSION` enforces next door, arrived at from the other
+direction: a position, once used, keeps its meaning forever. Append a field;
+never repurpose one. Unlike KV there is nothing to bump — data points are
+historical facts rather than a cache, and re-meaning the old ones is not on the
+table.
+
+The binding is optional and every function in `telemetry.ts` swallows what it
+throws, exactly like the KV cache: nothing here is on a path whose correctness
+depends on the answer, and instrumentation that can fail the thing it measures
+is worse than none. The dataset is created on first write, so there is nothing
+to provision — unlike the queues and the KV namespace, the deploy workflow has
+no step for it.
+
+Query it from the account's Analytics Engine SQL API, e.g. the daily note's
+success rate over the last week:
+
+```sql
+SELECT blob4 AS model, avg(double1) AS success_rate, count() AS runs
+FROM baby_tracker_metrics
+WHERE blob1 = 'generation' AND blob2 = 'daily_note'
+  AND timestamp > now() - INTERVAL '7' DAY
+GROUP BY model
 ```
 
 ## Deployment

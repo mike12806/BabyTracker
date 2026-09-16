@@ -43,6 +43,7 @@ import { push } from "./routes/push.js";
 import { feedingTrend } from "./routes/feedingTrend.js";
 import { alerts } from "./routes/alerts.js";
 import { live } from "./routes/live.js";
+import { recordGeneration, recordQueueOutcome, type QueueOutcome } from "./telemetry.js";
 
 type AppEnv = { Bindings: Env; Variables: { userId: number; userEmail: string; userName: string } };
 
@@ -153,6 +154,31 @@ const FEEDING_TREND_CRON = "0 15,16,20,21,23,0 * * *";
  */
 export { ChildLive } from "./live.js";
 
+/**
+ * Ack or retry one message, and record which.
+ *
+ * Every consumer below already decides this correctly; what none of them do is
+ * leave a trace. A queue that acks everything on the first attempt and one
+ * that acks everything on the third look identical from outside — both drain,
+ * neither dead-letters — and only the second is quietly spending its
+ * `max_retries` budget, one bad minute away from losing messages for real.
+ * `message.attempts` is the number that tells them apart, and it is available
+ * here and nowhere else.
+ *
+ * Routed by `batch.queue` rather than a label per call site, so a queue added
+ * later is counted without anyone remembering to.
+ */
+function settle<T>(
+  env: Env,
+  batch: MessageBatch<T>,
+  message: Message<T>,
+  outcome: QueueOutcome,
+): void {
+  recordQueueOutcome(env, batch.queue, outcome, message.attempts);
+  if (outcome === "ack") message.ack();
+  else message.retry();
+}
+
 export default {
   fetch: app.fetch,
 
@@ -242,13 +268,13 @@ export default {
         const job = message.body as FeedingTrendJob;
         try {
           await deliverFeedingTrendAlert(env, job);
-          message.ack();
+          settle(env, batch, message, "ack");
         } catch (err) {
           console.error(
             `Feeding trend alert delivery failed for subscription ${job?.subscriptionId}:`,
             err,
           );
-          message.retry();
+          settle(env, batch, message, "retry");
         }
       }
       return;
@@ -259,10 +285,10 @@ export default {
         const job = message.body as ReminderJob;
         try {
           await deliverReminder(env, job);
-          message.ack();
+          settle(env, batch, message, "ack");
         } catch (err) {
           console.error(`Reminder delivery failed for subscription ${job?.subscriptionId}:`, err);
-          message.retry();
+          settle(env, batch, message, "retry");
         }
       }
       return;
@@ -277,14 +303,26 @@ export default {
         const job = message.body as DailyNoteJob;
         try {
           const note = await writeNoteForJob(env, job);
+          // Which end of the model chain answered, if any — the thing the
+          // `source` column records one row at a time and nothing aggregates.
+          // `note.reason` names the model that wrote it and what the ones
+          // before it did; it is this Worker's own diagnostic string and never
+          // the note text, which is about somebody's child.
+          recordGeneration(
+            env,
+            "daily_note",
+            note.source,
+            env.DAILY_NOTE_MODEL ?? "chain",
+            note.reason,
+          );
           // A template note means the model declined; retry rather than ack,
           // since "out of capacity" is exactly the transient case this queue
           // exists for. `writeNoteForJob` has already logged the reason.
-          if (note.source === "ai") message.ack();
-          else message.retry();
+          if (note.source === "ai") settle(env, batch, message, "ack");
+          else settle(env, batch, message, "retry");
         } catch (err) {
           console.error(`Daily note generation failed for child ${job?.childId}:`, err);
-          message.retry();
+          settle(env, batch, message, "retry");
         }
       }
       return;
@@ -295,14 +333,23 @@ export default {
         const job = message.body as BoopLineJob;
         try {
           const { added, reason } = await refreshMood(env, job.mood);
+          // Same reading as the daily note above: lines added means the model
+          // answered, none plus a reason means it did not.
+          recordGeneration(
+            env,
+            "boop_lines",
+            added > 0 ? "ai" : "fallback",
+            env.BOOP_LINES_MODEL ?? "chain",
+            reason,
+          );
           // Zero new lines usually means a transient model failure (out of
           // capacity, a bad reply) — retry, same as the daily note queue.
           // `refreshMood` has already logged the reason.
-          if (added > 0 || !reason) message.ack();
-          else message.retry();
+          if (added > 0 || !reason) settle(env, batch, message, "ack");
+          else settle(env, batch, message, "retry");
         } catch (err) {
           console.error(`Boop line generation failed for "${job?.mood}":`, err);
-          message.retry();
+          settle(env, batch, message, "retry");
         }
       }
       return;
@@ -312,7 +359,7 @@ export default {
       for (const message of batch.messages) {
         try {
           await alertDeadLetteredSummary(env, message.body as DailySummaryJob, message.attempts);
-          message.ack();
+          settle(env, batch, message, "ack");
         } catch (err) {
           // The alert goes over the same channel that just failed, so this is
           // a plausible outcome rather than a surprise. Retrying is still
@@ -323,7 +370,7 @@ export default {
             `Could not report the dead-lettered summary for ${(message.body as DailySummaryJob)?.email}:`,
             err,
           );
-          message.retry();
+          settle(env, batch, message, "retry");
         }
       }
       return;
@@ -332,12 +379,12 @@ export default {
     for (const message of batch.messages) {
       try {
         await deliverDailySummary(env, message.body as DailySummaryJob);
-        message.ack();
+        settle(env, batch, message, "ack");
       } catch (err) {
         // Retried `max_retries` times, then dead-lettered — and the branch
         // above turns that into an email rather than a message nobody sees.
         console.error(`Daily summary delivery failed for ${(message.body as DailySummaryJob)?.email}:`, err);
-        message.retry();
+        settle(env, batch, message, "retry");
       }
     }
   },

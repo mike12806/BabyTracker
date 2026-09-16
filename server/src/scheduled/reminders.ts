@@ -217,7 +217,7 @@ export async function deliverReminder(env: Env, job: ReminderJob): Promise<void>
       title: "Baby Tracker",
       body: "Reminders are on. We'll notify you here when one's due.",
       url: "/",
-    });
+    }, "reminder_confirmation");
     return;
   }
 
@@ -228,7 +228,7 @@ export async function deliverReminder(env: Env, job: ReminderJob): Promise<void>
     // Absent on a job queued before this field existed — the service worker
     // simply shows an untagged notification then, exactly as it used to.
     tag: job.childId ? reminderNotificationTag(job.childId, job.kind) : undefined,
-  });
+  }, `reminder_${job.kind}`);
 }
 
 /**

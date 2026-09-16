@@ -33,3 +33,8 @@ new_sqlite_classes = ["ChildLive"]
 [vars]
 CF_ACCESS_TEAM_DOMAIN = "test.cloudflareaccess.com"
 CF_ACCESS_AUD = "test-aud"
+
+# Analytics Engine is left out for the same reason as the queues: the tests
+# that care pass their own recording stub (see test/telemetry.test.ts), and
+# every other test then exercises the no-binding path — which is the one
+# `src/telemetry.ts` promises is a silent no-op, and the one local dev runs.
