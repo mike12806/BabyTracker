@@ -1,6 +1,9 @@
 /// <reference types="vite/client" />
 import { describe, it, expect, vi } from "vitest";
+import { Hono } from "hono";
 import { env } from "cloudflare:test";
+import { authMiddleware } from "../src/middleware/auth.js";
+import { cachePut } from "../src/kv/cache.js";
 import {
   cacheKeyKind,
   recordCacheAccess,
@@ -158,6 +161,78 @@ describe("telemetry", () => {
       expect(cacheKeyKind("no-colons-here")).toBe("other");
       expect(cacheKeyKind("")).toBe("other");
       expect(cacheKeyKind("v1:")).toBe("other");
+    });
+  });
+
+  // The two hottest cache reads in the Worker do not go through `cached()` —
+  // `authMiddleware` uses `cacheGet` directly for both, because each has a
+  // conditional hit test `cached()` cannot express. They are instrumented at
+  // their own call sites, and these are the tests that would fail if that were
+  // ever quietly undone, leaving a hit rate that excluded all the volume.
+  describe("the auth path, which does not use cached()", () => {
+    /** The real middleware on its DEV_MODE path, so no JWT is needed. */
+    function devApp() {
+      const app = new Hono<{ Bindings: Env; Variables: { userId: number; userName: string } }>();
+      app.use("/api/*", authMiddleware);
+      app.get("/api/whoami", (c) => c.json({ id: c.get("userId") }));
+      return app;
+    }
+
+    it("records a miss when the caller's row is not cached yet", async () => {
+      const { env: e, points } = withMetrics();
+
+      await devApp().request(
+        "/api/whoami",
+        { headers: { "X-Dev-Email": "fresh@example.com" } },
+        { ...e, DEV_MODE: "true" } as unknown as Env,
+      );
+
+      const user = points.filter((p) => p.blobs?.[0] === "cache" && p.blobs?.[1] === "user");
+      expect(user).toHaveLength(1);
+      expect(user[0].blobs?.[2]).toBe("miss");
+    });
+
+    it("records a hit once the row is cached", async () => {
+      const { env: e, points } = withMetrics();
+      await cachePut(
+        e,
+        userKey("known@example.com"),
+        { id: 4242, email: "known@example.com", name: "Known" },
+        60,
+      );
+
+      await devApp().request(
+        "/api/whoami",
+        { headers: { "X-Dev-Email": "known@example.com", "X-Dev-Name": "Known" } },
+        { ...e, DEV_MODE: "true" } as unknown as Env,
+      );
+
+      const user = points.filter((p) => p.blobs?.[0] === "cache" && p.blobs?.[1] === "user");
+      expect(user).toHaveLength(1);
+      expect(user[0].blobs?.[2]).toBe("hit");
+    });
+
+    it("counts a renamed account as a miss, because it still pays for D1", async () => {
+      // The cached row is present and valid; it is simply no longer usable,
+      // and auth falls through to the upsert. Counting that as a hit would
+      // report a cache that is working when it is not saving anything.
+      const { env: e, points } = withMetrics();
+      await cachePut(
+        e,
+        userKey("renamed@example.com"),
+        { id: 99, email: "renamed@example.com", name: "Old Name" },
+        60,
+      );
+
+      await devApp().request(
+        "/api/whoami",
+        { headers: { "X-Dev-Email": "renamed@example.com", "X-Dev-Name": "New Name" } },
+        { ...e, DEV_MODE: "true" } as unknown as Env,
+      );
+
+      const user = points.filter((p) => p.blobs?.[0] === "cache" && p.blobs?.[1] === "user");
+      expect(user).toHaveLength(1);
+      expect(user[0].blobs?.[2]).toBe("miss");
     });
   });
 });

@@ -427,7 +427,7 @@ So each of those outcomes is also written to Workers Analytics Engine, bound as
 | `generation` | Did the model write this, or did the template stand in — and which model, for which feature |
 | `queue` | Acked or retried, on which queue, **on which attempt** |
 | `push` | Delivered, expired, failed, or skipped for missing VAPID keys |
-| `cache` | Hit or miss, by key kind |
+| `cache` | Hit or miss, by key kind — including the two auth reads on every request |
 
 The attempt count is the point of recording the queue at all. A queue that acks
 everything first time and one that acks everything on the third look identical
@@ -436,6 +436,18 @@ quietly spending its `max_retries` budget, one bad minute from losing messages
 for real. `push` separates `expired` from `failed` for the same reason: a
 device that silently unsubscribed raises no error anywhere, so a household
 whose sends are mostly `expired` is invisible from every other angle.
+
+The `cache` event is recorded at each read site rather than only inside
+`cached()`, and that is not tidiness. The two hottest reads in the Worker —
+the Access JWKS and the caller's `users` row, both on *every* request — do not
+go through `cached()` at all: each has a conditional hit test that helper
+cannot express, since a cached JWKS that lacks the incoming `kid` and a cached
+user row under a changed display name are both present, valid, and unusable.
+Instrumenting only `cached()` would have reported a hit rate over the boop pool
+and the daily note while silently excluding essentially all the volume. A
+renamed account is likewise counted as a miss, because it still pays for D1,
+and a cache that reports itself working while saving nothing is worse than one
+that reports nothing.
 
 This is not a replacement for the `console.error` calls next to each of them.
 A log line says "this went wrong, here is the message"; these say how often,

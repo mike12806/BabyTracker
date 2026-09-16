@@ -63,7 +63,7 @@
 - One function per event in `src/telemetry.ts`; call sites never touch `writeDataPoint` directly
 - The layout is the schema — Analytics Engine addresses `blob1..blob20` by position, not by name. `blob1` is the event name, every other position is documented on its function, and a position keeps its meaning forever. Append, never repurpose
 - Put a 1/0 in `doubles` alongside any string outcome worth a rate: `avg(double1)` is the figure anyone actually wants, and it is awkward to get from a blob
-- Record at the point that already knows the answer. The queue outcome is recorded in `index.ts` where `ack`/`retry` is decided, the cache hit in `cached()` where a miss means a D1 read is about to happen — not in a wrapper that has to guess
+- Record at the point that already knows the answer. The queue outcome is recorded in `index.ts` where `ack`/`retry` is decided; the cache hit in `cached()` **and** at the two `cacheGet` sites in `authMiddleware`, whose hit test is conditional (an unknown `kid`, a changed display name) and so cannot use the helper. Instrument the read, not the helper — a new `cacheGet` caller that skips this leaves a hit rate that quietly excludes it
 - `METRICS` is optional and every function no-ops without it. That is the path the tests and local dev take, so it is the common case, not a degraded one
 
 ## Error Handling

@@ -3,6 +3,7 @@ import type { Env } from "../types/env.js";
 import { backgroundWrites, cacheDelete, cacheGet, cachePut } from "../kv/cache.js";
 import type { WaitUntil } from "../kv/cache.js";
 import { jwksKey, userKey } from "../kv/keys.js";
+import { cacheKeyKind, recordCacheAccess } from "../telemetry.js";
 import { JWKS_TTL_SECONDS, USER_TTL_SECONDS } from "../kv/ttl.js";
 
 type AppEnv = { Bindings: Env; Variables: { userId: number; userEmail: string; userName: string } };
@@ -73,6 +74,12 @@ async function signingKeyFor(
   const key = jwksKey();
   const cachedJwks = await cacheGet<Jwks>(env, key);
   const fromCache = cachedJwks?.keys?.find((k) => k.kid === kid);
+  // Recorded here rather than inside `cached()`, because this read cannot use
+  // it: a hit is not "the key set was cached" but "the cached key set contains
+  // *this* kid", and a rotation has to miss on a set that is present and
+  // perfectly valid. Counting it as a hit would hide exactly the event — a
+  // rotation, or a run of bad tokens — that the miss rate exists to show.
+  recordCacheAccess(env, cacheKeyKind(key), Boolean(fromCache));
   if (fromCache) return fromCache;
 
   const fresh = await fetchJwks(certsUrl);
@@ -161,7 +168,13 @@ async function resolveUser(
   const key = userKey(email);
 
   const hit = await cacheGet<CachedUser>(env, key);
-  if (hit && hit.name === name && hit.email === email) return hit;
+  const usable = Boolean(hit && hit.name === name && hit.email === email);
+  // Same shape as the JWKS read above: the cached row being present is not the
+  // same as it being usable, since a renamed account must fall through to the
+  // upsert. The miss rate is therefore "how often does auth still pay for D1",
+  // which is the question this cache was added to answer.
+  recordCacheAccess(env, cacheKeyKind(key), usable);
+  if (usable) return hit as CachedUser;
 
   await env.DB.prepare(UPSERT_USER_SQL).bind(email, name).run();
 
