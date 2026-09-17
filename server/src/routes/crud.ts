@@ -2,7 +2,9 @@ import { Hono } from "hono";
 import type { Env } from "../types/env.js";
 import { insertOnce, readClientRequestId } from "./idempotency.js";
 import { announceChange } from "../live.js";
-import { clearReminderAlerts } from "../scheduled/reminders.js";
+import { emit } from "../events/bus.js";
+import { entryEvent } from "../events/types.js";
+import { backgroundWrites } from "../kv/cache.js";
 
 type AppEnv = { Bindings: Env; Variables: { userId: number; userEmail: string; userName: string } };
 
@@ -22,15 +24,6 @@ interface CrudRouteConfig {
   requiredColumns: string[];
   /** Column used for default ordering (descending). Defaults to "created_at". */
   orderBy?: string;
-  /**
-   * The overdue reminder an entry in this table answers, if any.
-   *
-   * Set on feedings and diaper changes: those are the two things a reminder
-   * nags about, so logging one is what closes an outstanding alert. Whether
-   * the entry actually ends the gap is `clearReminderAlerts`'s call, not this
-   * flag's — see `scheduled/reminders.ts`.
-   */
-  clearsReminderKind?: "diaper" | "feeding";
 }
 
 /**
@@ -39,7 +32,7 @@ interface CrudRouteConfig {
  * All routes expect child_id as a query param (GET list) or in the body.
  */
 export function createChildScopedCrud(config: CrudRouteConfig) {
-  const { table, columns, requiredColumns, orderBy = "created_at", clearsReminderKind } = config;
+  const { table, columns, requiredColumns, orderBy = "created_at" } = config;
   const router = new Hono<AppEnv>();
 
   // GET / — list entries, filtered by child_id query param
@@ -126,20 +119,32 @@ export function createChildScopedCrud(config: CrudRouteConfig) {
     // to hand back, and resurrecting the entry would undo a deliberate delete.
     if (!created) return c.json({ deleted: true });
 
-    // A reminder is a statement about a gap, so the entry that ends the gap
-    // answers it: the alert comes off the bell — everyone's, not just this
-    // caller's — and the notification comes off the lock screen on the next
-    // refresh. Deliberately after the insert rather than instead of part of
-    // it: an alert left standing is a stale bell, not a lost entry, so it
-    // must not be able to fail the save. `clearReminderAlerts` swallows its
-    // own errors for the same reason.
+    // Say what happened, once. Whatever should follow from a logged entry —
+    // today, resolving the overdue reminder it answers — is a subscriber in
+    // `events/subscribers.ts` rather than a call added here, which is the
+    // point of the bus: this route no longer has to know reminders exist.
     //
-    // A deduplicated retry lands here too, and harmlessly: the second call
-    // finds nothing open and does nothing. Same for an outbox flush, which
-    // is the case that matters most — the phone that logged the feed offline
-    // is the one still showing the reminder.
-    if (clearsReminderKind) await clearReminderAlerts(c.env, childId, clearsReminderKind);
+    // Deliberately after the insert, and deliberately unable to fail it: an
+    // alert left standing is a stale bell, not a lost entry. `emit` swallows
+    // its own errors for that reason, and `waitUntil` keeps the publish off
+    // the response path entirely.
+    //
+    // A deduplicated retry emits too, and harmlessly — every subscriber on
+    // this bus is idempotent, which is what made a retried create safe here
+    // long before the events did.
+    await emit(
+      c.env,
+      entryEvent("entry.created", {
+        childId,
+        table,
+        entryId: rowId,
+        actorUserId: userId,
+      }),
+      backgroundWrites(c),
+    );
 
+    // Not on the bus, on purpose: the live nudge is the one piece of this
+    // whose job is to feel instant, and a queue hop is latency. See bus.ts.
     await announceChange(c, childId);
 
     return c.json(created, 201);
@@ -186,6 +191,17 @@ export function createChildScopedCrud(config: CrudRouteConfig) {
 
     // `existing.child_id`, not the body: an edit does not carry a child_id,
     // and the row's own child is who was watching it anyway.
+    await emit(
+      c.env,
+      entryEvent("entry.updated", {
+        childId: existing.child_id as number,
+        table,
+        entryId: id,
+        actorUserId: c.get("userId"),
+      }),
+      backgroundWrites(c),
+    );
+
     await announceChange(c, existing.child_id as number);
 
     return c.json(updated);
@@ -209,6 +225,22 @@ export function createChildScopedCrud(config: CrudRouteConfig) {
 
     // A delete is as much a change as a create — the other caregiver's list is
     // showing a row that is gone.
+    //
+    // Nothing subscribes to this one today. It is published anyway because the
+    // alternative is a bus whose events exist only where someone happened to
+    // need them, which is how a write path ends up being edited again the next
+    // time something does.
+    await emit(
+      c.env,
+      entryEvent("entry.deleted", {
+        childId: existing.child_id as number,
+        table,
+        entryId: id,
+        actorUserId: c.get("userId"),
+      }),
+      backgroundWrites(c),
+    );
+
     await announceChange(c, existing.child_id as number);
 
     return c.json({ ok: true });

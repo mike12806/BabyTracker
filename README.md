@@ -34,6 +34,7 @@ A baby tracking application inspired by [Baby Buddy](https://github.com/babybudd
 | Feeding trend delivery | Cloudflare Queues | Retried; one job per subscribed device |
 | In-app alerts feed | D1 (`alerts`) | Written where the alert is decided, read back by the app's bell |
 | Offline writes | Device-local outbox | Foreground flush, deduplicated server-side by `client_request_id` |
+| Domain events | Cloudflare Queues | One `entry.*` event per write; subscribers react, inline when no queue is bound |
 
 ## Getting Started
 
@@ -407,6 +408,81 @@ npm run kv:migrate -w server          # miniflare's local KV
 npm run kv:status -w server           # what a remote run would do
 npm run kv:migrate:remote -w server   # the real namespace
 ```
+
+## The event bus
+
+A write used to do its own fan-out. `createChildScopedCrud`'s POST inserted the
+row, then called `clearReminderAlerts`, then `announceChange` — in that order,
+inline, on the response path — and there were 18 `announceChange` call sites
+across four route files doing the same thing by hand. Adding anything that
+should happen when a feed is logged meant editing the create path.
+
+Now the write says *what happened*, once, and whatever cares subscribes:
+
+```
+POST /api/feedings ──▶ insert ──▶ emit(entry.created) ──▶ baby-tracker-events
+                          │                                      │
+                          └──▶ announceChange (inline)           ▼
+                                                        dispatch to subscribers
+                                                          └─ reminder-resolution
+```
+
+`server/src/events/` holds all of it: `types.ts` (the event shapes), `bus.ts`
+(publish and dispatch), `subscribers.ts` (what reacts to what).
+
+### Events carry identity, never the row
+
+`{ type, childId, table, entryId, actorUserId, at }` and nothing about the
+entry's contents. This is the same rule `src/live.ts` already states for what
+crosses the socket, reached from the same direction: a queued message can be
+delivered well after the row it names has changed again, so a snapshot taken at
+emit time is a value that *was* true and may not be now. A subscriber that needs
+the entry re-reads D1 and gets the current answer. It also means nothing about
+anybody's child sits in a queue's retention window.
+
+`at` is when the event was emitted, not the entry's own timestamp. The two
+differ constantly — a feed logged at 11:58 and saved at 12:03, an outbox flush
+replaying yesterday — and a subscriber reasoning about a gap wants the entry's
+time, from D1, not this one.
+
+### One queue, not one per subscriber
+
+Cloudflare Queues gives one consumer per queue, so N independent subscribers
+means either a consumer that dispatches in process or N queues and N sends per
+event. This is the first. The cost is a shared retry fate: when one subscriber
+fails the message is retried and every subscriber on it runs again.
+
+That is affordable here only because it was already paid. **Every subscriber on
+this bus must be idempotent**, and the ones moved onto it already were —
+`clearReminderAlerts` finds nothing open on a second run, which is exactly what
+made a deduplicated create retry safe long before the bus existed. The day a
+subscriber needs its own retry budget, it gets its own queue.
+
+### What is deliberately not on the bus
+
+The live nudge. `announceChange` stays inline on every write path, because a
+queue hop is latency and the nudge is the one piece whose whole job is to feel
+instant. It is also not a *reaction* to a change the way a subscriber is — it is
+the change, reaching the other device. The split is the ordinary one: a read
+model updated synchronously, everything else asynchronously.
+
+### The one behaviour change
+
+`clearReminderAlerts` used to run before the 201 went back and now runs a moment
+later on the consumer, so there is a brief window in which the phone that just
+logged a feed still shows the reminder that feed answered. That is the trade
+this bus is, and the create path had already made the argument for it: an alert
+left standing is a stale bell, not a lost entry, so it must not be able to fail
+the save — and something that must not fail the save has no business being
+awaited by it either. The bell catches up on the next refresh, which the other
+caregiver's device was always waiting for anyway.
+
+### Without the binding
+
+`EVENTS` is optional like every other queue here, and `emit` falls back to
+dispatching inline. Tests and local dev without `wrangler dev` therefore keep
+the exact pre-bus ordering — which is why every create test that predates this
+passes unchanged.
 
 ## Deployment
 

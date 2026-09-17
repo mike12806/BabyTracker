@@ -185,6 +185,39 @@ max_batch_timeout = 30
 max_retries = 3
 retry_delay = 60
 
+# The domain event bus. Unlike every queue above — each of which carries one
+# job type from one producer to one consumer — this one carries *events*: a
+# write says what happened, and `src/events/subscribers.ts` decides what should
+# follow. Adding a reaction to "a feed was logged" is a subscriber there rather
+# than another call spliced into the create path.
+#
+# One queue with a dispatching consumer, rather than one queue per subscriber.
+# Cloudflare Queues gives one consumer per queue, so N independent subscribers
+# means either this or N sends per event; the cost of this shape is that a
+# retry re-runs every subscriber on the message, which is affordable only
+# because each one is required to be idempotent. They already were — see the
+# comment on SUBSCRIBERS. The day one needs its own retry budget, it gets its
+# own queue.
+[[queues.producers]]
+queue = "baby-tracker-events"
+binding = "EVENTS"
+
+[[queues.consumers]]
+queue = "baby-tracker-events"
+max_batch_size = 10
+max_batch_timeout = 30
+max_retries = 3
+# Ten seconds. Far shorter than the delivery queues above, because what is
+# waiting on this is a caregiver's bell catching up with a feed they have
+# already logged — a minute of staleness is the thing the retry is meant to
+# avoid, not something it can afford to spend.
+retry_delay = 10
+# No dead letter queue. Every subscriber here is doing work the write path
+# already declared non-critical ("an alert left standing is a stale bell, not a
+# lost entry"), so an event that exhausts its retries has cost a stale bell
+# until the next refresh, and a queue of unread messages would add nothing the
+# Worker log does not already say.
+
 # Workers AI, for the dashboard's daily note. One generation per child per day
 # from the cron below, cached in D1 — a page load never reaches the model, so
 # the cost does not scale with how often the app is opened.
