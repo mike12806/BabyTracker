@@ -36,6 +36,7 @@ import { useDataRefresh } from "../hooks/useDataRefresh";
 import { useNotification } from "../hooks/useNotification";
 import ChildHero from "../components/ChildHero";
 import NoChildPlaceholder from "../components/NoChildPlaceholder";
+import MilestonesCard from "../components/MilestonesCard";
 import QuickLogDialog, { type QuickLogCategory } from "../components/QuickLogDialog";
 import { buildCategoryColors, type CategoryKey } from "../theme/categoryColors";
 import type { BoopLinePool } from "../utils/childMoments";
@@ -668,6 +669,10 @@ export default function Dashboard() {
           );
         })}
       </Box>
+
+      {/* Developmental milestones. One row, below the numbers, so it never
+          pushes the quick-log tiles down. The full checklist opens from it. */}
+      <MilestonesCard child={selectedChild} cat={cat} isDark={isDark} />
 
       {/* Section: Recent Activity */}
       <Box sx={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", px: 0.25, mb: 0.5 }}>
