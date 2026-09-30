@@ -3,7 +3,7 @@ import { describe, it, expect } from "vitest";
 import { ThemeProvider, createTheme } from "@mui/material/styles";
 import MilestonesCard from "../src/components/MilestonesCard";
 import { buildCategoryColors } from "../src/theme/categoryColors";
-import { MILESTONE_SOURCE } from "../src/utils/milestones";
+import { DEVELOPMENTAL_MILESTONES, MILESTONE_SOURCE, checkpointItems } from "../src/utils/milestones";
 import type { Child } from "../src/types/models";
 
 const cat = buildCategoryColors(false);
@@ -32,6 +32,14 @@ describe("MilestonesCard", () => {
     renderCard();
     expect(screen.getByText("Milestones by 4 months · CDC")).toBeInTheDocument();
     expect(screen.getByText("in 5 wks")).toBeInTheDocument();
+  });
+
+  it("says how many more milestones the sheet holds beyond the one previewed", () => {
+    renderCard();
+    const fourMonths = DEVELOPMENTAL_MILESTONES.find((c) => c.months === 4)!;
+    const more = checkpointItems(fourMonths).length - 1;
+    expect(screen.getByText(`+${more} more`)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: new RegExp(`and ${more} more`) })).toBeInTheDocument();
   });
 
   it("keeps a just-reached checkpoint in view for the well-child visit", () => {

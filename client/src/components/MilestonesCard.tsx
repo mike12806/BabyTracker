@@ -56,10 +56,10 @@ interface Props {
 
 /**
  * Developmental milestones on the dashboard. The card itself is one row: the
- * checkpoint coming up, one milestone from it (a different one each day), and
- * how far away it is. The full CDC checklist and its sources open in a sheet
- * when tapped. It is kept to one row so it never pushes the logging tiles and
- * today's totals down the page.
+ * checkpoint coming up, one milestone from it (a different one each day), how
+ * far away it is, and how many more the checkpoint has. The full CDC checklist
+ * and its sources open in a sheet when tapped. It is kept to one row so it
+ * never pushes the logging tiles and today's totals down the page.
  */
 export default function MilestonesCard({ child, cat, isDark, now = new Date() }: Props) {
   const theme = useTheme();
@@ -73,6 +73,7 @@ export default function MilestonesCard({ child, cat, isDark, now = new Date() }:
   const accent = cat.tummy;
   const preview = milestoneOfTheDay(focus.checkpoint, now);
   const gap = compactGap(focus.daysUntil);
+  const moreCount = checkpointItems(focus.checkpoint).length - 1;
 
   const viewed = DEVELOPMENTAL_MILESTONES[viewIndex] ?? focus.checkpoint;
   const viewedDays = daysUntilCheckpoint(child.birth_date, viewed, now);
@@ -89,7 +90,7 @@ export default function MilestonesCard({ child, cat, isDark, now = new Date() }:
     <>
       <ButtonBase
         onClick={handleOpen}
-        aria-label={`Milestones by ${focus.checkpoint.label}, ${gap}: ${preview}. Source: CDC. Open the full checklist.`}
+        aria-label={`Milestones by ${focus.checkpoint.label}, ${gap}: ${preview}, and ${moreCount} more. Source: CDC. Open the full checklist.`}
         sx={{
           width: "100%",
           display: "flex",
@@ -132,11 +133,20 @@ export default function MilestonesCard({ child, cat, isDark, now = new Date() }:
             {preview}
           </Typography>
         </Box>
-        <Typography
-          sx={{ fontSize: 11, color: "text.secondary", fontVariantNumeric: "tabular-nums", flexShrink: 0 }}
-        >
-          {gap}
-        </Typography>
+        {/* The card previews one milestone, so say how many more the sheet
+            holds. Without it the card reads as if that one is the whole list. */}
+        <Box sx={{ display: "flex", flexDirection: "column", alignItems: "flex-end", flexShrink: 0 }}>
+          <Typography sx={{ fontSize: 11, color: "text.secondary", fontVariantNumeric: "tabular-nums", lineHeight: 1.3 }}>
+            {gap}
+          </Typography>
+          {moreCount > 0 && (
+            <Typography
+              sx={{ fontSize: 11, color: accent.ink, fontWeight: 600, fontVariantNumeric: "tabular-nums", lineHeight: 1.3 }}
+            >
+              +{moreCount} more
+            </Typography>
+          )}
+        </Box>
         <ChevronRightIcon sx={{ fontSize: 15, color: "text.disabled", flexShrink: 0 }} />
       </ButtonBase>
 
