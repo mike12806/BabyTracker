@@ -30,7 +30,7 @@ interface CachedUser {
 }
 
 const UPSERT_USER_SQL =
-  "INSERT INTO users (email, name, created_at, updated_at) VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), strftime('%Y-%m-%dT%H:%M:%SZ', 'now')) ON CONFLICT(email) DO UPDATE SET name = excluded.name, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')";
+  "INSERT INTO users (email, name, created_at, updated_at) VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), strftime('%Y-%m-%dT%H:%M:%SZ', 'now')) ON CONFLICT(email) DO UPDATE SET name = excluded.name, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') RETURNING id, email, name";
 
 function decodeJwtPayload(token: string): JwtPayload | null {
   const parts = token.split(".");
@@ -163,11 +163,7 @@ async function resolveUser(
   const hit = await cacheGet<CachedUser>(env, key);
   if (hit && hit.name === name && hit.email === email) return hit;
 
-  await env.DB.prepare(UPSERT_USER_SQL).bind(email, name).run();
-
-  const user = await env.DB.prepare("SELECT id, email, name FROM users WHERE email = ?")
-    .bind(email)
-    .first<CachedUser>();
+  const user = await env.DB.prepare(UPSERT_USER_SQL).bind(email, name).first<CachedUser>();
 
   if (!user) {
     // Whatever went wrong, do not leave a cached identity behind that outlives

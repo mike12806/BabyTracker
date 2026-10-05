@@ -72,27 +72,17 @@ timers.put("/:id/stop", async (c) => {
   const userId = c.get("userId");
   const id = parseInt(c.req.param("id"), 10);
 
-  const existing = await c.env.DB.prepare(
-    "SELECT t.* FROM timers t WHERE t.id = ? AND t.user_id = ?"
+  const timer = await c.env.DB.prepare(
+    "UPDATE timers SET end_time = strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), is_active = 0, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ? AND user_id = ? RETURNING *"
   )
     .bind(id, userId)
     .first();
 
-  if (!existing) {
+  if (!timer) {
     return c.json({ error: "Timer not found" }, 404);
   }
 
-  await c.env.DB.prepare(
-    "UPDATE timers SET end_time = strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), is_active = 0, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?"
-  )
-    .bind(id)
-    .run();
-
-  const timer = await c.env.DB.prepare("SELECT * FROM timers WHERE id = ?")
-    .bind(id)
-    .first();
-
-  await announceChange(c, existing.child_id as number, "timers");
+  await announceChange(c, timer.child_id as number, "timers");
 
   return c.json(timer);
 });
@@ -102,10 +92,10 @@ timers.delete("/:id", async (c) => {
   const userId = c.get("userId");
   const id = parseInt(c.req.param("id"), 10);
 
-  // `child_id` rather than `1`: the row is about to be gone, and it is the
-  // only place left that says whose timer list needs refreshing.
+  // Returning `child_id`: the row is gone once this runs, and it is the only
+  // place left that says whose timer list needs refreshing.
   const existing = await c.env.DB.prepare(
-    "SELECT child_id FROM timers WHERE id = ? AND user_id = ?"
+    "DELETE FROM timers WHERE id = ? AND user_id = ? RETURNING child_id"
   )
     .bind(id, userId)
     .first();
@@ -113,8 +103,6 @@ timers.delete("/:id", async (c) => {
   if (!existing) {
     return c.json({ error: "Timer not found" }, 404);
   }
-
-  await c.env.DB.prepare("DELETE FROM timers WHERE id = ?").bind(id).run();
 
   await announceChange(c, existing.child_id as number, "timers");
 

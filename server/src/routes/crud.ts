@@ -154,17 +154,6 @@ export function createChildScopedCrud(config: CrudRouteConfig) {
   router.put("/:id", async (c) => {
     const id = parseInt(c.req.param("id"), 10);
 
-    // Verify entry exists
-    const existing = await c.env.DB.prepare(
-      `SELECT child_id FROM ${table} WHERE id = ?`
-    )
-      .bind(id)
-      .first();
-
-    if (!existing) {
-      return c.json({ error: "Not found" }, 404);
-    }
-
     const body = await c.req.json<Record<string, unknown>>();
     const updateCols = columns.filter((col) => body[col] !== undefined);
 
@@ -179,22 +168,23 @@ export function createChildScopedCrud(config: CrudRouteConfig) {
     ];
     const values = [...updateCols.map((col) => body[col]), c.get("userId")];
 
-    await c.env.DB.prepare(
-      `UPDATE ${table} SET ${setClauses.join(", ")} WHERE id = ?`
+    // One round trip: no row back means there was no entry to update.
+    const updated = await c.env.DB.prepare(
+      `UPDATE ${table} SET ${setClauses.join(", ")} WHERE id = ? RETURNING *`
     )
       .bind(...values, id)
-      .run();
-
-    const updated = await c.env.DB.prepare(`SELECT * FROM ${table} WHERE id = ?`)
-      .bind(id)
       .first();
 
-    // `existing.child_id`, not the body: an edit does not carry a child_id,
+    if (!updated) {
+      return c.json({ error: "Not found" }, 404);
+    }
+
+    // `updated.child_id`, not the body: an edit does not carry a child_id,
     // and the row's own child is who was watching it anyway.
     await emit(
       c.env,
       entryEvent("entry.updated", {
-        childId: existing.child_id as number,
+        childId: updated.child_id as number,
         table,
         entryId: id,
         actorUserId: c.get("userId"),
@@ -202,7 +192,7 @@ export function createChildScopedCrud(config: CrudRouteConfig) {
       backgroundWrites(c),
     );
 
-    await announceChange(c, existing.child_id as number);
+    await announceChange(c, updated.child_id as number);
 
     return c.json(updated);
   });
@@ -212,7 +202,7 @@ export function createChildScopedCrud(config: CrudRouteConfig) {
     const id = parseInt(c.req.param("id"), 10);
 
     const existing = await c.env.DB.prepare(
-      `SELECT child_id FROM ${table} WHERE id = ?`
+      `DELETE FROM ${table} WHERE id = ? RETURNING child_id`
     )
       .bind(id)
       .first();
@@ -220,8 +210,6 @@ export function createChildScopedCrud(config: CrudRouteConfig) {
     if (!existing) {
       return c.json({ error: "Not found" }, 404);
     }
-
-    await c.env.DB.prepare(`DELETE FROM ${table} WHERE id = ?`).bind(id).run();
 
     // A delete is as much a change as a create — the other caregiver's list is
     // showing a row that is gone.
