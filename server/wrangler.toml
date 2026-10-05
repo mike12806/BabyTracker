@@ -2,16 +2,16 @@ name = "baby-tracker-api"
 main = "src/index.ts"
 compatibility_date = "2024-12-01"
 
+routes = [
+  { pattern = "baby.mfaherty.net/api/*", zone_name = "mfaherty.net" }
+]
+
 # Run the Worker near D1 rather than near the caller: a request that misses the
 # cache makes several sequential D1 queries, and each one pays the trip from the
 # edge to the database. Only affects fetch handlers; cron, queue and Durable
 # Object work is unchanged.
 [placement]
 mode = "smart"
-
-routes = [
-  { pattern = "baby.mfaherty.net/api/*", zone_name = "mfaherty.net" }
-]
 
 [[d1_databases]]
 binding = "DB"
