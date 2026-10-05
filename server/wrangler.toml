@@ -13,6 +13,17 @@ routes = [
 [placement]
 mode = "smart"
 
+# Workers Logs, also exported (OTLP) to Redpanda -> Elasticsearch in the
+# homelab. "redpanda-logs" is the account's Observability destination
+# (https://otel.mfaherty.net/v1/logs, Access service-token headers); see
+# gh_hdc kubernetes/apps/redpanda-connect-otel.yaml.
+[observability]
+enabled = true
+
+[observability.logs]
+enabled = true
+destinations = ["redpanda-logs"]
+
 [[d1_databases]]
 binding = "DB"
 database_name = "baby-tracker-db"
