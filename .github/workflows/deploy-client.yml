@@ -48,8 +48,21 @@ jobs:
     permissions:
       contents: read
       deployments: write
+      id-token: write  # Tailscale + Vault logins through GitHub OIDC
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+
+      # Deploy secrets come from Vault (role babytracker-deploy, gh_hdc vault/),
+      # reached over the tailnet as tag:ci-vault with no stored secret. Runs
+      # before npm and leaves the tailnet before any build code runs.
+      - name: Read secrets from Vault
+        uses: mike12806/public-jobs/.github/actions/vault-secrets@98a8f4481b9225406dcad83a32c48765b357747f # main
+        with:
+          role: babytracker-deploy
+          hostname: github-babytracker-deploy
+          secrets: |
+            kv/data/github/BabyTracker/cloudflare CLOUDFLARE_API_TOKEN | CLOUDFLARE_API_TOKEN ;
+            kv/data/github/BabyTracker/cloudflare CLOUDFLARE_ACCOUNT_ID | CLOUDFLARE_ACCOUNT_ID
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7
         with:
@@ -65,8 +78,8 @@ jobs:
         run: npx wrangler pages project create ${{ env.PAGES_PROJECT }} --production-branch=main
         continue-on-error: true
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ env.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ env.CLOUDFLARE_ACCOUNT_ID }}
 
       # Cloudflare Pages deploy is atomic — the new version is uploaded
       # first, then traffic is switched. If the upload fails, the
@@ -74,16 +87,16 @@ jobs:
       - name: Deploy to Cloudflare Pages
         run: npx wrangler pages deploy client/dist --project-name=${{ env.PAGES_PROJECT }}
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ env.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ env.CLOUDFLARE_ACCOUNT_ID }}
 
       # Register the custom domain with the Pages project (idempotent —
       # returns success or "already exists" which we handle gracefully).
       - name: Register custom domain
         run: |
           RESPONSE=$(curl -s -X POST \
-            "https://api.cloudflare.com/client/v4/accounts/${{ secrets.CLOUDFLARE_ACCOUNT_ID }}/pages/projects/${{ env.PAGES_PROJECT }}/domains" \
-            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" \
+            "https://api.cloudflare.com/client/v4/accounts/${{ env.CLOUDFLARE_ACCOUNT_ID }}/pages/projects/${{ env.PAGES_PROJECT }}/domains" \
+            -H "Authorization: Bearer ${{ env.CLOUDFLARE_API_TOKEN }}" \
             -H "Content-Type: application/json" \
             -d '{"name": "${{ env.CUSTOM_DOMAIN }}"}')
           SUCCESS=$(echo "$RESPONSE" | jq -r '.success // "false"' 2>/dev/null)
@@ -108,8 +121,8 @@ jobs:
         run: |
           # Get the pages.dev subdomain
           PROJECT_RESPONSE=$(curl -s -X GET \
-            "https://api.cloudflare.com/client/v4/accounts/${{ secrets.CLOUDFLARE_ACCOUNT_ID }}/pages/projects/${{ env.PAGES_PROJECT }}" \
-            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" \
+            "https://api.cloudflare.com/client/v4/accounts/${{ env.CLOUDFLARE_ACCOUNT_ID }}/pages/projects/${{ env.PAGES_PROJECT }}" \
+            -H "Authorization: Bearer ${{ env.CLOUDFLARE_API_TOKEN }}" \
             -H "Content-Type: application/json")
           PAGES_DOMAIN=$(echo "$PROJECT_RESPONSE" | jq -r '.result.subdomain // ""')
           if [ -z "$PAGES_DOMAIN" ]; then
@@ -121,7 +134,7 @@ jobs:
           # Get zone ID
           ZONE_RESPONSE=$(curl -s -X GET \
             "https://api.cloudflare.com/client/v4/zones?name=${{ env.ZONE_NAME }}" \
-            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" \
+            -H "Authorization: Bearer ${{ env.CLOUDFLARE_API_TOKEN }}" \
             -H "Content-Type: application/json")
           ZONE_ID=$(echo "$ZONE_RESPONSE" | jq -r '.result[0].id // ""')
           if [ -z "$ZONE_ID" ]; then
@@ -133,7 +146,7 @@ jobs:
           # Check for existing CNAME
           RECORDS_RESPONSE=$(curl -s -X GET \
             "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records?type=CNAME&name=${{ env.CUSTOM_DOMAIN }}" \
-            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" \
+            -H "Authorization: Bearer ${{ env.CLOUDFLARE_API_TOKEN }}" \
             -H "Content-Type: application/json")
           RECORD_ID=$(echo "$RECORDS_RESPONSE" | jq -r '.result[0].id // ""')
 
@@ -141,14 +154,14 @@ jobs:
             echo "Updating existing CNAME record $RECORD_ID..."
             RESULT=$(curl -s -X PUT \
               "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records/$RECORD_ID" \
-              -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" \
+              -H "Authorization: Bearer ${{ env.CLOUDFLARE_API_TOKEN }}" \
               -H "Content-Type: application/json" \
               -d "{\"type\":\"CNAME\",\"name\":\"baby\",\"content\":\"$PAGES_DOMAIN\",\"proxied\":true}")
           else
             echo "Creating new CNAME record..."
             RESULT=$(curl -s -X POST \
               "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records" \
-              -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" \
+              -H "Authorization: Bearer ${{ env.CLOUDFLARE_API_TOKEN }}" \
               -H "Content-Type: application/json" \
               -d "{\"type\":\"CNAME\",\"name\":\"baby\",\"content\":\"$PAGES_DOMAIN\",\"proxied\":true}")
           fi
@@ -164,8 +177,8 @@ jobs:
       - name: Verify custom domain
         run: |
           PATCH_RESPONSE=$(curl -s -X PATCH \
-            "https://api.cloudflare.com/client/v4/accounts/${{ secrets.CLOUDFLARE_ACCOUNT_ID }}/pages/projects/${{ env.PAGES_PROJECT }}/domains/${{ env.CUSTOM_DOMAIN }}" \
-            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" \
+            "https://api.cloudflare.com/client/v4/accounts/${{ env.CLOUDFLARE_ACCOUNT_ID }}/pages/projects/${{ env.PAGES_PROJECT }}/domains/${{ env.CUSTOM_DOMAIN }}" \
+            -H "Authorization: Bearer ${{ env.CLOUDFLARE_API_TOKEN }}" \
             -H "Content-Type: application/json" \
             -d '{}')
           SUCCESS=$(echo "$PATCH_RESPONSE" | jq -r '.success // "false"' 2>/dev/null)
@@ -182,7 +195,7 @@ jobs:
         run: |
           ZONE_RESPONSE=$(curl -s -X GET \
             "https://api.cloudflare.com/client/v4/zones?name=${{ env.ZONE_NAME }}" \
-            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" \
+            -H "Authorization: Bearer ${{ env.CLOUDFLARE_API_TOKEN }}" \
             -H "Content-Type: application/json")
           ZONE_ID=$(echo "$ZONE_RESPONSE" | jq -r '.result[0].id // ""')
           if [ -z "$ZONE_ID" ]; then
@@ -192,7 +205,7 @@ jobs:
 
           PURGE_RESPONSE=$(curl -s -X POST \
             "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/purge_cache" \
-            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" \
+            -H "Authorization: Bearer ${{ env.CLOUDFLARE_API_TOKEN }}" \
             -H "Content-Type: application/json" \
             -d '{"hosts": ["${{ env.CUSTOM_DOMAIN }}"]}')
           SUCCESS=$(echo "$PURGE_RESPONSE" | jq -r '.success // "false"' 2>/dev/null)
