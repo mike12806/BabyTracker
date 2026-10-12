@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, type ReactNode } from "react";
-import { Alert, Snackbar } from "@mui/material";
+import { Alert, Snackbar, type SnackbarCloseReason } from "@mui/material";
 
 type Severity = "error" | "warning" | "info" | "success";
 
@@ -22,7 +22,10 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     setOpen(true);
   };
 
-  const handleClose = (_event?: React.SyntheticEvent | Event, reason?: string) => {
+  const handleClose = (
+    _event?: React.SyntheticEvent | Event | null,
+    reason?: SnackbarCloseReason,
+  ) => {
     if (reason === "clickaway") return;
     setOpen(false);
   };
