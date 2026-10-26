@@ -17,19 +17,21 @@ import {
   useMediaQuery,
   useTheme,
 } from "@mui/material";
-import AddIcon from "@mui/icons-material/Add";
-import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
-import RestaurantIcon from "@mui/icons-material/Restaurant";
-import BabyChangingStationIcon from "@mui/icons-material/BabyChangingStation";
-import BedtimeIcon from "@mui/icons-material/Bedtime";
-import TimerIcon from "@mui/icons-material/Timer";
-import AccessibilityNewIcon from "@mui/icons-material/AccessibilityNew";
-import OpacityIcon from "@mui/icons-material/Opacity";
-import NoteIcon from "@mui/icons-material/Note";
-import ThermostatIcon from "@mui/icons-material/Thermostat";
-import MedicationIcon from "@mui/icons-material/Medication";
-import ChecklistIcon from "@mui/icons-material/Checklist";
-import ChevronRightIcon from "@mui/icons-material/ChevronRight";
+import {
+  AccessibilityNewIcon,
+  AddIcon,
+  ArrowForwardIcon,
+  BabyChangingStationIcon,
+  BedtimeIcon,
+  ChecklistIcon,
+  ChevronRightIcon,
+  MedicationIcon,
+  NoteIcon,
+  OpacityIcon,
+  RestaurantIcon,
+  ThermostatIcon,
+  TimerIcon,
+} from "../icons";
 import { api, API_BASE } from "../api/client";
 import { useChildren } from "../hooks/useChildren";
 import { useDataRefresh } from "../hooks/useDataRefresh";

@@ -24,11 +24,7 @@ import {
   useMediaQuery,
   useTheme,
 } from "@mui/material";
-import AddIcon from "@mui/icons-material/Add";
-import DeleteIcon from "@mui/icons-material/Delete";
-import EditIcon from "@mui/icons-material/Edit";
-import MoreVertIcon from "@mui/icons-material/MoreVert";
-import BabyChangingStationIcon from "@mui/icons-material/BabyChangingStation";
+import { AddIcon, BabyChangingStationIcon, DeleteIcon, EditIcon, MoreVertIcon } from "../icons";
 import { api } from "../api/client";
 import { useChildren } from "../hooks/useChildren";
 import { useDataRefresh } from "../hooks/useDataRefresh";

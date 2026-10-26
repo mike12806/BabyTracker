@@ -71,6 +71,7 @@ All entries are associated with a child. Multi-child support is required.
 - Install: `npm install` (from root)
 - Build client: `npm run build -w client`
 - Build server: `npm run build -w server`
+- Icons: import `<Name>Icon` from `client/src/icons.tsx` (never from `@mui/icons-material`, which is not installed), then run `npm run icons -w client` to regenerate the file. It copies just the imported icons out of the package; see `client/scripts/vendor-icons.mjs`
 - Dev: `npm run dev` (from respective package)
 - Test: `npm test` (from respective package)
 - Deploy: `npx wrangler pages deploy` (client), `npx wrangler deploy` (server)

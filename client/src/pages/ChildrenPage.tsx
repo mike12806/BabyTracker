@@ -19,13 +19,15 @@ import {
   useMediaQuery,
   useTheme,
 } from "@mui/material";
-import AddIcon from "@mui/icons-material/Add";
-import EditIcon from "@mui/icons-material/Edit";
-import DeleteIcon from "@mui/icons-material/Delete";
-import PhotoCameraIcon from "@mui/icons-material/PhotoCamera";
-import StarIcon from "@mui/icons-material/Star";
-import StarBorderIcon from "@mui/icons-material/StarBorder";
-import ChildCareIcon from "@mui/icons-material/ChildCare";
+import {
+  AddIcon,
+  ChildCareIcon,
+  DeleteIcon,
+  EditIcon,
+  PhotoCameraIcon,
+  StarBorderIcon,
+  StarIcon,
+} from "../icons";
 import { api, API_BASE } from "../api/client";
 import { useChildren } from "../hooks/useChildren";
 import { useNotification } from "../hooks/useNotification";

@@ -22,14 +22,16 @@ import {
 } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import { LineChart, Line, ResponsiveContainer } from "recharts";
-import AddIcon from "@mui/icons-material/Add";
-import DeleteIcon from "@mui/icons-material/Delete";
-import EditIcon from "@mui/icons-material/Edit";
-import MonitorWeightIcon from "@mui/icons-material/MonitorWeight";
-import HeightIcon from "@mui/icons-material/Height";
-import CircleIcon from "@mui/icons-material/Circle";
-import MoreVertIcon from "@mui/icons-material/MoreVert";
-import CloseIcon from "@mui/icons-material/Close";
+import {
+  AddIcon,
+  CircleIcon,
+  CloseIcon,
+  DeleteIcon,
+  EditIcon,
+  HeightIcon,
+  MonitorWeightIcon,
+  MoreVertIcon,
+} from "../icons";
 import { api } from "../api/client";
 import { useChildren } from "../hooks/useChildren";
 import { useNotification } from "../hooks/useNotification";
@@ -58,15 +60,25 @@ const EMPTY_FORM = {
   notes: "",
 };
 
+function parseDateParts(iso: string): Date | null {
+  const parts = iso.split("T")[0].split("-").map(Number);
+  if (parts.length === 3 && parts.every((n) => !Number.isNaN(n))) {
+    const [y, m, d] = parts;
+    return new Date(y, m - 1, d);
+  }
+  const parsed = new Date(iso);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
 function formatDate(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
+  const d = parseDateParts(iso);
+  if (!d) return iso;
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
 function relativeTime(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
+  const d = parseDateParts(iso);
+  if (!d) return "";
   const diffMs = Date.now() - d.getTime();
   const day = 86400000;
   const days = Math.round(diffMs / day);

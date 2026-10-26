@@ -24,12 +24,14 @@ import {
   useMediaQuery,
   useTheme,
 } from "@mui/material";
-import AddIcon from "@mui/icons-material/Add";
-import DeleteIcon from "@mui/icons-material/Delete";
-import EditIcon from "@mui/icons-material/Edit";
-import MoreVertIcon from "@mui/icons-material/MoreVert";
-import AccessibilityNewIcon from "@mui/icons-material/AccessibilityNew";
-import EmojiEventsIcon from "@mui/icons-material/EmojiEvents";
+import {
+  AccessibilityNewIcon,
+  AddIcon,
+  DeleteIcon,
+  EditIcon,
+  EmojiEventsIcon,
+  MoreVertIcon,
+} from "../icons";
 import { api } from "../api/client";
 import { useChildren } from "../hooks/useChildren";
 import { useDataRefresh } from "../hooks/useDataRefresh";

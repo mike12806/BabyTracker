@@ -25,30 +25,32 @@ import {
   useMediaQuery,
   useTheme,
 } from "@mui/material";
-import MenuIcon from "@mui/icons-material/Menu";
-import DashboardIcon from "@mui/icons-material/Dashboard";
-import RestaurantIcon from "@mui/icons-material/Restaurant";
-import BabyChangingStationIcon from "@mui/icons-material/BabyChangingStation";
-import BedtimeIcon from "@mui/icons-material/Bedtime";
-import AccessibilityNewIcon from "@mui/icons-material/AccessibilityNew";
-import OpacityIcon from "@mui/icons-material/Opacity";
-import MonitorWeightIcon from "@mui/icons-material/MonitorWeight";
-import ThermostatIcon from "@mui/icons-material/Thermostat";
-import NoteIcon from "@mui/icons-material/Note";
-import TimerIcon from "@mui/icons-material/Timer";
-import ChildCareIcon from "@mui/icons-material/ChildCare";
-import MedicationIcon from "@mui/icons-material/Medication";
-import HistoryIcon from "@mui/icons-material/History";
-import ChecklistIcon from "@mui/icons-material/Checklist";
-import MoreHorizIcon from "@mui/icons-material/MoreHoriz";
-import DarkModeIcon from "@mui/icons-material/DarkMode";
-import LightModeIcon from "@mui/icons-material/LightMode";
-import SettingsBrightnessIcon from "@mui/icons-material/SettingsBrightness";
-import HomeRoundedIcon from "@mui/icons-material/HomeRounded";
-import TimelineRoundedIcon from "@mui/icons-material/TimelineRounded";
-import AddRoundedIcon from "@mui/icons-material/AddRounded";
-import BarChartRoundedIcon from "@mui/icons-material/BarChartRounded";
-import MoreHorizRoundedIcon from "@mui/icons-material/MoreHorizRounded";
+import {
+  AccessibilityNewIcon,
+  AddRoundedIcon,
+  BabyChangingStationIcon,
+  BarChartRoundedIcon,
+  BedtimeIcon,
+  ChecklistIcon,
+  ChildCareIcon,
+  DarkModeIcon,
+  DashboardIcon,
+  HistoryIcon,
+  HomeRoundedIcon,
+  LightModeIcon,
+  MedicationIcon,
+  MenuIcon,
+  MonitorWeightIcon,
+  MoreHorizIcon,
+  MoreHorizRoundedIcon,
+  NoteIcon,
+  OpacityIcon,
+  RestaurantIcon,
+  SettingsBrightnessIcon,
+  ThermostatIcon,
+  TimelineRoundedIcon,
+  TimerIcon,
+} from "../icons";
 import ErrorBoundary from "./ErrorBoundary";
 import { useAuth } from "../hooks/useAuth";
 import { useChildren } from "../hooks/useChildren";

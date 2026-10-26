@@ -14,8 +14,7 @@ import {
   useMediaQuery,
   useTheme,
 } from "@mui/material";
-import ZoomInIcon from "@mui/icons-material/ZoomIn";
-import ZoomOutIcon from "@mui/icons-material/ZoomOut";
+import { ZoomInIcon, ZoomOutIcon } from "../icons";
 import {
   MAX_ZOOM,
   MIN_ZOOM,

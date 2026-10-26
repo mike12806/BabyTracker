@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { Box, Button, CircularProgress, Typography } from "@mui/material";
-import ChildCareIcon from "@mui/icons-material/ChildCare";
+import { ChildCareIcon } from "../icons";
 import { useChildren } from "../hooks/useChildren";
 
 export default function NoChildPlaceholder() {

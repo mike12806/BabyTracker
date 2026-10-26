@@ -1,18 +1,20 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { Box, Stack, Typography, useTheme } from "@mui/material";
-import RestaurantIcon from "@mui/icons-material/Restaurant";
-import BabyChangingStationIcon from "@mui/icons-material/BabyChangingStation";
-import BedtimeIcon from "@mui/icons-material/Bedtime";
-import AccessibilityNewIcon from "@mui/icons-material/AccessibilityNew";
-import OpacityIcon from "@mui/icons-material/Opacity";
-import ThermostatIcon from "@mui/icons-material/Thermostat";
-import NoteIcon from "@mui/icons-material/Note";
-import MedicationIcon from "@mui/icons-material/Medication";
-import HistoryIcon from "@mui/icons-material/History";
-import ArrowBackIcon from "@mui/icons-material/ArrowBack";
-import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
-import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
-import ChevronRightIcon from "@mui/icons-material/ChevronRight";
+import {
+  AccessibilityNewIcon,
+  ArrowBackIcon,
+  ArrowForwardIcon,
+  BabyChangingStationIcon,
+  BedtimeIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  HistoryIcon,
+  MedicationIcon,
+  NoteIcon,
+  OpacityIcon,
+  RestaurantIcon,
+  ThermostatIcon,
+} from "../icons";
 import Button from "@mui/material/Button";
 import IconButton from "@mui/material/IconButton";
 import { useNavigate } from "react-router-dom";

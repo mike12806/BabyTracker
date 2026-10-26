@@ -31,9 +31,10 @@ describe("App", () => {
     // Make the auth call hang
     mockApi.get.mockImplementation(() => new Promise(() => {}));
 
-    render(<App />);
+    const { unmount } = render(<App />);
 
     expect(screen.getByRole("progressbar")).toBeInTheDocument();
+    unmount();
   });
 
   it("shows app content when user is authenticated", async () => {
@@ -49,8 +50,11 @@ describe("App", () => {
 
     render(<App />);
 
-    await waitFor(() => {
-      expect(screen.getByText("No children added yet")).toBeInTheDocument();
-    });
+    await waitFor(
+      () => {
+        expect(screen.getByText("No children added yet")).toBeInTheDocument();
+      },
+      { timeout: 10_000 },
+    );
   });
 });

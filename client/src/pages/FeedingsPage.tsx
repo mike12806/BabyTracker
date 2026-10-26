@@ -23,11 +23,7 @@ import {
   useMediaQuery,
   useTheme,
 } from "@mui/material";
-import AddIcon from "@mui/icons-material/Add";
-import DeleteIcon from "@mui/icons-material/Delete";
-import EditIcon from "@mui/icons-material/Edit";
-import MoreVertIcon from "@mui/icons-material/MoreVert";
-import RestaurantIcon from "@mui/icons-material/Restaurant";
+import { AddIcon, DeleteIcon, EditIcon, MoreVertIcon, RestaurantIcon } from "../icons";
 import { api } from "../api/client";
 import { useChildren } from "../hooks/useChildren";
 import { useDataRefresh } from "../hooks/useDataRefresh";
