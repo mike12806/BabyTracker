@@ -233,7 +233,7 @@ describe("Dashboard – Today so far feeding total", () => {
     render(<Dashboard />, { wrapper: Wrapper });
 
     const tile = await feedTile();
-    expect(within(tile).getByText("fed")).toBeTruthy();
+    expect(await within(tile).findByText("fed")).toBeTruthy();
     expect(within(tile).getByText("80 mL")).toBeTruthy();
     expect(within(tile).getByText("3 feeds")).toBeTruthy();
   });
@@ -249,7 +249,7 @@ describe("Dashboard – Today so far feeding total", () => {
     render(<Dashboard />, { wrapper: Wrapper });
 
     const tile = await feedTile();
-    expect(within(tile).getByText("168 mL")).toBeTruthy();
+    expect(await within(tile).findByText("168 mL")).toBeTruthy();
     expect(within(tile).getByText("3 feeds")).toBeTruthy();
   });
 
@@ -259,7 +259,7 @@ describe("Dashboard – Today so far feeding total", () => {
     render(<Dashboard />, { wrapper: Wrapper });
 
     const tile = await feedTile();
-    expect(within(tile).getByText("60 mL")).toBeTruthy();
+    expect(await within(tile).findByText("60 mL")).toBeTruthy();
     expect(within(tile).getByText("2 feeds · 100 g")).toBeTruthy();
   });
 
@@ -272,8 +272,8 @@ describe("Dashboard – Today so far feeding total", () => {
     render(<Dashboard />, { wrapper: Wrapper });
 
     const tile = await feedTile();
+    expect(await within(tile).findByText("2")).toBeTruthy();
     expect(within(tile).getByText("feeds")).toBeTruthy();
-    expect(within(tile).getByText("2")).toBeTruthy();
     expect(within(tile).getByText("today")).toBeTruthy();
   });
 
@@ -283,7 +283,7 @@ describe("Dashboard – Today so far feeding total", () => {
     render(<Dashboard />, { wrapper: Wrapper });
 
     const tile = await feedTile();
-    expect(within(tile).getByText("30 mL")).toBeTruthy();
+    expect(await within(tile).findByText("30 mL")).toBeTruthy();
     expect(within(tile).getByText("1 feed")).toBeTruthy();
   });
 });
@@ -328,7 +328,7 @@ describe("Dashboard – Today so far pumping total", () => {
     render(<Dashboard />, { wrapper: Wrapper });
 
     const tile = within(await pumpTile());
-    expect(tile.getByText("150 mL")).toBeTruthy();
+    expect(await tile.findByText("150 mL")).toBeTruthy();
     expect(tile.getByText("2 sessions")).toBeTruthy();
   });
 
@@ -339,7 +339,7 @@ describe("Dashboard – Today so far pumping total", () => {
     render(<Dashboard />, { wrapper: Wrapper });
 
     const tile = within(await pumpTile());
-    expect(tile.getByText("149 mL")).toBeTruthy();
+    expect(await tile.findByText("149 mL")).toBeTruthy();
   });
 
   it("falls back to the session count when no amount was recorded", async () => {
@@ -348,7 +348,7 @@ describe("Dashboard – Today so far pumping total", () => {
     render(<Dashboard />, { wrapper: Wrapper });
 
     const tile = within(await pumpTile());
-    expect(tile.getByText("1")).toBeTruthy();
+    expect(await tile.findByText("1")).toBeTruthy();
     expect(tile.getByText("1 session")).toBeTruthy();
   });
 });

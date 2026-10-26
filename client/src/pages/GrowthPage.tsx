@@ -60,15 +60,25 @@ const EMPTY_FORM = {
   notes: "",
 };
 
+function parseDateParts(iso: string): Date | null {
+  const parts = iso.split("T")[0].split("-").map(Number);
+  if (parts.length === 3 && parts.every((n) => !Number.isNaN(n))) {
+    const [y, m, d] = parts;
+    return new Date(y, m - 1, d);
+  }
+  const parsed = new Date(iso);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
 function formatDate(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
+  const d = parseDateParts(iso);
+  if (!d) return iso;
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
 function relativeTime(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
+  const d = parseDateParts(iso);
+  if (!d) return "";
   const diffMs = Date.now() - d.getTime();
   const day = 86400000;
   const days = Math.round(diffMs / day);
