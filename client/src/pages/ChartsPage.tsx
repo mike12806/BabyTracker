@@ -9,10 +9,7 @@ import {
   Typography,
   useTheme,
 } from "@mui/material";
-import RestaurantIcon from "@mui/icons-material/Restaurant";
-import BabyChangingStationIcon from "@mui/icons-material/BabyChangingStation";
-import BedtimeIcon from "@mui/icons-material/Bedtime";
-import OpacityIcon from "@mui/icons-material/Opacity";
+import { BabyChangingStationIcon, BedtimeIcon, OpacityIcon, RestaurantIcon } from "../icons";
 import { api } from "../api/client";
 import { useChildren } from "../hooks/useChildren";
 import { useDataRefresh } from "../hooks/useDataRefresh";

@@ -22,14 +22,16 @@ import {
 } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import { LineChart, Line, ResponsiveContainer } from "recharts";
-import AddIcon from "@mui/icons-material/Add";
-import DeleteIcon from "@mui/icons-material/Delete";
-import EditIcon from "@mui/icons-material/Edit";
-import MonitorWeightIcon from "@mui/icons-material/MonitorWeight";
-import HeightIcon from "@mui/icons-material/Height";
-import CircleIcon from "@mui/icons-material/Circle";
-import MoreVertIcon from "@mui/icons-material/MoreVert";
-import CloseIcon from "@mui/icons-material/Close";
+import {
+  AddIcon,
+  CircleIcon,
+  CloseIcon,
+  DeleteIcon,
+  EditIcon,
+  HeightIcon,
+  MonitorWeightIcon,
+  MoreVertIcon,
+} from "../icons";
 import { api } from "../api/client";
 import { useChildren } from "../hooks/useChildren";
 import { useNotification } from "../hooks/useNotification";

@@ -25,12 +25,7 @@ import {
   useMediaQuery,
   useTheme,
 } from "@mui/material";
-import AddIcon from "@mui/icons-material/Add";
-import BedtimeIcon from "@mui/icons-material/Bedtime";
-import DeleteIcon from "@mui/icons-material/Delete";
-import EditIcon from "@mui/icons-material/Edit";
-import MoreVertIcon from "@mui/icons-material/MoreVert";
-import NightlightIcon from "@mui/icons-material/Nightlight";
+import { AddIcon, BedtimeIcon, DeleteIcon, EditIcon, MoreVertIcon, NightlightIcon } from "../icons";
 import { api } from "../api/client";
 import { useChildren } from "../hooks/useChildren";
 import { useDataRefresh } from "../hooks/useDataRefresh";

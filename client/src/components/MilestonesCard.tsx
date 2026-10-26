@@ -16,10 +16,7 @@ import {
   useMediaQuery,
   useTheme,
 } from "@mui/material";
-import FlagIcon from "@mui/icons-material/Flag";
-import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
-import ChevronRightIcon from "@mui/icons-material/ChevronRight";
-import OpenInNewIcon from "@mui/icons-material/OpenInNew";
+import { ChevronLeftIcon, ChevronRightIcon, FlagIcon, OpenInNewIcon } from "../icons";
 import { detailedAge } from "../utils/childMoments";
 import {
   DEVELOPMENTAL_MILESTONES,

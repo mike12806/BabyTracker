@@ -23,11 +23,7 @@ import {
   useMediaQuery,
   useTheme,
 } from "@mui/material";
-import AddIcon from "@mui/icons-material/Add";
-import DeleteIcon from "@mui/icons-material/Delete";
-import EditIcon from "@mui/icons-material/Edit";
-import MedicationIcon from "@mui/icons-material/Medication";
-import MoreVertIcon from "@mui/icons-material/MoreVert";
+import { AddIcon, DeleteIcon, EditIcon, MedicationIcon, MoreVertIcon } from "../icons";
 import { api } from "../api/client";
 import { useChildren } from "../hooks/useChildren";
 import { useNotification } from "../hooks/useNotification";

@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Box, ButtonBase, Typography, useMediaQuery } from "@mui/material";
 import { keyframes } from "@emotion/react";
-import BedtimeIcon from "@mui/icons-material/Bedtime";
-import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
+import { AutoAwesomeIcon, BedtimeIcon } from "../icons";
 import { API_BASE } from "../api/client";
 import { boopMessage, childPhotoUrl, detailedAge, greeting, milestone } from "../utils/childMoments";
 import type { BoopLinePool } from "../utils/childMoments";

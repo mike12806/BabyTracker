@@ -17,15 +17,17 @@ import {
   useMediaQuery,
   useTheme,
 } from "@mui/material";
-import PlayArrowIcon from "@mui/icons-material/PlayArrow";
-import StopIcon from "@mui/icons-material/Stop";
-import DeleteIcon from "@mui/icons-material/Delete";
-import TimerIcon from "@mui/icons-material/Timer";
-import RestaurantIcon from "@mui/icons-material/Restaurant";
-import BedtimeIcon from "@mui/icons-material/Bedtime";
-import WaterDropIcon from "@mui/icons-material/WaterDrop";
-import ChildFriendlyIcon from "@mui/icons-material/ChildFriendly";
-import MoreHorizIcon from "@mui/icons-material/MoreHoriz";
+import {
+  BedtimeIcon,
+  ChildFriendlyIcon,
+  DeleteIcon,
+  MoreHorizIcon,
+  PlayArrowIcon,
+  RestaurantIcon,
+  StopIcon,
+  TimerIcon,
+  WaterDropIcon,
+} from "../icons";
 import { api } from "../api/client";
 import { useChildren } from "../hooks/useChildren";
 import { useNotification } from "../hooks/useNotification";
