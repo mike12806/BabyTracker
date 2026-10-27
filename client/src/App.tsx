@@ -2,6 +2,7 @@ import { lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { CssBaseline } from "@mui/material";
 import { AppThemeProvider } from "./hooks/useTheme";
+import { FoldProvider } from "./hooks/useFold";
 import { AuthProvider, useAuth } from "./hooks/useAuth";
 import { ChildProvider } from "./hooks/useChildren";
 import { DataRefreshProvider } from "./hooks/useDataRefresh";
@@ -60,6 +61,9 @@ function AuthGate({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   return (
+    // Outside the theme, which is rebuilt from it: on an open foldable every
+    // breakpoint describes one pane — see utils/fold.ts.
+    <FoldProvider>
     <AppThemeProvider>
       <CssBaseline />
       {/* Catch-all. The boundary inside Layout handles a page blowing up and
@@ -112,5 +116,6 @@ export default function App() {
       </BrowserRouter>
       </ErrorBoundary>
     </AppThemeProvider>
+    </FoldProvider>
   );
 }

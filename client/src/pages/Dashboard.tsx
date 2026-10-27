@@ -37,6 +37,7 @@ import { useChildren } from "../hooks/useChildren";
 import { useDataRefresh } from "../hooks/useDataRefresh";
 import { useNotification } from "../hooks/useNotification";
 import ChildHero from "../components/ChildHero";
+import FoldPanes from "../components/FoldPanes";
 import NoChildPlaceholder from "../components/NoChildPlaceholder";
 import MilestonesCard from "../components/MilestonesCard";
 import QuickLogDialog, { type QuickLogCategory } from "../components/QuickLogDialog";
@@ -440,442 +441,454 @@ export default function Dashboard() {
 
   return (
     <Box>
-      {/* Him, first — before any of the numbers about him. */}
-      <ChildHero
-        key={selectedChild.id}
-        child={selectedChild}
-        napping={!!activeSleep}
-        cat={cat}
-        isDark={isDark}
-        dailyNote={dailyNote}
-        dailyNoteSource={dailyNoteSource}
-        boopExtras={boopExtras}
-      />
+      {/* Open like a book, the left half is what is happening now and the
+          right half is what already happened; on one screen they stack in that
+          same order. */}
+      <FoldPanes
+        start={
+          <>
+            {/* Him, first — before any of the numbers about him. */}
+            <ChildHero
+              key={selectedChild.id}
+              child={selectedChild}
+              napping={!!activeSleep}
+              cat={cat}
+              isDark={isDark}
+              dailyNote={dailyNote}
+              dailyNoteSource={dailyNoteSource}
+              boopExtras={boopExtras}
+            />
 
-      {/* Live status banner */}
-      {activeSleep && (
-        <Box
-          sx={{
-            p: "8px 10px",
-            borderRadius: 2,
-            background: `linear-gradient(135deg, ${cat.sleep.soft}, ${cat.pump.soft})`,
-            border: `1px solid ${cat.sleep.edge}`,
-            display: "flex",
-            alignItems: "center",
-            gap: 1,
-            mb: 1.25,
-          }}
-        >
-          <Box
-            sx={{
-              width: 28, height: 28, borderRadius: "9px",
-              bgcolor: cat.sleep.solid, color: isDark ? "#0c1018" : "#fff",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              boxShadow: `0 0 0 3px ${cat.sleep.solid}25`,
-            }}
-          >
-            <BedtimeIcon sx={{ fontSize: 15 }} />
-          </Box>
-          <Box sx={{ flex: 1 }}>
-            <Typography sx={{ fontSize: 10, color: cat.sleep.ink, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", lineHeight: 1.1 }}>
-              Napping
-            </Typography>
-            <Typography sx={{ fontSize: 16, fontWeight: 700, letterSpacing: "-0.02em", fontVariantNumeric: "tabular-nums", lineHeight: 1.2 }}>
-              {formatDuration(activeSleep.start_time, null)}
-            </Typography>
-          </Box>
-          <Button
-            variant="outlined"
-            size="small"
-            sx={{
-              borderColor: cat.sleep.edge,
-              color: cat.sleep.ink,
-              borderRadius: 99,
-              fontWeight: 600,
-              textTransform: "none",
-              fontSize: 12,
-              minHeight: 30,
-              px: 1.5,
-            }}
-            onClick={() => navigate("/sleep")}
-          >
-            End nap
-          </Button>
-        </Box>
-      )}
-
-      {/* Active timers */}
-      {timers.length > 0 && !activeSleep && (
-        <Box sx={{ mb: 1.25 }}>
-          {timers.map((t) => (
-            <Box
-              key={t.id}
-              sx={{
-                p: "8px 10px",
-                borderRadius: 2,
-                background: `linear-gradient(135deg, ${cat.feed.soft}, ${cat.pump.soft})`,
-                border: `1px solid ${cat.feed.edge}`,
-                display: "flex",
-                alignItems: "center",
-                gap: 1,
-                mb: 0.75,
-              }}
-            >
+            {/* Live status banner */}
+            {activeSleep && (
               <Box
                 sx={{
-                  width: 28, height: 28, borderRadius: "9px",
-                  bgcolor: cat.feed.solid, color: isDark ? "#0c1018" : "#fff",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                }}
-              >
-                <TimerIcon sx={{ fontSize: 15 }} />
-              </Box>
-              <Box sx={{ flex: 1 }}>
-                <Typography sx={{ fontSize: 10, color: cat.feed.ink, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", lineHeight: 1.1 }}>
-                  {t.name}
-                </Typography>
-                <Typography sx={{ fontSize: 16, fontWeight: 700, letterSpacing: "-0.02em", fontVariantNumeric: "tabular-nums", lineHeight: 1.2 }}>
-                  {formatDuration(t.start_time, null)}
-                </Typography>
-              </Box>
-            </Box>
-          ))}
-        </Box>
-      )}
-
-      {/* Section: Quick Log */}
-      <Box sx={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", px: 0.25, mb: 0.75 }}>
-        <Typography sx={{ fontSize: 11, color: "text.secondary", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em" }}>
-          Quick log
-        </Typography>
-        <Box sx={{ display: "flex", alignItems: "center", gap: 0.4 }}>
-          <AddIcon sx={{ fontSize: 12, color: "text.secondary" }} />
-          <Typography sx={{ fontSize: 11, color: "text.secondary" }}>
-            Tap to record
-          </Typography>
-        </Box>
-      </Box>
-
-      {/* Tile grid */}
-      <Box sx={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: { xs: 1, sm: 1.5 }, mb: 1.75 }}>
-        {tiles.map((tile) => {
-          const c = cat[tile.cat];
-          return (
-            <ButtonBase
-              key={tile.cat}
-              aria-label={tile.label}
-              onClick={tile.onClick}
-              sx={{
-                position: "relative",
-                borderRadius: "16px",
-                p: { xs: "14px 8px", sm: "20px 14px" },
-                bgcolor: c.tile,
-                border: `1px solid ${c.edge}`,
-                minHeight: { xs: 108, sm: 132 },
-                display: "flex",
-                flexDirection: "column",
-                justifyContent: "center",
-                alignItems: "center",
-                gap: { xs: 0.75, sm: 1 },
-                overflow: "hidden",
-                textAlign: "center",
-              }}
-            >
-              {tile.live && (
-                <Box
-                  sx={{
-                    position: "absolute", top: 9, right: 9, width: 8, height: 8,
-                    borderRadius: 99, bgcolor: c.solid,
-                    boxShadow: `0 0 0 3px ${c.solid}33`,
-                  }}
-                />
-              )}
-              <Box
-                sx={{
-                  width: { xs: 44, sm: 52 }, height: { xs: 44, sm: 52 }, borderRadius: "13px",
-                  bgcolor: c.solid, color: isDark ? "#0c1018" : "#fff",
-                  display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-                }}
-              >
-                {CAT_ICONS_LG[tile.cat]}
-              </Box>
-              <Box sx={{ minWidth: 0, width: "100%" }}>
-                <Typography sx={{ fontSize: { xs: 15, sm: 17 }, fontWeight: 700, color: c.ink, letterSpacing: "-0.01em", lineHeight: 1.2 }} noWrap>
-                  {tile.label}
-                </Typography>
-                <Typography sx={{ fontSize: { xs: 11.5, sm: 13 }, color: c.ink, opacity: 0.72, mt: 0.25, lineHeight: 1.25 }} noWrap>
-                  {tile.last || tile.detail}
-                </Typography>
-              </Box>
-            </ButtonBase>
-          );
-        })}
-      </Box>
-
-      {/* Section: Today so far */}
-      <Box sx={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", px: 0.25, mb: 0.625 }}>
-        <Typography sx={{ fontSize: 11, color: "text.secondary", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em" }}>
-          Today so far
-        </Typography>
-        <Typography
-          onClick={() => navigate("/charts")}
-          sx={{ fontSize: 11, color: "text.secondary", display: "flex", alignItems: "center", gap: 0.25, cursor: "pointer" }}
-        >
-          View charts <ChevronRightIcon sx={{ fontSize: 13 }} />
-        </Typography>
-      </Box>
-
-      {/* Today totals — horizontal scroll on mobile, equal-width grid on desktop */}
-      <Box
-        sx={{
-          display: { xs: "flex", md: "grid" },
-          gridTemplateColumns: { md: `repeat(${todayTotals.length}, minmax(0, 1fr))` },
-          gap: { xs: 0.75, md: 1.25 },
-          overflowX: { xs: "auto", md: "visible" },
-          pb: { xs: 0.25, md: 0 },
-          mb: 1.5,
-          mx: { xs: -1.5, md: 0 },
-          px: { xs: 1.5, md: 0 },
-          scrollbarWidth: "none",
-          "&::-webkit-scrollbar": { display: "none" },
-        }}
-      >
-        {todayTotals.map((t) => {
-          const c = cat[t.cat];
-          return (
-            <Box
-              key={t.cat}
-              sx={{
-                flexShrink: 0,
-                minWidth: { xs: 96, md: 0 },
-                width: { md: "100%" },
-                p: { xs: "6px 10px", md: "10px 14px" },
-                borderRadius: 1.5,
-                bgcolor: "background.paper",
-                border: 1, borderColor: "divider",
-              }}
-            >
-              <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-                <Box sx={{ width: { xs: 5, md: 6 }, height: { xs: 5, md: 6 }, borderRadius: 99, bgcolor: c.solid }} />
-                <Typography sx={{ fontSize: { xs: 9.5, md: 11 }, color: "text.secondary", fontWeight: 600, letterSpacing: "0.02em", textTransform: "uppercase" }}>
-                  {t.label}
-                </Typography>
-              </Box>
-              <Typography sx={{ fontSize: { xs: 15, md: 22 }, fontWeight: 700, lineHeight: 1.1, mt: { xs: 0.25, md: 0.5 }, letterSpacing: "-0.02em", fontVariantNumeric: "tabular-nums" }} noWrap>
-                {t.value}
-              </Typography>
-              <Typography sx={{ fontSize: { xs: 9.5, md: 11 }, color: "text.secondary", mt: { xs: 0, md: 0.25 } }} noWrap>
-                {t.sub}
-              </Typography>
-            </Box>
-          );
-        })}
-      </Box>
-
-      {/* Developmental milestones. One row, below the numbers, so it never
-          pushes the quick-log tiles down. The full checklist opens from it. */}
-      <MilestonesCard child={selectedChild} cat={cat} isDark={isDark} />
-
-      {/* Section: Recent Activity */}
-      <Box sx={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", px: 0.25, mb: 0.5 }}>
-        <Typography sx={{ fontSize: 11, color: "text.secondary", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em" }}>
-          Recent activity
-        </Typography>
-        <Typography
-          onClick={() => navigate("/activity")}
-          sx={{ fontSize: 11, color: "text.secondary", cursor: "pointer" }}
-        >
-          See all
-        </Typography>
-      </Box>
-
-      <Box
-        sx={{
-          bgcolor: "background.paper",
-          borderRadius: 2,
-          border: 1, borderColor: "divider",
-          p: "2px 10px",
-          boxShadow: 0,
-          mb: 1.5,
-        }}
-      >
-        {recentActivity.length === 0 ? (
-          <Typography sx={{ py: 1.25, textAlign: "center", fontSize: 12, color: "text.secondary" }}>
-            No activity recorded yet today.
-          </Typography>
-        ) : (
-          recentActivity.map((ev, i) => {
-            const c = cat[ev.cat];
-            // A pending row has no server id, so there is no edit form on the
-            // other end of a link — the row renders as plain text instead, and
-            // the chip says why.
-            const pendingRow = ev.id < 0;
-            const editPath = pendingRow ? null : editEntryPath(ev.cat, ev.id);
-            return (
-              // Tapping a row opens that entry's edit form on its section page.
-              <Box
-                key={`${ev.cat}-${ev.id}`}
-                component={editPath ? "button" : "div"}
-                type={editPath ? "button" : undefined}
-                onClick={editPath ? () => navigate(editPath) : undefined}
-                aria-label={editPath ? `Edit ${ev.title} at ${ev.time}` : undefined}
-                sx={{
-                  display: "flex", alignItems: "center", gap: 1,
-                  py: "6px",
-                  width: "100%",
-                  font: "inherit", color: "inherit", textAlign: "left",
-                  bgcolor: "transparent",
-                  border: 0,
-                  borderBottom: i === recentActivity.length - 1 ? "none" : 1,
-                  borderColor: "divider",
-                  ...(editPath && { cursor: "pointer" }),
+                  p: "8px 10px",
+                  borderRadius: 2,
+                  background: `linear-gradient(135deg, ${cat.sleep.soft}, ${cat.pump.soft})`,
+                  border: `1px solid ${cat.sleep.edge}`,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 1,
+                  mb: 1.25,
                 }}
               >
                 <Box
                   sx={{
-                    width: 24, height: 24, borderRadius: "8px",
-                    bgcolor: c.soft, color: c.ink,
-                    display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+                    width: 28, height: 28, borderRadius: "9px",
+                    bgcolor: cat.sleep.solid, color: isDark ? "#0c1018" : "#fff",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    boxShadow: `0 0 0 3px ${cat.sleep.solid}25`,
                   }}
                 >
-                  {CAT_ICONS_SM[ev.cat]}
+                  <BedtimeIcon sx={{ fontSize: 15 }} />
                 </Box>
-                <Box sx={{ flex: 1, minWidth: 0 }}>
-                  <Typography sx={{ fontSize: 12.5, fontWeight: 600, letterSpacing: "-0.005em", lineHeight: 1.2 }} noWrap>
-                    {ev.title}
+                <Box sx={{ flex: 1 }}>
+                  <Typography sx={{ fontSize: 10, color: cat.sleep.ink, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", lineHeight: 1.1 }}>
+                    Napping
                   </Typography>
-                  {pendingRow && <PendingChip compact />}
-                  <Typography sx={{ fontSize: 10.5, color: "text.secondary", mt: 0, lineHeight: 1.2 }}>
-                    {ev.meta}
+                  <Typography sx={{ fontSize: 16, fontWeight: 700, letterSpacing: "-0.02em", fontVariantNumeric: "tabular-nums", lineHeight: 1.2 }}>
+                    {formatDuration(activeSleep.start_time, null)}
                   </Typography>
                 </Box>
-                <Typography
-                  sx={{
-                    fontSize: 11,
-                    color: ev.live ? c.ink : "text.secondary",
-                    fontWeight: ev.live ? 700 : 500,
-                    fontVariantNumeric: "tabular-nums",
-                    flexShrink: 0,
-                  }}
-                >
-                  {ev.time}
-                </Typography>
-                {editPath && (
-                  <ChevronRightIcon sx={{ fontSize: 13, color: "text.disabled", flexShrink: 0 }} />
-                )}
-              </Box>
-            );
-          })
-        )}
-      </Box>
-
-      {/* Section: To-do snapshot */}
-      <Box sx={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", px: 0.25, mb: 0.5 }}>
-        <Typography sx={{ fontSize: 11, color: "text.secondary", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em" }}>
-          To-do · {activeTodos.length} active
-        </Typography>
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-          {overdueCount > 0 && (
-            <Typography sx={{ fontSize: 11, color: cat.temp.solid, fontWeight: 600 }}>
-              {overdueCount} overdue
-            </Typography>
-          )}
-          <Typography
-            onClick={() => navigate("/todos")}
-            sx={{ fontSize: 11, color: "text.secondary", display: "flex", alignItems: "center", gap: 0.25, cursor: "pointer" }}
-          >
-            View to-dos <ChevronRightIcon sx={{ fontSize: 13 }} />
-          </Typography>
-        </Box>
-      </Box>
-
-      <Box
-        sx={{
-          bgcolor: "background.paper",
-          borderRadius: 2,
-          border: 1, borderColor: "divider",
-          p: "2px 10px",
-          boxShadow: 0,
-          mb: 1.25,
-        }}
-      >
-        {snapshotTodos.length === 0 ? (
-          <Box sx={{ py: 1.25, textAlign: "center" }}>
-            <Typography sx={{ fontSize: 12, color: "text.secondary" }}>
-              {activeTodos.length === 0 && todos.length > 0
-                ? "All caught up!"
-                : "No tasks yet."}
-            </Typography>
-          </Box>
-        ) : (
-          snapshotTodos.map((t, i) => {
-            const overdue = isTodoOverdue(t);
-            const pc = cat[prioCatKey(t.priority)];
-            const completing = completingTodos.includes(t.id);
-            return (
-              <Box
-                key={t.id}
-                sx={{
-                  display: "flex", alignItems: "center",
-                  borderBottom: i === snapshotTodos.length - 1 ? "none" : 1,
-                  borderColor: "divider",
-                  opacity: completing ? 0.5 : 1,
-                  transition: "opacity 160ms ease",
-                }}
-              >
-                {/* 8px of padding around the 20px control keeps the tap target
-                    finger-sized; the negative margin holds the original alignment. */}
-                <Checkbox
-                  checked={!!t.completed || completing}
-                  onChange={() => handleTodoToggle(t)}
+                <Button
+                  variant="outlined"
                   size="small"
-                  slotProps={{ input: { "aria-label": `Mark "${t.title}" complete` } }}
                   sx={{
-                    p: 1, ml: "-8px", mr: "-2px",
-                    color: "text.disabled",
-                    "&.Mui-checked": { color: cat.todo.solid },
+                    borderColor: cat.sleep.edge,
+                    color: cat.sleep.ink,
+                    borderRadius: 99,
+                    fontWeight: 600,
+                    textTransform: "none",
+                    fontSize: 12,
+                    minHeight: 30,
+                    px: 1.5,
                   }}
-                />
-                <ButtonBase
-                  onClick={() => navigate("/todos")}
-                  sx={{
-                    flex: 1, minWidth: 0,
-                    display: "flex", alignItems: "center", gap: 1,
-                    py: "6px", px: "4px", borderRadius: 1,
-                    textAlign: "left",
-                  }}
+                  onClick={() => navigate("/sleep")}
                 >
-                  <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Typography
-                      sx={{
-                        fontSize: 12.5, fontWeight: 500, letterSpacing: "-0.005em", lineHeight: 1.2,
-                        textDecoration: completing ? "line-through" : "none",
-                      }}
-                      noWrap
-                    >
-                      {t.title}
-                    </Typography>
-                    {t.due_date && (
-                      <Typography sx={{ fontSize: 10.5, color: overdue ? cat.temp.solid : "text.secondary", fontWeight: overdue ? 600 : 500, mt: 0, lineHeight: 1.2 }}>
-                        {formatTodoDueDate(t.due_date)}
-                      </Typography>
-                    )}
-                  </Box>
+                  End nap
+                </Button>
+              </Box>
+            )}
+
+            {/* Active timers */}
+            {timers.length > 0 && !activeSleep && (
+              <Box sx={{ mb: 1.25 }}>
+                {timers.map((t) => (
                   <Box
+                    key={t.id}
                     sx={{
-                      fontSize: 9.5, fontWeight: 700, px: "6px", py: "2px",
-                      borderRadius: 99, textTransform: "uppercase", letterSpacing: "0.04em",
-                      bgcolor: pc.soft, color: pc.ink, flexShrink: 0,
+                      p: "8px 10px",
+                      borderRadius: 2,
+                      background: `linear-gradient(135deg, ${cat.feed.soft}, ${cat.pump.soft})`,
+                      border: `1px solid ${cat.feed.edge}`,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 1,
+                      mb: 0.75,
                     }}
                   >
-                    {t.priority}
+                    <Box
+                      sx={{
+                        width: 28, height: 28, borderRadius: "9px",
+                        bgcolor: cat.feed.solid, color: isDark ? "#0c1018" : "#fff",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                      }}
+                    >
+                      <TimerIcon sx={{ fontSize: 15 }} />
+                    </Box>
+                    <Box sx={{ flex: 1 }}>
+                      <Typography sx={{ fontSize: 10, color: cat.feed.ink, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", lineHeight: 1.1 }}>
+                        {t.name}
+                      </Typography>
+                      <Typography sx={{ fontSize: 16, fontWeight: 700, letterSpacing: "-0.02em", fontVariantNumeric: "tabular-nums", lineHeight: 1.2 }}>
+                        {formatDuration(t.start_time, null)}
+                      </Typography>
+                    </Box>
                   </Box>
-                </ButtonBase>
+                ))}
               </Box>
-            );
-          })
-        )}
-      </Box>
+            )}
+
+            {/* Section: Quick Log */}
+            <Box sx={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", px: 0.25, mb: 0.75 }}>
+              <Typography sx={{ fontSize: 11, color: "text.secondary", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                Quick log
+              </Typography>
+              <Box sx={{ display: "flex", alignItems: "center", gap: 0.4 }}>
+                <AddIcon sx={{ fontSize: 12, color: "text.secondary" }} />
+                <Typography sx={{ fontSize: 11, color: "text.secondary" }}>
+                  Tap to record
+                </Typography>
+              </Box>
+            </Box>
+
+            {/* Tile grid */}
+            <Box sx={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: { xs: 1, sm: 1.5 }, mb: 1.75 }}>
+              {tiles.map((tile) => {
+                const c = cat[tile.cat];
+                return (
+                  <ButtonBase
+                    key={tile.cat}
+                    aria-label={tile.label}
+                    onClick={tile.onClick}
+                    sx={{
+                      position: "relative",
+                      borderRadius: "16px",
+                      p: { xs: "14px 8px", sm: "20px 14px" },
+                      bgcolor: c.tile,
+                      border: `1px solid ${c.edge}`,
+                      minHeight: { xs: 108, sm: 132 },
+                      display: "flex",
+                      flexDirection: "column",
+                      justifyContent: "center",
+                      alignItems: "center",
+                      gap: { xs: 0.75, sm: 1 },
+                      overflow: "hidden",
+                      textAlign: "center",
+                    }}
+                  >
+                    {tile.live && (
+                      <Box
+                        sx={{
+                          position: "absolute", top: 9, right: 9, width: 8, height: 8,
+                          borderRadius: 99, bgcolor: c.solid,
+                          boxShadow: `0 0 0 3px ${c.solid}33`,
+                        }}
+                      />
+                    )}
+                    <Box
+                      sx={{
+                        width: { xs: 44, sm: 52 }, height: { xs: 44, sm: 52 }, borderRadius: "13px",
+                        bgcolor: c.solid, color: isDark ? "#0c1018" : "#fff",
+                        display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+                      }}
+                    >
+                      {CAT_ICONS_LG[tile.cat]}
+                    </Box>
+                    <Box sx={{ minWidth: 0, width: "100%" }}>
+                      <Typography sx={{ fontSize: { xs: 15, sm: 17 }, fontWeight: 700, color: c.ink, letterSpacing: "-0.01em", lineHeight: 1.2 }} noWrap>
+                        {tile.label}
+                      </Typography>
+                      <Typography sx={{ fontSize: { xs: 11.5, sm: 13 }, color: c.ink, opacity: 0.72, mt: 0.25, lineHeight: 1.25 }} noWrap>
+                        {tile.last || tile.detail}
+                      </Typography>
+                    </Box>
+                  </ButtonBase>
+                );
+              })}
+            </Box>
+
+            {/* Section: Today so far */}
+            <Box sx={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", px: 0.25, mb: 0.625 }}>
+              <Typography sx={{ fontSize: 11, color: "text.secondary", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                Today so far
+              </Typography>
+              <Typography
+                onClick={() => navigate("/charts")}
+                sx={{ fontSize: 11, color: "text.secondary", display: "flex", alignItems: "center", gap: 0.25, cursor: "pointer" }}
+              >
+                View charts <ChevronRightIcon sx={{ fontSize: 13 }} />
+              </Typography>
+            </Box>
+
+            {/* Today totals — horizontal scroll on mobile, equal-width grid on desktop */}
+            <Box
+              sx={{
+                display: { xs: "flex", md: "grid" },
+                gridTemplateColumns: { md: `repeat(${todayTotals.length}, minmax(0, 1fr))` },
+                gap: { xs: 0.75, md: 1.25 },
+                overflowX: { xs: "auto", md: "visible" },
+                pb: { xs: 0.25, md: 0 },
+                mb: 1.5,
+                mx: { xs: -1.5, md: 0 },
+                px: { xs: 1.5, md: 0 },
+                scrollbarWidth: "none",
+                "&::-webkit-scrollbar": { display: "none" },
+              }}
+            >
+              {todayTotals.map((t) => {
+                const c = cat[t.cat];
+                return (
+                  <Box
+                    key={t.cat}
+                    sx={{
+                      flexShrink: 0,
+                      minWidth: { xs: 96, md: 0 },
+                      width: { md: "100%" },
+                      p: { xs: "6px 10px", md: "10px 14px" },
+                      borderRadius: 1.5,
+                      bgcolor: "background.paper",
+                      border: 1, borderColor: "divider",
+                    }}
+                  >
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+                      <Box sx={{ width: { xs: 5, md: 6 }, height: { xs: 5, md: 6 }, borderRadius: 99, bgcolor: c.solid }} />
+                      <Typography sx={{ fontSize: { xs: 9.5, md: 11 }, color: "text.secondary", fontWeight: 600, letterSpacing: "0.02em", textTransform: "uppercase" }}>
+                        {t.label}
+                      </Typography>
+                    </Box>
+                    <Typography sx={{ fontSize: { xs: 15, md: 22 }, fontWeight: 700, lineHeight: 1.1, mt: { xs: 0.25, md: 0.5 }, letterSpacing: "-0.02em", fontVariantNumeric: "tabular-nums" }} noWrap>
+                      {t.value}
+                    </Typography>
+                    <Typography sx={{ fontSize: { xs: 9.5, md: 11 }, color: "text.secondary", mt: { xs: 0, md: 0.25 } }} noWrap>
+                      {t.sub}
+                    </Typography>
+                  </Box>
+                );
+              })}
+            </Box>
+          </>
+        }
+        end={
+          <>
+            {/* Developmental milestones. One row, below the numbers, so it never
+                pushes the quick-log tiles down. The full checklist opens from it. */}
+            <MilestonesCard child={selectedChild} cat={cat} isDark={isDark} />
+
+            {/* Section: Recent Activity */}
+            <Box sx={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", px: 0.25, mb: 0.5 }}>
+              <Typography sx={{ fontSize: 11, color: "text.secondary", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                Recent activity
+              </Typography>
+              <Typography
+                onClick={() => navigate("/activity")}
+                sx={{ fontSize: 11, color: "text.secondary", cursor: "pointer" }}
+              >
+                See all
+              </Typography>
+            </Box>
+
+            <Box
+              sx={{
+                bgcolor: "background.paper",
+                borderRadius: 2,
+                border: 1, borderColor: "divider",
+                p: "2px 10px",
+                boxShadow: 0,
+                mb: 1.5,
+              }}
+            >
+              {recentActivity.length === 0 ? (
+                <Typography sx={{ py: 1.25, textAlign: "center", fontSize: 12, color: "text.secondary" }}>
+                  No activity recorded yet today.
+                </Typography>
+              ) : (
+                recentActivity.map((ev, i) => {
+                  const c = cat[ev.cat];
+                  // A pending row has no server id, so there is no edit form on the
+                  // other end of a link — the row renders as plain text instead, and
+                  // the chip says why.
+                  const pendingRow = ev.id < 0;
+                  const editPath = pendingRow ? null : editEntryPath(ev.cat, ev.id);
+                  return (
+                    // Tapping a row opens that entry's edit form on its section page.
+                    <Box
+                      key={`${ev.cat}-${ev.id}`}
+                      component={editPath ? "button" : "div"}
+                      type={editPath ? "button" : undefined}
+                      onClick={editPath ? () => navigate(editPath) : undefined}
+                      aria-label={editPath ? `Edit ${ev.title} at ${ev.time}` : undefined}
+                      sx={{
+                        display: "flex", alignItems: "center", gap: 1,
+                        py: "6px",
+                        width: "100%",
+                        font: "inherit", color: "inherit", textAlign: "left",
+                        bgcolor: "transparent",
+                        border: 0,
+                        borderBottom: i === recentActivity.length - 1 ? "none" : 1,
+                        borderColor: "divider",
+                        ...(editPath && { cursor: "pointer" }),
+                      }}
+                    >
+                      <Box
+                        sx={{
+                          width: 24, height: 24, borderRadius: "8px",
+                          bgcolor: c.soft, color: c.ink,
+                          display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+                        }}
+                      >
+                        {CAT_ICONS_SM[ev.cat]}
+                      </Box>
+                      <Box sx={{ flex: 1, minWidth: 0 }}>
+                        <Typography sx={{ fontSize: 12.5, fontWeight: 600, letterSpacing: "-0.005em", lineHeight: 1.2 }} noWrap>
+                          {ev.title}
+                        </Typography>
+                        {pendingRow && <PendingChip compact />}
+                        <Typography sx={{ fontSize: 10.5, color: "text.secondary", mt: 0, lineHeight: 1.2 }}>
+                          {ev.meta}
+                        </Typography>
+                      </Box>
+                      <Typography
+                        sx={{
+                          fontSize: 11,
+                          color: ev.live ? c.ink : "text.secondary",
+                          fontWeight: ev.live ? 700 : 500,
+                          fontVariantNumeric: "tabular-nums",
+                          flexShrink: 0,
+                        }}
+                      >
+                        {ev.time}
+                      </Typography>
+                      {editPath && (
+                        <ChevronRightIcon sx={{ fontSize: 13, color: "text.disabled", flexShrink: 0 }} />
+                      )}
+                    </Box>
+                  );
+                })
+              )}
+            </Box>
+
+            {/* Section: To-do snapshot */}
+            <Box sx={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", px: 0.25, mb: 0.5 }}>
+              <Typography sx={{ fontSize: 11, color: "text.secondary", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                To-do · {activeTodos.length} active
+              </Typography>
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                {overdueCount > 0 && (
+                  <Typography sx={{ fontSize: 11, color: cat.temp.solid, fontWeight: 600 }}>
+                    {overdueCount} overdue
+                  </Typography>
+                )}
+                <Typography
+                  onClick={() => navigate("/todos")}
+                  sx={{ fontSize: 11, color: "text.secondary", display: "flex", alignItems: "center", gap: 0.25, cursor: "pointer" }}
+                >
+                  View to-dos <ChevronRightIcon sx={{ fontSize: 13 }} />
+                </Typography>
+              </Box>
+            </Box>
+
+            <Box
+              sx={{
+                bgcolor: "background.paper",
+                borderRadius: 2,
+                border: 1, borderColor: "divider",
+                p: "2px 10px",
+                boxShadow: 0,
+                mb: 1.25,
+              }}
+            >
+              {snapshotTodos.length === 0 ? (
+                <Box sx={{ py: 1.25, textAlign: "center" }}>
+                  <Typography sx={{ fontSize: 12, color: "text.secondary" }}>
+                    {activeTodos.length === 0 && todos.length > 0
+                      ? "All caught up!"
+                      : "No tasks yet."}
+                  </Typography>
+                </Box>
+              ) : (
+                snapshotTodos.map((t, i) => {
+                  const overdue = isTodoOverdue(t);
+                  const pc = cat[prioCatKey(t.priority)];
+                  const completing = completingTodos.includes(t.id);
+                  return (
+                    <Box
+                      key={t.id}
+                      sx={{
+                        display: "flex", alignItems: "center",
+                        borderBottom: i === snapshotTodos.length - 1 ? "none" : 1,
+                        borderColor: "divider",
+                        opacity: completing ? 0.5 : 1,
+                        transition: "opacity 160ms ease",
+                      }}
+                    >
+                      {/* 8px of padding around the 20px control keeps the tap target
+                          finger-sized; the negative margin holds the original alignment. */}
+                      <Checkbox
+                        checked={!!t.completed || completing}
+                        onChange={() => handleTodoToggle(t)}
+                        size="small"
+                        slotProps={{ input: { "aria-label": `Mark "${t.title}" complete` } }}
+                        sx={{
+                          p: 1, ml: "-8px", mr: "-2px",
+                          color: "text.disabled",
+                          "&.Mui-checked": { color: cat.todo.solid },
+                        }}
+                      />
+                      <ButtonBase
+                        onClick={() => navigate("/todos")}
+                        sx={{
+                          flex: 1, minWidth: 0,
+                          display: "flex", alignItems: "center", gap: 1,
+                          py: "6px", px: "4px", borderRadius: 1,
+                          textAlign: "left",
+                        }}
+                      >
+                        <Box sx={{ flex: 1, minWidth: 0 }}>
+                          <Typography
+                            sx={{
+                              fontSize: 12.5, fontWeight: 500, letterSpacing: "-0.005em", lineHeight: 1.2,
+                              textDecoration: completing ? "line-through" : "none",
+                            }}
+                            noWrap
+                          >
+                            {t.title}
+                          </Typography>
+                          {t.due_date && (
+                            <Typography sx={{ fontSize: 10.5, color: overdue ? cat.temp.solid : "text.secondary", fontWeight: overdue ? 600 : 500, mt: 0, lineHeight: 1.2 }}>
+                              {formatTodoDueDate(t.due_date)}
+                            </Typography>
+                          )}
+                        </Box>
+                        <Box
+                          sx={{
+                            fontSize: 9.5, fontWeight: 700, px: "6px", py: "2px",
+                            borderRadius: 99, textTransform: "uppercase", letterSpacing: "0.04em",
+                            bgcolor: pc.soft, color: pc.ink, flexShrink: 0,
+                          }}
+                        >
+                          {t.priority}
+                        </Box>
+                      </ButtonBase>
+                    </Box>
+                  );
+                })
+              )}
+            </Box>
+          </>
+        }
+      />
 
       <QuickLogDialog
         category={quickLogCategory}
