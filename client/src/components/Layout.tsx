@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import {
   Alert,
@@ -68,12 +68,34 @@ import { childPhotoUrl } from "../utils/childMoments";
 import QuickLogDialog, { type QuickLogCategory } from "./QuickLogDialog";
 import PushNotificationsNudge from "./PushNotificationsNudge";
 import AlertsBell from "./AlertsBell";
+import { FoldPanesContext } from "./FoldPanes";
+import { useFold } from "../hooks/useFold";
 
 const DRAWER_WIDTH = 240;
 const BOTTOM_NAV_HEIGHT = 68;
 const APPBAR_HEIGHT_MOBILE = 48;
 const APPBAR_HEIGHT_DESKTOP = 56;
 export const FAB_BOTTOM_OFFSET = `calc(${BOTTOM_NAV_HEIGHT}px + env(safe-area-inset-bottom) + 16px)`;
+
+/**
+ * The pane right of the fold on an open foldable (see `utils/fold.ts`). It
+ * stays in view while the page beside it scrolls, and scrolls on its own; the
+ * bottom padding clears a page's add button, which floats over this pane.
+ */
+const END_PANE_SX = {
+  gridColumn: 3,
+  minWidth: 0,
+  position: "sticky",
+  top: `calc(${APPBAR_HEIGHT_MOBILE}px + env(safe-area-inset-top))`,
+  height: `calc(100dvh - ${APPBAR_HEIGHT_MOBILE}px - env(safe-area-inset-top))`,
+  overflowY: "auto",
+  overscrollBehavior: "contain",
+  px: 1.5,
+  pt: 1.5,
+  pb: `calc(${FAB_BOTTOM_OFFSET} + 56px)`,
+  borderLeft: 1,
+  borderColor: "divider",
+} as const;
 
 const navItems = [
   { label: "Dashboard", icon: <DashboardIcon />, path: "/" },
@@ -166,6 +188,20 @@ export default function Layout() {
   const isMobile = useMediaQuery(muiTheme.breakpoints.down("md"));
   const isDark = muiTheme.palette.mode === "dark";
 
+  // Open like a book, the app is two panes. A page with something for each
+  // (the dashboard) claims both through `FoldPanes`; any other page gets the
+  // left one, with the log panel on the right — which is also where its
+  // forms open, since the theme puts dialogs there.
+  const fold = useFold();
+  const columns = fold.kind === "columns" ? fold : null;
+  const [paneClaims, setPaneClaims] = useState(0);
+  const claimPanes = useCallback(() => {
+    setPaneClaims((n) => n + 1);
+    return () => setPaneClaims((n) => n - 1);
+  }, []);
+  const foldPanes = useMemo(() => ({ claim: claimPanes, endPaneSx: END_PANE_SX }), [claimPanes]);
+  const pageFillsBothPanes = columns !== null && paneClaims > 0;
+
   const cycleTheme = () => {
     const order: Array<"system" | "light" | "dark"> = ["system", "light", "dark"];
     const next = order[(order.indexOf(preference) + 1) % order.length];
@@ -211,6 +247,36 @@ export default function Layout() {
     { label: "Tummy Time", icon: <AccessibilityNewIcon />, cat: "tummy" },
     { label: "Note", icon: <NoteIcon />, cat: "note" },
   ];
+
+  const logTiles = (
+    <Box sx={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 1 }}>
+      {addSheetItems.map((item) => (
+        <Box
+          key={item.label}
+          onClick={() => {
+            setAddSheetOpen(false);
+            setQuickLogCategory(item.cat);
+          }}
+          sx={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            gap: 0.75,
+            py: 1.5,
+            borderRadius: 3,
+            bgcolor: "background.paper",
+            border: 1,
+            borderColor: "divider",
+            cursor: "pointer",
+            "&:active": { transform: "scale(0.96)" },
+          }}
+        >
+          <Box sx={{ color: "text.secondary" }}>{item.icon}</Box>
+          <Typography sx={{ fontSize: 12.5, fontWeight: 700 }}>{item.label}</Typography>
+        </Box>
+      ))}
+    </Box>
+  );
 
   const drawer = (
     <Box
@@ -495,7 +561,14 @@ export default function Layout() {
         component="main"
         sx={{
           flexGrow: 1,
-          p: { xs: 1.5, sm: 3 },
+          pt: { xs: 1.5, sm: 3 },
+          // Open, the panes pad themselves, so each is inset from the crease.
+          px: columns ? 0 : { xs: 1.5, sm: 3 },
+          ...(columns && {
+            display: "grid",
+            gridTemplateColumns: `${columns.start}px ${columns.hinge}px ${columns.end}px`,
+            alignItems: "start",
+          }),
           ml: { md: `${DRAWER_WIDTH}px` },
           mt: {
             xs: `calc(${APPBAR_HEIGHT_MOBILE}px + env(safe-area-inset-top))`,
@@ -510,43 +583,67 @@ export default function Layout() {
             md: `calc(100vh - ${APPBAR_HEIGHT_DESKTOP}px)`,
           },
           maxWidth: "100%",
-          overflow: "hidden",
+          // `clip` rather than `hidden` when open: a hidden overflow is a
+          // scroll container, and the right-hand pane could not stick in it.
+          overflow: columns ? "clip" : "hidden",
         }}
       >
-        {/* Nothing caches API data anymore, so what's on screen is whatever
-            the last successful refresh brought back. These screens are read as
-            current state — how long since the last feed, whether anyone has
-            changed her — so the moment a refresh fails, the age of what's
-            showing has to be said out loud rather than left to look live. */}
-        {staleSince !== null && (
-          <Alert
-            severity="warning"
-            variant="outlined"
-            sx={{ mb: 2, alignItems: "center" }}
-            action={
-              <Button color="inherit" size="small" onClick={refreshData}>
-                Retry
-              </Button>
+        <FoldPanesContext.Provider value={foldPanes}>
+          <Box
+            sx={
+              columns
+                ? { gridColumn: pageFillsBothPanes ? "1 / -1" : 1, minWidth: 0, px: pageFillsBothPanes ? 0 : 1.5 }
+                : undefined
             }
           >
-            Can't reach the server — showing data from{" "}
-            {formatRelativeTime(new Date(staleSince).toISOString())}. New
-            entries from other devices aren't here yet; retrying automatically.
-          </Alert>
+            {/* A page that fills both panes still gets these in the left one
+                only, so the crease doesn't run through a line of warning text. */}
+            <Box sx={pageFillsBothPanes && columns ? { width: columns.start, px: 1.5 } : undefined}>
+              {/* Nothing caches API data anymore, so what's on screen is whatever
+                  the last successful refresh brought back. These screens are read as
+                  current state — how long since the last feed, whether anyone has
+                  changed her — so the moment a refresh fails, the age of what's
+                  showing has to be said out loud rather than left to look live. */}
+              {staleSince !== null && (
+                <Alert
+                  severity="warning"
+                  variant="outlined"
+                  sx={{ mb: 2, alignItems: "center" }}
+                  action={
+                    <Button color="inherit" size="small" onClick={refreshData}>
+                      Retry
+                    </Button>
+                  }
+                >
+                  Can't reach the server — showing data from{" "}
+                  {formatRelativeTime(new Date(staleSince).toISOString())}. New
+                  entries from other devices aren't here yet; retrying automatically.
+                </Alert>
+              )}
+              {/* The same honesty in the other direction: the banner above says what
+                  this screen may be missing, this one says what the rest of the
+                  world is missing from this screen. Below it deliberately — a
+                  failure to reach the server explains why anything is queued at
+                  all, so it reads in that order. */}
+              <PendingSyncBanner />
+            </Box>
+            {/* Keyed on the route so navigating away clears a crashed page rather
+                than pinning the error in place for the rest of the session. The
+                nav around it stays usable, which is the whole point of catching
+                here as well as at the top. */}
+            <ErrorBoundary key={location.pathname} scope="This page failed to load">
+              <Outlet />
+            </ErrorBoundary>
+          </Box>
+        </FoldPanesContext.Provider>
+        {/* After the page, never around it: opening the phone adds this pane
+            without moving the page in the tree, so nothing on it remounts. */}
+        {columns && !pageFillsBothPanes && (
+          <Box component="aside" aria-label="Log" sx={END_PANE_SX}>
+            <Typography sx={{ fontSize: 18, fontWeight: 700, mb: 2, letterSpacing: "-0.01em" }}>Log</Typography>
+            {logTiles}
+          </Box>
         )}
-        {/* The same honesty in the other direction: the banner above says what
-            this screen may be missing, this one says what the rest of the
-            world is missing from this screen. Below it deliberately — a
-            failure to reach the server explains why anything is queued at
-            all, so it reads in that order. */}
-        <PendingSyncBanner />
-        {/* Keyed on the route so navigating away clears a crashed page rather
-            than pinning the error in place for the rest of the session. The
-            nav around it stays usable, which is the whole point of catching
-            here as well as at the top. */}
-        <ErrorBoundary key={location.pathname} scope="This page failed to load">
-          <Outlet />
-        </ErrorBoundary>
       </Box>
 
       {/* Add log sheet (mobile) */}
@@ -576,7 +673,8 @@ export default function Layout() {
             sx={{
               position: "absolute",
               left: 0,
-              right: 0,
+              right: columns ? "auto" : 0,
+              width: columns?.start,
               bottom: `calc(${BOTTOM_NAV_HEIGHT}px + env(safe-area-inset-bottom))`,
               bgcolor: "background.default",
               borderTopLeftRadius: "24px",
@@ -589,45 +687,22 @@ export default function Layout() {
             <Typography id="log-sheet-title" sx={{ fontSize: 18, fontWeight: 700, mb: 2, letterSpacing: "-0.01em" }}>
               Log
             </Typography>
-            <Box sx={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 1 }}>
-              {addSheetItems.map((item) => (
-                <Box
-                  key={item.label}
-                  onClick={() => {
-                    setAddSheetOpen(false);
-                    setQuickLogCategory(item.cat);
-                  }}
-                  sx={{
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                    gap: 0.75,
-                    py: 1.5,
-                    borderRadius: 3,
-                    bgcolor: "background.paper",
-                    border: 1,
-                    borderColor: "divider",
-                    cursor: "pointer",
-                    "&:active": { transform: "scale(0.96)" },
-                  }}
-                >
-                  <Box sx={{ color: "text.secondary" }}>{item.icon}</Box>
-                  <Typography sx={{ fontSize: 12.5, fontWeight: 700 }}>{item.label}</Typography>
-                </Box>
-              ))}
-            </Box>
+            {logTiles}
           </Box>
         </Box>
       )}
 
-      {/* Mobile bottom navigation — PWA style with center FAB */}
+      {/* Mobile bottom navigation — PWA style with center FAB. Open, it spans
+          the left pane only: across the whole width its centre button would
+          sit on the crease. */}
       <Box
         sx={{
           display: { xs: "block", md: "none" },
           position: "fixed",
           bottom: 0,
           left: 0,
-          right: 0,
+          right: columns ? "auto" : 0,
+          width: columns?.start,
           zIndex: (theme) => theme.zIndex.appBar,
           paddingBottom: "env(safe-area-inset-bottom)",
           borderTop: 1,

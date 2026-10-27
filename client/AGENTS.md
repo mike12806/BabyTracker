@@ -253,3 +253,44 @@ here — it is the least dependable link in the chain.
 - Form components for each entity (FeedingForm, DiaperForm, SleepForm, etc.)
 - Dashboard should show recent activity across all tracked entities
 - Timer components for in-progress events (feedings, sleep, tummy time)
+
+## Foldables
+
+The iPhone Duo — and any book-style foldable — opens to a landscape inner
+display of about 890 × 626 points with the crease down the middle. Open, the
+app is two panes, one per half; closed, it is the phone app it always was.
+The same machinery is in TaskTracker; keep the two in step.
+
+- **Where the fold is** comes from `utils/fold.ts`, fed by `FoldProvider`
+  (`hooks/useFold.tsx`), which re-measures on resize, orientation, posture and
+  segment changes. The Viewport Segments and Device Posture APIs are used when
+  the browser reports them, but Safari 27.1 ships both only behind feature
+  flags, so the fold is usually *inferred*: an Apple touch screen whose short
+  side is at least 560 points is a foldable's inner display (no slab iPhone is
+  wider than 440, no iPad is shorter than 1133), with the crease at its centre.
+  Only a page that spans the whole display is split — in a split-screen window
+  the centre of the page is not the crease.
+- **The theme makes every screen pane-sized.** Open, every breakpoint is pushed
+  out by the width of the other pane (`paneBreakpointOffset`), so `sm`, `md`
+  and every `useMediaQuery` describe one pane, and each page renders its phone
+  layout in a half without knowing about folds. Don't add `useFold` checks
+  where a breakpoint already says the same thing.
+- **The left pane is the page; the right is the log panel, and where forms
+  open.** Dialogs and snackbars are kept in the right pane by theme overrides,
+  so a full-screen form fills that half and the list it came from stays in view
+  beside it; drawers are capped at their pane's width, and menus open
+  leftwards from their button so a row's ⋮ menu doesn't cross the crease. The
+  bottom nav spans the left pane only: across the whole width its centre button
+  sits on the crease.
+- **A page with something for both halves uses `FoldPanes`** — the dashboard
+  (now | earlier) and the charts (two a side). It claims both panes, so Layout
+  leaves the log panel out. Only split what the page already has: a second pane
+  that fetches would multiply the refresh cost for as long as the phone is open,
+  and Data Freshness above is why that matters.
+- **Opening and closing must not remount anything.** Layout and `FoldPanes`
+  render the same element tree in both shapes and change only styles, and the
+  log panel is added *after* the page, never around it. Wrapping the `Outlet`
+  conditionally would unmount the page, and any half-filled form on it, every
+  time the phone is opened.
+- The manifest's orientation is `any`. Locked to portrait, a browser that
+  honours the lock would turn the open phone sideways into one tall column.

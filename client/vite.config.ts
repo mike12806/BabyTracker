@@ -45,7 +45,11 @@ export default defineConfig({
         start_url: "/",
         scope: "/",
         display: "standalone",
-        orientation: "portrait",
+        // Not "portrait": a foldable's inner display is landscape when held
+        // open like a book, and the layout splits into two panes there (see
+        // src/utils/fold.ts). Locked to portrait, a browser that honours the
+        // lock would turn it sideways into one tall column instead.
+        orientation: "any",
         theme_color: "#5c6bc0",
         background_color: "#f5f5f5",
         categories: ["lifestyle", "health"],

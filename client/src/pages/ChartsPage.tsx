@@ -14,6 +14,8 @@ import { api } from "../api/client";
 import { useChildren } from "../hooks/useChildren";
 import { useDataRefresh } from "../hooks/useDataRefresh";
 import NoChildPlaceholder from "../components/NoChildPlaceholder";
+import FoldPanes from "../components/FoldPanes";
+import { useFold } from "../hooks/useFold";
 import { unitLabel, volumeTotal } from "../utils/feedingAmount";
 import { useVolumeUnit } from "../hooks/useVolumeUnit";
 import {
@@ -59,6 +61,7 @@ export default function ChartsPage() {
   const theme = useTheme();
   const dark = theme.palette.mode === "dark";
   const colors = useMemo(() => buildCategoryColors(dark), [dark]);
+  const fold = useFold();
 
   const [range, setRange] = useState<RangeKey>("7");
   const [loading, setLoading] = useState(true);
@@ -178,125 +181,137 @@ export default function ChartsPage() {
     },
   ];
 
-  return (
-    <Box>
-      {/* Header */}
-      <Typography sx={{ fontSize: 20, fontWeight: 700, letterSpacing: "-0.01em", lineHeight: 1.2 }}>
-        Trends
-      </Typography>
-      <Typography sx={{ fontSize: 12, color: "text.secondary", mb: 1.25 }}>
-        {rangeSubtitle(range)}
-      </Typography>
-
-      {/* Filter pills */}
-      <Stack
-        direction="row"
-        spacing={0.75}
+  const sectionCard = (sec: SectionDef) => {
+    const cat = colors[sec.category];
+    return (
+      <Card
+        key={sec.key}
+        elevation={0}
         sx={{
-          mb: 1.5,
-          overflowX: "auto",
-          scrollbarWidth: "none",
-          "&::-webkit-scrollbar": { display: "none" },
+          border: `1px solid ${theme.palette.divider}`,
+          borderRadius: 2.5,
+          overflow: "visible",
         }}
       >
-        {RANGE_OPTIONS.map((opt) => (
-          <Chip
-            key={opt.key}
-            label={opt.label}
-            size="small"
-            variant={range === opt.key ? "filled" : "outlined"}
-            color={range === opt.key ? "primary" : "default"}
-            onClick={() => setRange(opt.key)}
-            sx={{ fontWeight: 600, flexShrink: 0, fontSize: 12, height: 26 }}
-          />
-        ))}
-      </Stack>
-
-      {loading ? (
-        <Box sx={{ display: "flex", justifyContent: "center", py: 6 }}>
-          <CircularProgress size={28} />
-        </Box>
-      ) : (
-        <Stack spacing={1.25}>
-          {sections.map((sec) => {
-            const cat = colors[sec.category];
-            return (
-              <Card
-                key={sec.key}
-                elevation={0}
+        {/* Colored left gutter via a left border */}
+        <Box sx={{ borderLeft: `2px solid ${cat.solid}` }}>
+          <CardContent sx={{ p: "10px 12px !important" }}>
+            {/* Card header row */}
+            <Stack
+              direction="row"
+              sx={{ alignItems: "center", mb: 0.75 }}
+              spacing={1}
+            >
+              {/* Icon tile */}
+              <Box
                 sx={{
-                  border: `1px solid ${theme.palette.divider}`,
-                  borderRadius: 2.5,
-                  overflow: "visible",
+                  width: 22,
+                  height: 22,
+                  borderRadius: 1,
+                  bgcolor: cat.tile,
+                  color: cat.solid,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexShrink: 0,
+                  "& svg": { fontSize: 14 },
                 }}
               >
-                {/* Colored left gutter via a left border */}
-                <Box sx={{ borderLeft: `2px solid ${cat.solid}` }}>
-                  <CardContent sx={{ p: "10px 12px !important" }}>
-                    {/* Card header row */}
-                    <Stack
-                      direction="row"
-                      sx={{ alignItems: "center", mb: 0.75 }}
-                      spacing={1}
-                    >
-                      {/* Icon tile */}
-                      <Box
-                        sx={{
-                          width: 22,
-                          height: 22,
-                          borderRadius: 1,
-                          bgcolor: cat.tile,
-                          color: cat.solid,
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          flexShrink: 0,
-                          "& svg": { fontSize: 14 },
-                        }}
-                      >
-                        {sec.icon}
-                      </Box>
+                {sec.icon}
+              </Box>
 
-                      {/* Title + subtitle */}
-                      <Box sx={{ flex: 1, minWidth: 0 }}>
-                        <Typography
-                          sx={{ fontSize: 13, fontWeight: 700, lineHeight: 1.15 }}
-                          noWrap
-                        >
-                          {sec.title}
-                        </Typography>
-                        <Typography
-                          sx={{ fontSize: 10.5, color: "text.secondary", lineHeight: 1.15 }}
-                          noWrap
-                        >
-                          {sec.subtitle}
-                        </Typography>
-                      </Box>
+              {/* Title + subtitle */}
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Typography
+                  sx={{ fontSize: 13, fontWeight: 700, lineHeight: 1.15 }}
+                  noWrap
+                >
+                  {sec.title}
+                </Typography>
+                <Typography
+                  sx={{ fontSize: 10.5, color: "text.secondary", lineHeight: 1.15 }}
+                  noWrap
+                >
+                  {sec.subtitle}
+                </Typography>
+              </Box>
 
-                      {/* Avg value */}
-                      <Box sx={{ textAlign: "right", flexShrink: 0 }}>
-                        <Typography
-                          sx={{ fontSize: 15, fontWeight: 700, lineHeight: 1.1, color: cat.solid, fontVariantNumeric: "tabular-nums" }}
-                        >
-                          {sec.avg}
-                        </Typography>
-                        <Typography
-                          sx={{ fontSize: 10, color: "text.secondary", lineHeight: 1 }}
-                        >
-                          {sec.avgLabel}
-                        </Typography>
-                      </Box>
-                    </Stack>
+              {/* Avg value */}
+              <Box sx={{ textAlign: "right", flexShrink: 0 }}>
+                <Typography
+                  sx={{ fontSize: 15, fontWeight: 700, lineHeight: 1.1, color: cat.solid, fontVariantNumeric: "tabular-nums" }}
+                >
+                  {sec.avg}
+                </Typography>
+                <Typography
+                  sx={{ fontSize: 10, color: "text.secondary", lineHeight: 1 }}
+                >
+                  {sec.avgLabel}
+                </Typography>
+              </Box>
+            </Stack>
 
-                    {/* Chart */}
-                    <Box sx={{ mx: -0.5 }}>{sec.chart}</Box>
-                  </CardContent>
-                </Box>
-              </Card>
-            );
-          })}
-        </Stack>
-      )}
-    </Box>
+            {/* Chart */}
+            <Box sx={{ mx: -0.5 }}>{sec.chart}</Box>
+          </CardContent>
+        </Box>
+      </Card>
+    );
+  };
+
+  // Open like a book, two charts a side, so all four are in view at once.
+  return (
+    <FoldPanes
+      start={
+        <>
+          {/* Header */}
+          <Typography sx={{ fontSize: 20, fontWeight: 700, letterSpacing: "-0.01em", lineHeight: 1.2 }}>
+            Trends
+          </Typography>
+          <Typography sx={{ fontSize: 12, color: "text.secondary", mb: 1.25 }}>
+            {rangeSubtitle(range)}
+          </Typography>
+
+          {/* Filter pills */}
+          <Stack
+            direction="row"
+            spacing={0.75}
+            sx={{
+              mb: 1.5,
+              overflowX: "auto",
+              scrollbarWidth: "none",
+              "&::-webkit-scrollbar": { display: "none" },
+            }}
+          >
+            {RANGE_OPTIONS.map((opt) => (
+              <Chip
+                key={opt.key}
+                label={opt.label}
+                size="small"
+                variant={range === opt.key ? "filled" : "outlined"}
+                color={range === opt.key ? "primary" : "default"}
+                onClick={() => setRange(opt.key)}
+                sx={{ fontWeight: 600, flexShrink: 0, fontSize: 12, height: 26 }}
+              />
+            ))}
+          </Stack>
+
+          {loading ? (
+            <Box sx={{ display: "flex", justifyContent: "center", py: 6 }}>
+              <CircularProgress size={28} />
+            </Box>
+          ) : (
+            <Stack spacing={1.25}>{sections.slice(0, 2).map(sectionCard)}</Stack>
+          )}
+        </>
+      }
+      end={
+        !loading && (
+          <Stack spacing={1.25} sx={{ mt: fold.kind === "columns" ? 0 : 1.25 }}>
+            {sections.slice(2).map(sectionCard)}
+          </Stack>
+        )
+      }
+    />
   );
 }
