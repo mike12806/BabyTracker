@@ -15,7 +15,7 @@
     "kv:status": "node scripts/kv-migrate.mjs --remote --dry-run"
   },
   "dependencies": {
-    "hono": "4.13.13"
+    "hono": "4.13.14"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "0.23.0",
