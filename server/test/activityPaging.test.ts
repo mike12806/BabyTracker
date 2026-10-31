@@ -37,6 +37,50 @@ describe("Activity paging", () => {
     childId = ((await res.json()) as { id: number }).id;
   });
 
+  /**
+   * Seeds entries straight into D1 in one batch. These tests are about how the
+   * feed pages what is already stored, not about the create routes (which have
+   * their own tests), and posting each row through the API was slow enough on
+   * the CI runner pods to push the larger cases past the test timeout.
+   */
+  type Seed =
+    | { table: "feedings"; childId?: number; time: string }
+    | { table: "diaper_changes"; time: string }
+    | { table: "sleep"; time: string }
+    | { table: "notes"; time: string; content: string };
+
+  async function seed(...rows: Seed[]): Promise<void> {
+    await env.DB.batch(
+      rows.map((row) => {
+        switch (row.table) {
+          case "feedings":
+            return env.DB.prepare("INSERT INTO feedings (child_id, type, start_time) VALUES (?, 'bottle_formula', ?)").bind(
+              row.childId ?? childId,
+              row.time
+            );
+          case "diaper_changes":
+            return env.DB.prepare("INSERT INTO diaper_changes (child_id, time, type) VALUES (?, ?, 'wet')").bind(
+              childId,
+              row.time
+            );
+          case "sleep":
+            return env.DB.prepare("INSERT INTO sleep (child_id, start_time, is_nap) VALUES (?, ?, 1)").bind(
+              childId,
+              row.time
+            );
+          case "notes":
+            return env.DB.prepare("INSERT INTO notes (child_id, time, content) VALUES (?, ?, ?)").bind(
+              childId,
+              row.time,
+              row.content
+            );
+        }
+      })
+    );
+  }
+
+  const feeding = (time: string, child?: number): Seed => ({ table: "feedings", childId: child, time });
+
   async function get(query: string): Promise<ActivityResponse> {
     const res = await api.get(`/api/activity?child_id=${childId}&${query}`);
     expect(res.status).toBe(200);
@@ -45,10 +89,12 @@ describe("Activity paging", () => {
 
   it("returns the newest entries first, across every source table", async () => {
     // Interleaved so no single table holds the whole page.
-    await api.post("/api/feedings", { child_id: childId, type: "bottle_formula", start_time: at(1, 10) });
-    await api.post("/api/diaper-changes", { child_id: childId, time: at(1, 12), type: "wet" });
-    await api.post("/api/feedings", { child_id: childId, type: "bottle_formula", start_time: at(1, 14) });
-    await api.post("/api/sleep", { child_id: childId, start_time: at(1, 16), is_nap: 1 });
+    await seed(
+      feeding(at(1, 10)),
+      { table: "diaper_changes", time: at(1, 12) },
+      feeding(at(1, 14)),
+      { table: "sleep", time: at(1, 16) }
+    );
 
     const page = await get("limit=2&offset=0");
 
@@ -61,10 +107,10 @@ describe("Activity paging", () => {
     // older than all of them. The cap has to be `offset + limit`, not `limit`:
     // capping at `limit` would fetch only the ten newest feedings, and page two
     // would lose the five that belong at its top.
-    for (let hour = 0; hour < 15; hour++) {
-      await api.post("/api/feedings", { child_id: childId, type: "bottle_formula", start_time: at(2, hour) });
-    }
-    await api.post("/api/diaper-changes", { child_id: childId, time: at(1, 1), type: "wet" });
+    await seed(
+      ...Array.from({ length: 15 }, (_, hour) => feeding(at(2, hour))),
+      { table: "diaper_changes", time: at(1, 1) }
+    );
 
     const first = await get("limit=10&offset=0");
     const second = await get("limit=10&offset=10");
@@ -80,10 +126,10 @@ describe("Activity paging", () => {
   });
 
   it("counts everything in range, not just the rows the page needed", async () => {
-    for (let hour = 10; hour < 18; hour++) {
-      await api.post("/api/feedings", { child_id: childId, type: "bottle_formula", start_time: at(3, hour) });
-    }
-    await api.post("/api/notes", { child_id: childId, time: at(3, 9), content: "slept well" });
+    await seed(
+      ...Array.from({ length: 8 }, (_, i) => feeding(at(3, 10 + i))),
+      { table: "notes", time: at(3, 9), content: "slept well" }
+    );
 
     // The pager renders "Page X of Y" from this, so it has to reflect the whole
     // range rather than the capped slice the page was built from.
@@ -93,9 +139,7 @@ describe("Activity paging", () => {
   });
 
   it("honours the date filter in both the page and the count", async () => {
-    await api.post("/api/feedings", { child_id: childId, type: "bottle_formula", start_time: at(1, 10) });
-    await api.post("/api/feedings", { child_id: childId, type: "bottle_formula", start_time: at(5, 10) });
-    await api.post("/api/feedings", { child_id: childId, type: "bottle_formula", start_time: at(9, 10) });
+    await seed(feeding(at(1, 10)), feeding(at(5, 10)), feeding(at(9, 10)));
 
     const page = await get(`limit=50&offset=0&date_from=${at(4, 0)}&date_to=${at(6, 0)}`);
 
@@ -108,8 +152,7 @@ describe("Activity paging", () => {
       await api.post("/api/children", { first_name: "Mikey", birth_date: "2026-01-04" })
     ).json()) as { id: number }).id;
 
-    await api.post("/api/feedings", { child_id: childId, type: "bottle_formula", start_time: at(4, 10) });
-    await api.post("/api/feedings", { child_id: other, type: "bottle_formula", start_time: at(4, 11) });
+    await seed(feeding(at(4, 10)), feeding(at(4, 11), other));
 
     const page = await get("limit=50&offset=0");
 
