@@ -435,7 +435,7 @@ export default function ActivityPage() {
                 borderRadius: 99,
                 cursor: "pointer",
                 whiteSpace: "nowrap",
-                fontSize: 13,
+                fontSize: 14,
                 fontWeight: 600,
                 flexShrink: 0,
                 userSelect: "none",
@@ -494,7 +494,7 @@ export default function ActivityPage() {
                 borderRadius: 99,
                 cursor: "pointer",
                 whiteSpace: "nowrap",
-                fontSize: 13,
+                fontSize: 14,
                 fontWeight: 600,
                 flexShrink: 0,
                 userSelect: "none",
@@ -625,7 +625,7 @@ export default function ActivityPage() {
                 >
                   <Typography
                     sx={{
-                      fontSize: 10,
+                      fontSize: 11.5,
                       fontWeight: 600,
                       textTransform: "uppercase",
                       letterSpacing: "0.06em",
@@ -685,7 +685,7 @@ export default function ActivityPage() {
               {/* Section header */}
               <Typography
                 sx={{
-                  fontSize: 11.5,
+                  fontSize: 13,
                   textTransform: "uppercase",
                   fontWeight: 700,
                   letterSpacing: "0.08em",
@@ -882,7 +882,7 @@ export default function ActivityPage() {
                                     ? `Logged by ${entry.logged_by}, edited by ${entry.edited_by}`
                                     : `Logged by ${entry.logged_by}`
                                 }
-                                sx={{ fontSize: "0.7rem", maxWidth: 96 }}
+                                sx={{ fontSize: "0.8rem", maxWidth: 104 }}
                               >
                                 {entry.edited_by ? `edited · ${entry.edited_by}` : entry.logged_by}
                               </Typography>

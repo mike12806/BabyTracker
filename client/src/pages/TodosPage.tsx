@@ -268,7 +268,7 @@ export default function TodosPage() {
                 borderRadius: 99,
                 cursor: "pointer",
                 whiteSpace: "nowrap",
-                fontSize: 13,
+                fontSize: 14,
                 fontWeight: 600,
                 userSelect: "none",
                 transition: "all 0.15s",
@@ -293,7 +293,7 @@ export default function TodosPage() {
               {p.count != null && p.count > 0 && (
                 <Box
                   component="span"
-                  sx={{ opacity: 0.7, fontSize: 12, ml: 0.25 }}
+                  sx={{ opacity: 0.7, fontSize: 13, ml: 0.25 }}
                 >
                   {p.count}
                 </Box>
@@ -379,7 +379,7 @@ export default function TodosPage() {
                               bgcolor: priorityColor(todo.priority),
                               color: "#fff",
                               fontWeight: 600,
-                              fontSize: 11,
+                              fontSize: 12.5,
                               height: 22,
                             }}
                           />
@@ -495,7 +495,7 @@ export default function TodosPage() {
                   <Box sx={{ flex: 1, minWidth: 0 }}>
                     <Typography
                       sx={{
-                        fontSize: 12.5,
+                        fontSize: 13.5,
                         fontWeight: 600,
                         letterSpacing: "-0.005em",
                         lineHeight: 1.2,
@@ -506,7 +506,7 @@ export default function TodosPage() {
                       {todo.title}
                     </Typography>
                     <Typography
-                      sx={{ fontSize: 10.5, color: "text.secondary", mt: 0, lineHeight: 1.2 }}
+                      sx={{ fontSize: 12, color: "text.secondary", mt: 0, lineHeight: 1.2 }}
                       noWrap
                     >
                       {todo.notes || priorityLabel(todo.priority)}
@@ -515,7 +515,7 @@ export default function TodosPage() {
                   {todo.due_date && (
                     <Typography
                       sx={{
-                        fontSize: 11,
+                        fontSize: 12.5,
                         color: overdue ? cat.temp.solid : "text.secondary",
                         fontWeight: overdue ? 700 : 500,
                         fontVariantNumeric: "tabular-nums",

@@ -325,7 +325,7 @@ export default function NotesPage() {
                               bgcolor: tc.soft,
                               color: tc.ink,
                               fontWeight: 600,
-                              fontSize: 11,
+                              fontSize: 12.5,
                               height: 22,
                               border: 1,
                               borderColor: tc.edge,
@@ -429,7 +429,7 @@ export default function NotesPage() {
                   <Box sx={{ flex: 1, minWidth: 0 }}>
                     <Typography
                       sx={{
-                        fontSize: 12.5,
+                        fontSize: 13.5,
                         fontWeight: 600,
                         letterSpacing: "-0.005em",
                         lineHeight: 1.2,
@@ -439,7 +439,7 @@ export default function NotesPage() {
                       {n.title || "Note"}
                     </Typography>
                     <Typography
-                      sx={{ fontSize: 10.5, color: "text.secondary", mt: 0, lineHeight: 1.2 }}
+                      sx={{ fontSize: 12, color: "text.secondary", mt: 0, lineHeight: 1.2 }}
                       noWrap
                     >
                       {n.content}
@@ -448,7 +448,7 @@ export default function NotesPage() {
                   {isPending(n) && <PendingChip compact />}
                   <Typography
                     sx={{
-                      fontSize: 11,
+                      fontSize: 12.5,
                       color: "text.secondary",
                       fontWeight: 500,
                       fontVariantNumeric: "tabular-nums",

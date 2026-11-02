@@ -31,7 +31,7 @@ export default function StatCard({ label, value, sublabel, accentColor }: StatCa
     >
       <Typography
         sx={{
-          fontSize: 9.5,
+          fontSize: 11,
           color: "text.secondary",
           fontWeight: 600,
           textTransform: "uppercase",
@@ -57,7 +57,7 @@ export default function StatCard({ label, value, sublabel, accentColor }: StatCa
       </Typography>
       {sublabel && (
         <Typography
-          sx={{ fontSize: 9.5, color: "text.secondary", lineHeight: 1.15, mt: 0 }}
+          sx={{ fontSize: 11, color: "text.secondary", lineHeight: 1.15, mt: 0 }}
           noWrap
         >
           {sublabel}

@@ -257,7 +257,7 @@ export default function TimersPage() {
         <Box sx={{ mb: 3 }}>
           <Typography
             sx={{
-              fontSize: 12,
+              fontSize: 13,
               color: "text.secondary",
               fontWeight: 700,
               textTransform: "uppercase",
@@ -286,7 +286,7 @@ export default function TimersPage() {
       {/* Start a new timer grid */}
       <Typography
         sx={{
-          fontSize: 12,
+          fontSize: 13,
           color: "text.secondary",
           fontWeight: 700,
           textTransform: "uppercase",
@@ -323,7 +323,7 @@ export default function TimersPage() {
                 <Box sx={{ color: tile.color.solid, mb: 1, display: "flex", justifyContent: "center" }}>
                   {tile.icon}
                 </Box>
-                <Typography variant="body2" sx={{ fontWeight: 600, fontSize: 13 }}>
+                <Typography variant="body2" sx={{ fontWeight: 600, fontSize: 14 }}>
                   {tile.name}
                 </Typography>
               </CardContent>
@@ -345,7 +345,7 @@ export default function TimersPage() {
         <>
           <Typography
             sx={{
-              fontSize: 12,
+              fontSize: 13,
               color: "text.secondary",
               fontWeight: 700,
               textTransform: "uppercase",

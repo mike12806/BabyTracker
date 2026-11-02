@@ -222,7 +222,7 @@ export default function ChildHero({ child, napping, cat, isDark, dailyNote, dail
               justifyContent: "center",
             }}
           >
-            <BedtimeIcon sx={{ fontSize: 11 }} />
+            <BedtimeIcon sx={{ fontSize: 12.5 }} />
           </Box>
         )}
         {/* Particles ride above the photo but must never eat the next tap. */}
@@ -249,7 +249,7 @@ export default function ChildHero({ child, napping, cat, isDark, dailyNote, dail
       <Box sx={{ minWidth: 0, flex: 1 }}>
         <Typography
           sx={{
-            fontSize: 10.5,
+            fontSize: 12,
             fontWeight: 700,
             textTransform: "uppercase",
             letterSpacing: "0.07em",
@@ -294,7 +294,7 @@ export default function ChildHero({ child, napping, cat, isDark, dailyNote, dail
             {dailyNoteSource === "ai" && (
               <AutoAwesomeIcon
                 titleAccess="Written by AI"
-                sx={{ fontSize: 13, color: cat.tummy.solid, opacity: 0.85, mt: "1px", flexShrink: 0 }}
+                sx={{ fontSize: 14, color: cat.tummy.solid, opacity: 0.85, mt: "1px", flexShrink: 0 }}
               />
             )}
             {/* Tap to read the rest. The clamp keeps the card a predictable
@@ -343,11 +343,11 @@ export default function ChildHero({ child, napping, cat, isDark, dailyNote, dail
               maxWidth: "100%",
             }}
           >
-            <Box component="span" aria-hidden sx={{ fontSize: 11, lineHeight: 1 }}>
+            <Box component="span" aria-hidden sx={{ fontSize: 12.5, lineHeight: 1 }}>
               {today.emoji}
             </Box>
             <Typography
-              sx={{ fontSize: 11, fontWeight: 700, color: accent.ink, letterSpacing: "-0.005em" }}
+              sx={{ fontSize: 12.5, fontWeight: 700, color: accent.ink, letterSpacing: "-0.005em" }}
               noWrap
             >
               {today.label}
