@@ -352,7 +352,7 @@ export default function ChildrenPage() {
                               bgcolor: cat.feed.solid,
                               color: "#fff",
                               fontWeight: 600,
-                              fontSize: 11,
+                              fontSize: 12.5,
                               height: 22,
                             }}
                           />
@@ -366,7 +366,7 @@ export default function ChildrenPage() {
                               borderColor: cat.feed.edge,
                               color: cat.feed.ink,
                               fontWeight: 600,
-                              fontSize: 11,
+                              fontSize: 12.5,
                               height: 22,
                             }}
                           />

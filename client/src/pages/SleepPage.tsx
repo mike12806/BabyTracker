@@ -429,10 +429,10 @@ export default function SleepPage() {
             {[...grouped.entries()].map(([key, items]) => (
               <Box key={key}>
                 <Box sx={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", pt: 1, pb: 0.5 }}>
-                  <Typography sx={{ fontSize: 10.5, color: "text.secondary", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                  <Typography sx={{ fontSize: 12, color: "text.secondary", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em" }}>
                     {dateSectionLabel(items[0].start_time)}
                   </Typography>
-                  <Typography sx={{ fontSize: 10.5, color: "text.secondary", fontVariantNumeric: "tabular-nums" }}>{items.length}</Typography>
+                  <Typography sx={{ fontSize: 12, color: "text.secondary", fontVariantNumeric: "tabular-nums" }}>{items.length}</Typography>
                 </Box>
                 {items.map((s) => {
                   const isNap = Boolean(s.is_nap);
@@ -459,15 +459,15 @@ export default function SleepPage() {
                         {isNap ? <BedtimeIcon sx={{ fontSize: 14 }} /> : <NightlightIcon sx={{ fontSize: 14 }} />}
                       </Box>
                       <Box sx={{ flex: 1, minWidth: 0 }}>
-                        <Typography sx={{ fontSize: 12.5, fontWeight: 600, letterSpacing: "-0.005em", color: inProgress ? "warning.main" : "text.primary", lineHeight: 1.2 }} noWrap>
+                        <Typography sx={{ fontSize: 13.5, fontWeight: 600, letterSpacing: "-0.005em", color: inProgress ? "warning.main" : "text.primary", lineHeight: 1.2 }} noWrap>
                           {inProgress ? "In progress" : humanDuration(durationMs)} {isNap ? "(Nap)" : "(Night)"}
                         </Typography>
-                        <Typography sx={{ fontSize: 10.5, color: "text.secondary", mt: 0, lineHeight: 1.2 }}>
+                        <Typography sx={{ fontSize: 12, color: "text.secondary", mt: 0, lineHeight: 1.2 }}>
                           {formatTimeRange(s.start_time, s.end_time)}
                         </Typography>
                       </Box>
                       {isPending(s) && <PendingChip compact />}
-                      <Typography sx={{ fontSize: 11, color: "text.secondary", fontWeight: 500, fontVariantNumeric: "tabular-nums", flexShrink: 0, mr: 3.25 }}>
+                      <Typography sx={{ fontSize: 12.5, color: "text.secondary", fontWeight: 500, fontVariantNumeric: "tabular-nums", flexShrink: 0, mr: 3.25 }}>
                         {formatTimeShort(s.start_time)}
                       </Typography>
                       <IconButton

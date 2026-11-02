@@ -272,7 +272,7 @@ export default function Layout() {
           }}
         >
           <Box sx={{ color: "text.secondary" }}>{item.icon}</Box>
-          <Typography sx={{ fontSize: 12.5, fontWeight: 700 }}>{item.label}</Typography>
+          <Typography sx={{ fontSize: 13.5, fontWeight: 700 }}>{item.label}</Typography>
         </Box>
       ))}
     </Box>
@@ -311,7 +311,7 @@ export default function Layout() {
                 <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                   <Avatar
                     src={childPhotoUrl(child, API_BASE) ?? undefined}
-                    sx={{ width: 24, height: 24, fontSize: 12 }}
+                    sx={{ width: 24, height: 24, fontSize: 13 }}
                   >
                     {child.first_name[0]}
                   </Avatar>
@@ -372,7 +372,7 @@ export default function Layout() {
           aria-label="Volume units"
         >
           {VOLUME_UNITS.map((u) => (
-            <ToggleButton key={u} value={u} sx={{ py: 0.4, fontSize: 13, textTransform: "none" }}>
+            <ToggleButton key={u} value={u} sx={{ py: 0.4, fontSize: 14, textTransform: "none" }}>
               {unitLabel(u)}
             </ToggleButton>
           ))}
@@ -390,7 +390,7 @@ export default function Layout() {
               >
                 Reminders
               </Typography>
-              <Typography variant="body2" sx={{ fontSize: 13 }}>
+              <Typography variant="body2" sx={{ fontSize: 14 }}>
                 Notify if diapers/feedings go unrecorded for 3+ hours
               </Typography>
             </Box>
@@ -439,7 +439,7 @@ export default function Layout() {
                 size="small"
                 onClick={handleRegenerateNotes}
                 disabled={regeneratingNotes}
-                sx={{ mt: 1, fontSize: 11.5, textTransform: "none", color: "text.secondary" }}
+                sx={{ mt: 1, fontSize: 13, textTransform: "none", color: "text.secondary" }}
               >
                 {regeneratingNotes ? "Regenerating…" : "Regenerate today's note"}
               </Button>
@@ -501,7 +501,7 @@ export default function Layout() {
             {selectedChild && (
               <Avatar
                 src={childPhotoUrl(selectedChild, API_BASE) ?? undefined}
-                sx={{ width: 28, height: 28, fontSize: 12 }}
+                sx={{ width: 28, height: 28, fontSize: 13 }}
               >
                 {selectedChild.first_name[0]}
               </Avatar>
@@ -770,7 +770,7 @@ export default function Layout() {
                 }}
               >
                 {tab.icon}
-                <Typography sx={{ fontSize: 10.5, fontWeight: isActive ? 700 : 500, letterSpacing: "-0.005em" }}>
+                <Typography sx={{ fontSize: 12, fontWeight: isActive ? 700 : 500, letterSpacing: "-0.005em" }}>
                   {tab.label}
                 </Typography>
               </Box>

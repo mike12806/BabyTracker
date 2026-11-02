@@ -123,7 +123,7 @@ function MetricCard({ label, value, unit, valueText, data, tileColor, solidColor
             <Box sx={{ color: solidColor, display: "flex", "& svg": { fontSize: 14 } }}>{icon}</Box>
             <Typography
               sx={{
-                fontSize: 10,
+                fontSize: 11.5,
                 color: "text.secondary",
                 fontWeight: 700,
                 textTransform: "uppercase",
@@ -139,7 +139,7 @@ function MetricCard({ label, value, unit, valueText, data, tileColor, solidColor
             {valueText ?? value}
           </Typography>
           {!valueText && (
-            <Typography sx={{ fontSize: 11, color: "text.secondary", fontWeight: 500 }}>
+            <Typography sx={{ fontSize: 12.5, color: "text.secondary", fontWeight: 500 }}>
               {unit}
             </Typography>
           )}
@@ -153,7 +153,7 @@ function MetricCard({ label, value, unit, valueText, data, tileColor, solidColor
             </ResponsiveContainer>
           ) : (
             <Box sx={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <Typography sx={{ fontSize: 10, color: "text.disabled" }}>
+              <Typography sx={{ fontSize: 11.5, color: "text.disabled" }}>
                 More data needed
               </Typography>
             </Box>
@@ -571,7 +571,7 @@ export default function GrowthPage() {
           {/* Section header */}
           <Typography
             sx={{
-              fontSize: 12,
+              fontSize: 13,
               color: "text.secondary",
               fontWeight: 700,
               textTransform: "uppercase",

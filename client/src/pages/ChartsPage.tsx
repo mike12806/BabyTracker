@@ -223,13 +223,13 @@ export default function ChartsPage() {
               {/* Title + subtitle */}
               <Box sx={{ flex: 1, minWidth: 0 }}>
                 <Typography
-                  sx={{ fontSize: 13, fontWeight: 700, lineHeight: 1.15 }}
+                  sx={{ fontSize: 14, fontWeight: 700, lineHeight: 1.15 }}
                   noWrap
                 >
                   {sec.title}
                 </Typography>
                 <Typography
-                  sx={{ fontSize: 10.5, color: "text.secondary", lineHeight: 1.15 }}
+                  sx={{ fontSize: 12, color: "text.secondary", lineHeight: 1.15 }}
                   noWrap
                 >
                   {sec.subtitle}
@@ -244,7 +244,7 @@ export default function ChartsPage() {
                   {sec.avg}
                 </Typography>
                 <Typography
-                  sx={{ fontSize: 10, color: "text.secondary", lineHeight: 1 }}
+                  sx={{ fontSize: 11.5, color: "text.secondary", lineHeight: 1 }}
                 >
                   {sec.avgLabel}
                 </Typography>
@@ -268,7 +268,7 @@ export default function ChartsPage() {
           <Typography sx={{ fontSize: 20, fontWeight: 700, letterSpacing: "-0.01em", lineHeight: 1.2 }}>
             Trends
           </Typography>
-          <Typography sx={{ fontSize: 12, color: "text.secondary", mb: 1.25 }}>
+          <Typography sx={{ fontSize: 13, color: "text.secondary", mb: 1.25 }}>
             {rangeSubtitle(range)}
           </Typography>
 
@@ -291,7 +291,7 @@ export default function ChartsPage() {
                 variant={range === opt.key ? "filled" : "outlined"}
                 color={range === opt.key ? "primary" : "default"}
                 onClick={() => setRange(opt.key)}
-                sx={{ fontWeight: 600, flexShrink: 0, fontSize: 12, height: 26 }}
+                sx={{ fontWeight: 600, flexShrink: 0, fontSize: 13, height: 26 }}
               />
             ))}
           </Stack>

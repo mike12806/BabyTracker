@@ -484,7 +484,7 @@ export default function Dashboard() {
                   <BedtimeIcon sx={{ fontSize: 15 }} />
                 </Box>
                 <Box sx={{ flex: 1 }}>
-                  <Typography sx={{ fontSize: 10, color: cat.sleep.ink, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", lineHeight: 1.1 }}>
+                  <Typography sx={{ fontSize: 11.5, color: cat.sleep.ink, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", lineHeight: 1.1 }}>
                     Napping
                   </Typography>
                   <Typography sx={{ fontSize: 16, fontWeight: 700, letterSpacing: "-0.02em", fontVariantNumeric: "tabular-nums", lineHeight: 1.2 }}>
@@ -500,7 +500,7 @@ export default function Dashboard() {
                     borderRadius: 99,
                     fontWeight: 600,
                     textTransform: "none",
-                    fontSize: 12,
+                    fontSize: 13,
                     minHeight: 30,
                     px: 1.5,
                   }}
@@ -538,7 +538,7 @@ export default function Dashboard() {
                       <TimerIcon sx={{ fontSize: 15 }} />
                     </Box>
                     <Box sx={{ flex: 1 }}>
-                      <Typography sx={{ fontSize: 10, color: cat.feed.ink, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", lineHeight: 1.1 }}>
+                      <Typography sx={{ fontSize: 11.5, color: cat.feed.ink, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", lineHeight: 1.1 }}>
                         {t.name}
                       </Typography>
                       <Typography sx={{ fontSize: 16, fontWeight: 700, letterSpacing: "-0.02em", fontVariantNumeric: "tabular-nums", lineHeight: 1.2 }}>
@@ -552,12 +552,12 @@ export default function Dashboard() {
 
             {/* Section: Quick Log */}
             <Box sx={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", px: 0.25, mb: 0.75 }}>
-              <Typography sx={{ fontSize: 11, color: "text.secondary", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+              <Typography sx={{ fontSize: 12.5, color: "text.secondary", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em" }}>
                 Quick log
               </Typography>
               <Box sx={{ display: "flex", alignItems: "center", gap: 0.4 }}>
-                <AddIcon sx={{ fontSize: 12, color: "text.secondary" }} />
-                <Typography sx={{ fontSize: 11, color: "text.secondary" }}>
+                <AddIcon sx={{ fontSize: 13, color: "text.secondary" }} />
+                <Typography sx={{ fontSize: 12.5, color: "text.secondary" }}>
                   Tap to record
                 </Typography>
               </Box>
@@ -621,14 +621,14 @@ export default function Dashboard() {
 
             {/* Section: Today so far */}
             <Box sx={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", px: 0.25, mb: 0.625 }}>
-              <Typography sx={{ fontSize: 11, color: "text.secondary", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+              <Typography sx={{ fontSize: 12.5, color: "text.secondary", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em" }}>
                 Today so far
               </Typography>
               <Typography
                 onClick={() => navigate("/charts")}
-                sx={{ fontSize: 11, color: "text.secondary", display: "flex", alignItems: "center", gap: 0.25, cursor: "pointer" }}
+                sx={{ fontSize: 12.5, color: "text.secondary", display: "flex", alignItems: "center", gap: 0.25, cursor: "pointer" }}
               >
-                View charts <ChevronRightIcon sx={{ fontSize: 13 }} />
+                View charts <ChevronRightIcon sx={{ fontSize: 14 }} />
               </Typography>
             </Box>
 
@@ -688,12 +688,12 @@ export default function Dashboard() {
 
             {/* Section: Recent Activity */}
             <Box sx={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", px: 0.25, mb: 0.5 }}>
-              <Typography sx={{ fontSize: 11, color: "text.secondary", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+              <Typography sx={{ fontSize: 12.5, color: "text.secondary", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em" }}>
                 Recent activity
               </Typography>
               <Typography
                 onClick={() => navigate("/activity")}
-                sx={{ fontSize: 11, color: "text.secondary", cursor: "pointer" }}
+                sx={{ fontSize: 12.5, color: "text.secondary", cursor: "pointer" }}
               >
                 See all
               </Typography>
@@ -710,7 +710,7 @@ export default function Dashboard() {
               }}
             >
               {recentActivity.length === 0 ? (
-                <Typography sx={{ py: 1.25, textAlign: "center", fontSize: 12, color: "text.secondary" }}>
+                <Typography sx={{ py: 1.25, textAlign: "center", fontSize: 13, color: "text.secondary" }}>
                   No activity recorded yet today.
                 </Typography>
               ) : (
@@ -751,17 +751,17 @@ export default function Dashboard() {
                         {CAT_ICONS_SM[ev.cat]}
                       </Box>
                       <Box sx={{ flex: 1, minWidth: 0 }}>
-                        <Typography sx={{ fontSize: 12.5, fontWeight: 600, letterSpacing: "-0.005em", lineHeight: 1.2 }} noWrap>
+                        <Typography sx={{ fontSize: 13.5, fontWeight: 600, letterSpacing: "-0.005em", lineHeight: 1.2 }} noWrap>
                           {ev.title}
                         </Typography>
                         {pendingRow && <PendingChip compact />}
-                        <Typography sx={{ fontSize: 10.5, color: "text.secondary", mt: 0, lineHeight: 1.2 }}>
+                        <Typography sx={{ fontSize: 12, color: "text.secondary", mt: 0, lineHeight: 1.2 }}>
                           {ev.meta}
                         </Typography>
                       </Box>
                       <Typography
                         sx={{
-                          fontSize: 11,
+                          fontSize: 12.5,
                           color: ev.live ? c.ink : "text.secondary",
                           fontWeight: ev.live ? 700 : 500,
                           fontVariantNumeric: "tabular-nums",
@@ -771,7 +771,7 @@ export default function Dashboard() {
                         {ev.time}
                       </Typography>
                       {editPath && (
-                        <ChevronRightIcon sx={{ fontSize: 13, color: "text.disabled", flexShrink: 0 }} />
+                        <ChevronRightIcon sx={{ fontSize: 14, color: "text.disabled", flexShrink: 0 }} />
                       )}
                     </Box>
                   );
@@ -781,20 +781,20 @@ export default function Dashboard() {
 
             {/* Section: To-do snapshot */}
             <Box sx={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", px: 0.25, mb: 0.5 }}>
-              <Typography sx={{ fontSize: 11, color: "text.secondary", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+              <Typography sx={{ fontSize: 12.5, color: "text.secondary", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em" }}>
                 To-do · {activeTodos.length} active
               </Typography>
               <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                 {overdueCount > 0 && (
-                  <Typography sx={{ fontSize: 11, color: cat.temp.solid, fontWeight: 600 }}>
+                  <Typography sx={{ fontSize: 12.5, color: cat.temp.solid, fontWeight: 600 }}>
                     {overdueCount} overdue
                   </Typography>
                 )}
                 <Typography
                   onClick={() => navigate("/todos")}
-                  sx={{ fontSize: 11, color: "text.secondary", display: "flex", alignItems: "center", gap: 0.25, cursor: "pointer" }}
+                  sx={{ fontSize: 12.5, color: "text.secondary", display: "flex", alignItems: "center", gap: 0.25, cursor: "pointer" }}
                 >
-                  View to-dos <ChevronRightIcon sx={{ fontSize: 13 }} />
+                  View to-dos <ChevronRightIcon sx={{ fontSize: 14 }} />
                 </Typography>
               </Box>
             </Box>
@@ -811,7 +811,7 @@ export default function Dashboard() {
             >
               {snapshotTodos.length === 0 ? (
                 <Box sx={{ py: 1.25, textAlign: "center" }}>
-                  <Typography sx={{ fontSize: 12, color: "text.secondary" }}>
+                  <Typography sx={{ fontSize: 13, color: "text.secondary" }}>
                     {activeTodos.length === 0 && todos.length > 0
                       ? "All caught up!"
                       : "No tasks yet."}
@@ -858,7 +858,7 @@ export default function Dashboard() {
                         <Box sx={{ flex: 1, minWidth: 0 }}>
                           <Typography
                             sx={{
-                              fontSize: 12.5, fontWeight: 500, letterSpacing: "-0.005em", lineHeight: 1.2,
+                              fontSize: 13.5, fontWeight: 500, letterSpacing: "-0.005em", lineHeight: 1.2,
                               textDecoration: completing ? "line-through" : "none",
                             }}
                             noWrap
@@ -866,14 +866,14 @@ export default function Dashboard() {
                             {t.title}
                           </Typography>
                           {t.due_date && (
-                            <Typography sx={{ fontSize: 10.5, color: overdue ? cat.temp.solid : "text.secondary", fontWeight: overdue ? 600 : 500, mt: 0, lineHeight: 1.2 }}>
+                            <Typography sx={{ fontSize: 12, color: overdue ? cat.temp.solid : "text.secondary", fontWeight: overdue ? 600 : 500, mt: 0, lineHeight: 1.2 }}>
                               {formatTodoDueDate(t.due_date)}
                             </Typography>
                           )}
                         </Box>
                         <Box
                           sx={{
-                            fontSize: 9.5, fontWeight: 700, px: "6px", py: "2px",
+                            fontSize: 11, fontWeight: 700, px: "6px", py: "2px",
                             borderRadius: 99, textTransform: "uppercase", letterSpacing: "0.04em",
                             bgcolor: pc.soft, color: pc.ink, flexShrink: 0,
                           }}

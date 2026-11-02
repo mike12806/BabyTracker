@@ -387,10 +387,10 @@ export default function FeedingsPage() {
             {[...grouped.entries()].map(([key, items]) => (
               <Box key={key}>
                 <Box sx={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", pt: 1, pb: 0.5 }}>
-                  <Typography sx={{ fontSize: 10.5, color: "text.secondary", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                  <Typography sx={{ fontSize: 12, color: "text.secondary", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em" }}>
                     {dateSectionLabel(items[0].start_time)}
                   </Typography>
-                  <Typography sx={{ fontSize: 10.5, color: "text.secondary", fontVariantNumeric: "tabular-nums" }}>{items.length}</Typography>
+                  <Typography sx={{ fontSize: 12, color: "text.secondary", fontVariantNumeric: "tabular-nums" }}>{items.length}</Typography>
                 </Box>
                 {items.map((f) => (
                   <Box
@@ -412,11 +412,11 @@ export default function FeedingsPage() {
                       <RestaurantIcon sx={{ fontSize: 14 }} />
                     </Box>
                     <Box sx={{ flex: 1, minWidth: 0 }}>
-                      <Typography sx={{ fontSize: 12.5, fontWeight: 600, letterSpacing: "-0.005em", lineHeight: 1.2 }} noWrap>{feedingTypeLabel(f.type)}</Typography>
-                      <Typography sx={{ fontSize: 10.5, color: "text.secondary", mt: 0, lineHeight: 1.2 }}>{summaryFor(f, unit)}</Typography>
+                      <Typography sx={{ fontSize: 13.5, fontWeight: 600, letterSpacing: "-0.005em", lineHeight: 1.2 }} noWrap>{feedingTypeLabel(f.type)}</Typography>
+                      <Typography sx={{ fontSize: 12, color: "text.secondary", mt: 0, lineHeight: 1.2 }}>{summaryFor(f, unit)}</Typography>
                     </Box>
                     {isPending(f) && <PendingChip compact />}
-                    <Typography sx={{ fontSize: 11, color: "text.secondary", fontWeight: 500, fontVariantNumeric: "tabular-nums", flexShrink: 0, mr: 3.25 }}>
+                    <Typography sx={{ fontSize: 12.5, color: "text.secondary", fontWeight: 500, fontVariantNumeric: "tabular-nums", flexShrink: 0, mr: 3.25 }}>
                       {formatTimeShort(f.start_time)}
                     </Typography>
                     <IconButton

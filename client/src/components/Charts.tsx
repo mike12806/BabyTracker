@@ -28,7 +28,7 @@ import type {
 // leave the chart overflowing into whatever sits below it.
 const CHART_HEIGHT = 130;
 const CHART_MARGIN = { top: 4, right: 12, bottom: 0, left: 0 };
-const TICK_STYLE = { fontSize: 10 };
+const TICK_STYLE = { fontSize: 11.5 };
 
 /** Build an array of YYYY-MM-DD strings for the last N days in local time */
 export function lastNDays(n: number): string[] {
