@@ -161,7 +161,12 @@ describe("the Log sheet and background refreshes", () => {
 
     await user.click(logFab());
 
-    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    // `hidden: true` because the sheet is mobile-only (`display: { md: "none" }`)
+    // and jsdom (v31+) evaluates media queries against a fixed 1024px viewport
+    // that `innerWidth` can't move — so in tests it is display:none and out of
+    // the accessibility tree. On a phone it is visible; `isUserBusy` reads the
+    // markup, not layout, either way.
+    expect(screen.getByRole("dialog", { name: "Log", hidden: true })).toBeInTheDocument();
     expect(isUserBusy()).toBe(true);
   });
 
